@@ -1,0 +1,31 @@
+# OS-generated files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# VS Code settings
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.Python
+*.sqlite3
+.env
+.venv/
+venv/
+ENV/
+build/
+dist/
+pip-wheel-metadata/
+*.log
+
+# Project output
+/output/

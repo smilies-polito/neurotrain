@@ -1,0 +1,37 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%post
+    # Update base system
+    apt-get update && apt-get upgrade -y
+
+    # Install system packages
+    apt-get install -y \
+        python3 \
+        python3-pip \
+        git \
+        vim \
+        curl \
+        wget \
+        build-essential
+
+    # Clean up
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+    # Install Python dependencies
+    pip3 install --no-cache-dir numpy==1.26.0
+    pip3 install --no-cache-dir scikit-learn==1.6.1
+    pip3 install --no-cache-dir scipy==1.11.4
+    pip3 install --no-cache-dir pandas==2.2.3
+    pip3 install --no-cache-dir snntorch==0.9.4
+    pip3 install --no-cache-dir neurobench==2.1.0
+
+%environment
+    # Environment variables set at runtime
+    export LC_ALL=C
+    export PATH=/usr/local/bin:$PATH
+
+%runscript
+    # What runs when you execute the container
+    python3 src/run.py O
