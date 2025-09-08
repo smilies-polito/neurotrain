@@ -29,3 +29,7 @@ pip-wheel-metadata/
 
 # Project output
 /output/
+
+# Singularity containers
+*.sif
+
