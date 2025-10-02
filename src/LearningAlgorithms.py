@@ -12,7 +12,7 @@ import numpy as np
 import itertools
 import math
 
-class LocalLearningAlgorithm(nn.Module):
+class LearningAlgorithms(nn.Module):
     """
     A base class to provide basic functionality for local learning algorithms implemented
     """
@@ -51,7 +51,6 @@ class LocalLearningAlgorithm(nn.Module):
         pass
 
     def train_network(trainer, train_loader, print_intermediate=False, device="cuda"):
-
         total_samples = 0
         loss_sum = 0.0
         acc_sum  = 0

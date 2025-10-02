@@ -53,7 +53,7 @@ class ExampleNet(nn.Module):
 # Helper Functions #
 ####################
 
-def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: bool = False, optimizer: bool = False, run_dir: Path = None, layer_idx: int = None) -> torch.Tensor:
+def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: bool = False, optimizer: bool = False, layer_idx: int = None) -> torch.Tensor:
     """
     Generates a sparse, fixed-connectivity feedback matrix for DFA.
     Returns a tensor of shape [n_classes, n_hidden].
@@ -102,18 +102,6 @@ def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: 
         value = (mat[idx[0], idx[1]], idx[0], idx[1])
         list_val.append(value)
     list_val.sort(key=lambda x: x[2])  # Sort only by column index
-    
-    # Save to file if run_dir is provided
-    if run_dir is not None and layer_idx is not None:
-        feedback_file = run_dir / f"feedback_matrix.txt"
-        with feedback_file.open("w") as f:
-            f.write(f"# Feedback matrix for layer {layer_idx}\n")
-            f.write(f"# Matrix size: {n_classes} x {n_hidden}\n")
-            f.write(f"# Learning rate: {lr}, Batch size: {batch_size}, Loss value: {loss_value}\n")
-            f.write(f"# Quantized: {quant}, Optimizer: {optimizer}\n")
-            f.write("# Non-zero elements (sorted by column index):\n")
-            for el in list_val:
-                f.write(f"mat[{el[1]}, {el[2]}] = {el[0]:.4f}\n")
     
     return mat
 
@@ -212,7 +200,6 @@ class STSFTrainer(nn.Module):
         update_last: bool = False,
         update_every: int = 1,
         seq_batch_size: int = 1,
-        run_dir: Path = None,
     ):
         super().__init__()
         self.network        = network
@@ -225,7 +212,6 @@ class STSFTrainer(nn.Module):
         self.update_last    = update_last
         self.update_every   = update_every
         self.seq_batch_size = seq_batch_size
-        self.run_dir        = run_dir
         
         self.stop_requested = False
         
@@ -240,7 +226,7 @@ class STSFTrainer(nn.Module):
         n_out            = network.n_classes
         hidden_sizes     = network.hidden_size
         self.feedback    = nn.ParameterList([
-            nn.Parameter(SFMatrix((n_out, h), lr, batch_size, self.loss_value, self.quant, self.use_optimizer, run_dir, i), requires_grad=False)
+            nn.Parameter(SFMatrix((n_out, h), lr, batch_size, self.loss_value, self.quant, self.use_optimizer, i), requires_grad=False)
             for i, h in enumerate(hidden_sizes)
         ])
 
