@@ -10,15 +10,14 @@ from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
-
-
+import math
 
 class LocalLearningAlgorithm(nn.Module):
     """
     A base class to provide basic functionality for local learning algorithms implemented
     """
 
-    def setup(batch_size=128, data_path='/tmp/data/mnist'):
+    def MNISTLoader(batch_size=128, data_path='/tmp/data/mnist'):
         
         # dataloader arguments
         batch_size = batch_size
@@ -50,7 +49,69 @@ class LocalLearningAlgorithm(nn.Module):
         to be call at each epoch of the outer training loop
         """
         pass
-    
+
+    def train_network(trainer, train_loader, print_intermediate=False, device="cuda"):
+
+        total_samples = 0
+        loss_sum = 0.0
+        acc_sum  = 0
+
+        for data, target in train_loader:
+            data, target = data.transpose(0,1).to(device), target.to(device)
+            B = data.size(1)
+
+            trainer.reset()
+            loss, pred = trainer.train_sample(data, target)
+
+            total_samples   += B
+            loss_sum        += loss.item() * B
+            acc_sum         += pred.eq(target.view_as(pred)).sum().item()
+            if print_intermediate and (total_samples % 1000 == 0):
+                print(f"TRAIN: Processed {total_samples} samples, Partial Loss: {loss_sum/total_samples:.4f}, Partial Accuracy: {acc_sum/total_samples:.4f}")
+            if getattr(trainer, "stop_requested", False):
+                break
+
+        return loss_sum/total_samples, acc_sum/total_samples
+
+    def test_network(network, test_loader, print_intermediate=False, device="cuda"):
+        """
+        Evaluate network accuracy over the test_loader.
+        Assumes network.forward(x_t) returns *only* the final-layer spike tensor of shape [B, C].
+        """
+        network.to(device)
+        network.eval()
+
+        total_correct = 0
+        total_samples = 0
+
+        #print("TEST: Evaluating network...")
+        # No gradients needed
+        with torch.no_grad():
+            for data, target in test_loader:
+                # data: [T, B, …], target: [B]
+                data   = data.transpose(0, 1).to(device)
+                target = target.to(device)
+                T, B    = data.shape[0], data.shape[1]
+
+                network.reset()
+
+                # 1) Unroll and sum final‐layer spikes
+                spk_sum = None
+                for t in range(T):
+                    # if your forward returns (spikes, mem), do: spk = network(data[t])[0]
+                    spk, _ = network(data[t])
+                    spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
+
+                # 2) Prediction & metric
+                logits = spk_sum       # optionally / T for rates
+                preds  = logits.argmax(dim=1)
+                total_correct += preds.eq(target).sum().item()
+                total_samples += B
+                if print_intermediate and (total_samples % 10000 == 0):
+                    print(f"TEST: Processed {total_samples} samples, Accuracy: {total_correct/total_samples:.4f}")
+
+        return total_correct / total_samples
+
     def outer_training_loop(net, num_steps, train_loader, test_loader, batch_size, device, dtype):
         num_epochs = 1
         loss_hist = []
@@ -140,6 +201,13 @@ class LocalLearningAlgorithm(nn.Module):
         test_acc = LocalLearningAlgorithm.compute_batch_accuracy(test_data, test_targets, train=False)
         print("\n")
 
+    # Fixes seeds for both NumPy and PyTorch random number generators. Ensures reproducibility.
+    def set_random_seed(seed):
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
 
     def run_outer_training():
         pass
