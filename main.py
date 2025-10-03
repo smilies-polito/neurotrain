@@ -7,6 +7,9 @@ from torch.optim import Adam
 from collections import deque
 import statistics
 
+# Add the src folder to the Python module search path - this might become a pip package later
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
 # Custom includes
 from utils.helpers import get_device, setup_storage_path, set_random_seed
 from utils.parameters import parse_args  # adjust if constants live elsewhere
@@ -15,8 +18,7 @@ from networks.fc_network import FCNetwork
 from trainers.stsf_trainer import STSFTrainer
 from LearningAlgorithms import LearningAlgorithms
 
-# Add the src folder to the Python module search path - this might become a pip package later
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
 # TEMP, just for printing dataset
 DUMP_DATASET = False
 
