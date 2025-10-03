@@ -1,57 +1,12 @@
-import snntorch as snn
-from snntorch import spikeplot as splt
-from snntorch import spikegen
-
+import math
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
-import matplotlib.pyplot as plt
-import numpy as np
-import itertools
-
-class ExampleNet(nn.Module):
-    def __init__(self,
-                 # Network Architecture
-                num_inputs=28*28,
-                num_hidden=1000,
-                num_outputs=10,
-
-                # Temporal Dynamics
-                num_steps=25, beta=0.95):
-        
-        super().__init__()
-
-        # Initialize layers
-        self.fc1 = nn.Linear(num_inputs, num_hidden)
-        self.lif1 = snn.Leaky(beta=beta)
-        self.fc2 = nn.Linear(num_hidden, num_outputs)
-        self.lif2 = snn.Leaky(beta=beta)
-
-    def forward(self, x):
-
-        # Initialize hidden states at t=0
-        mem1 = self.lif1.init_leaky()
-        mem2 = self.lif2.init_leaky()
-
-        # Record the final layer
-        spk2_rec = []
-        mem2_rec = []
-
-        for step in range(self.num_steps):
-            cur1 = self.fc1(x)
-            spk1, mem1 = self.lif1(cur1, mem1)
-            cur2 = self.fc2(spk1)
-            spk2, mem2 = self.lif2(cur2, mem2)
-            spk2_rec.append(spk2)
-            mem2_rec.append(mem2)
-
-        return torch.stack(spk2_rec, dim=0), torch.stack(mem2_rec, dim=0)
-
-####################
-# Helper Functions #
-####################
+from trainers.base_trainer import BaseTrainer
+from networks.fc_network import FCNetwork
+from utils.quantizer import fixed_point, check_range, clamp_int_
+from utils.parameters import FP_DEC, BW  # adjust if constants live elsewhere
 
 def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: bool = False, optimizer: bool = False, layer_idx: int = None) -> torch.Tensor:
     """
@@ -104,78 +59,8 @@ def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: 
     list_val.sort(key=lambda x: x[2])  # Sort only by column index
     
     return mat
-
-#############
-# SNN Class #
-#############
-
-from quantizer import fixed_point, check_range, clamp_int_
-
-class FCNetwork(nn.Module):
-    """
-    Feedforward network with Leaky Integrate-and-Fire (LIF) neurons.
-    layer_sizes: [in, hidden1, …, hiddenK, out]
-    beta: leakiness parameter
-    """
-    def __init__(self, layer_sizes, beta, quant=False):
-        super().__init__()
-        self.input_size     = layer_sizes[0]
-        self.hidden_size    = layer_sizes[1:-1]
-        self.n_classes      = layer_sizes[-1]
-        # I am including the quantization parameters but I don't plan to use them for now
-        self.quant          = quant
-
-        layers = []
-        for i in range(len(layer_sizes) - 1):
-            threshold_val = fixed_point(1.0, fp_dec=FP_DEC, bitwidth=BW) if self.quant else 1.0
-            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
-            layers.append(snn.Leaky(beta=beta, threshold=threshold_val))
-        # The network structure is now [Linear, LIF, Linear, LIF, ..., Linear, LIF] and saved in a PyTorch ModuleList
-        self.layers = nn.ModuleList(layers)
-
-        self.reset_parameters()
-
-        # Print well formated infos about the network
-        print(f"\n\nNetwork: {self.__class__.__name__}")
-        print(f"Layers: {layer_sizes}")
-        print(f"Modules: {self.layers}")
-        print(f"Input size: {self.input_size}")
-        print(f"Hidden size: {self.hidden_size}")
-        print(f"Output size: {self.n_classes}")
-        print(f"Beta: {beta}")
-        print(f"Threshold (quantized): {1.0} ({threshold_val})")
-
-    def reset_parameters(self):
-        """
-        Initialize weights of the network.
-        """
-        for layer in self.layers:
-            if isinstance(layer, nn.Linear):
-                nn.init.xavier_uniform_(layer.weight)
-                if (self.quant): layer.weight.data = fixed_point(layer.weight.data, FP_DEC, BW)
-
-    def forward(self, x: torch.Tensor):
-        spk = x
-        spk_rec, mem_rec = [], []
-        for fc, lif in zip(self.layers[0::2], self.layers[1::2]):
-            cur = fc(spk)
-            spk, mem = lif(cur)
-            if self.quant:
-                lif.mem.copy_(torch.trunc(lif.mem))
-            spk_rec.append(spk)
-            mem_rec.append(mem)
-        return spk_rec, mem_rec
-
-    def reset(self):
-        for layer in self.layers:
-            if isinstance(layer, snn.Leaky):
-                layer.reset_mem()
-
-################
-# STSF Trainer #
-################
-
-class STSFTrainer(nn.Module):
+    
+class STSFTrainer(BaseTrainer):
     """
     Trainer for Spiking Time Sparse Feedback (STSF). ASSUMES AT LEAST 1 HIDDEN LAYER.
     - network     : FCNetwork

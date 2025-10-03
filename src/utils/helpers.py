@@ -6,9 +6,7 @@ Contains utility functions for device selection, configuration validation, and l
 import torch
 from pathlib import Path
 from typing import List
-
-from parameters import LOG_N
-
+import numpy as np
 
 def get_device(quantization_mode: bool, assigned_gpus: List[int]) -> str:
     """
@@ -58,3 +56,11 @@ def setup_storage_path(exp_name: str) -> str:
         raise RuntimeError(f"Could not create storage directory {_storage_path}: {e}")
     
     return path
+
+# Fixes seeds for both NumPy and PyTorch random number generators. Ensures reproducibility.
+def set_random_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)

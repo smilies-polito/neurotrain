@@ -26,9 +26,7 @@ From: ubuntu:22.04
     pip3 install --no-cache-dir pandas==2.2.3
     pip3 install --no-cache-dir snntorch==0.9.4
     pip3 install --no-cache-dir neurobench==2.1.0
-    pip3 install --no-cache-dir ray
-    pip3 install --no-cache-dir "ray[tune]"
-    pip3 install matplotlib
+    pip3 install --no-cache-dir matplotlib
 
 %environment
     # Environment variables set at runtime
