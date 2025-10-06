@@ -33,3 +33,6 @@ pip-wheel-metadata/
 # Singularity containers
 *.sif
 
+# Dataset files
+src/Data/*
+
