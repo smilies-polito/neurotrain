@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snn-training-benchmarking"
+version = "0.1.0"
+description = "Modular benchmarking platform for spiking neural network learning algorithms"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Neuromorphic Computing Team", email = "neuromorphic@polito.it"}
+]
+keywords = [
+    "spiking-neural-networks",
+    "snn",
+    "neuromorphic",
+    "benchmarking",
+    "machine-learning",
+    "snntorch",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "numpy>=1.24.0",
+    "snntorch>=0.7.0",
+    "tonic>=1.0.0",
+    "pyyaml>=6.0",
+    "tensorboard>=2.13.0",
+    "matplotlib>=3.7.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "flake8>=6.1.0",
+    "black>=23.0.0",
+    "pre-commit>=3.3.0",
+    "isort>=5.12.0",
+]
+tune = [
+    "ray[tune]>=2.6.0",
+]
+all = [
+    "snn-training-benchmarking[dev,tune]",
+]
+
+[project.scripts]
+snn-benchmark = "snn_benchmark.main:main"
+
+[project.urls]
+Homepage = "https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking"
+Repository = "https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["*"]
+exclude = ["Data*", "*.sif"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.venv
+    | build
+    | dist
+    | \.eggs
+    | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["snn_benchmark"]
+skip = [".git", ".venv", "build", "dist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
