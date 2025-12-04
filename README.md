@@ -1,93 +1,274 @@
 # SNN Training Benchmarking
 
+A modular, scalable benchmarking platform for spiking neural network (SNN) learning algorithms. Supports plug-and-play algorithms, advanced logging, reproducibility, and systematic research analysis.
 
+## Features
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- **Reproducible Experiments**: Comprehensive seed management, environment logging, and git commit tracking
+- **Configuration System**: YAML/JSON config files with CLI override support
+- **Checkpointing**: Automatic checkpoint saving with resume capability
+- **Plug-and-Play Trainers**: Easily add new learning algorithms
+- **TensorBoard Integration**: Real-time training visualization
+- **Multiple Datasets**: MNIST, FashionMNIST, CIFAR10, SVHN, DVSGesture
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### From Source (Development)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```bash
+# Clone the repository
+git clone https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking.git
+cd snn-training-benchmarking
+
+# Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
+
+# Install in development mode
+pip install -e ".[dev]"
+
+# Setup pre-commit hooks
+pre-commit install
+```
+
+### Dependencies Only
+
+```bash
+pip install -r requirements.txt
+```
+
+## Quick Start
+
+### Using Config File (Recommended)
+
+```bash
+# Run with default MNIST config
+python main.py --config configs/mnist_default.yaml
+
+# Override specific parameters via CLI
+python main.py --config configs/mnist_default.yaml --lr 0.001 --epochs 50
+```
+
+### Using CLI Only (Legacy)
+
+```bash
+python main.py --dataset MNIST --epochs 100 --batch-size 256 --lr 0.01
+```
+
+### Resume Training
+
+```bash
+# Auto-resume from latest checkpoint
+python main.py --config configs/mnist_default.yaml --resume
+
+# Resume from specific checkpoint
+python main.py --resume-from experiments/STSF_MNIST/20231128_120000/checkpoints/checkpoint_latest.pt
+```
+
+## Configuration
+
+### Config File Structure
+
+```yaml
+experiment:
+  name: "STSF_MNIST"
+  seed: 42
+  deterministic: true
+  log_dir: "./experiments"
+
+model:
+  architecture: "fc"
+  layer_sizes: [784, 200, 10]
+  beta: 0.9375
+  threshold: 1.0
+  quantization: false
+
+training:
+  epochs: 100
+  batch_size: 256
+  learning_rate: 0.01
+  optimizer: null  # null for manual updates, "adam" for optimizer
+
+trainer:
+  name: "stsf"
+  update_last: false
+  update_every: 1
+  seq_batch: 1
+
+data:
+  dataset: "MNIST"
+  timesteps: 10
+  data_dir: "./src/Data"
+  num_workers: 4
+
+hardware:
+  device: "auto"
+  mixed_precision: false
+
+checkpoint:
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2
+```
+
+### Available Configs
+
+| Config | Description |
+|--------|-------------|
+| `mnist_default.yaml` | Standard MNIST training |
+| `mnist_quantized.yaml` | Quantized training for hardware |
+| `fashionmnist_default.yaml` | FashionMNIST training |
+| `cifar10_default.yaml` | CIFAR10 training |
+
+## CLI Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--config` | Path to YAML/JSON config file | None |
+| `--resume` | Resume from latest checkpoint | False |
+| `--resume-from` | Resume from specific checkpoint | None |
+| `--dataset` | Dataset name | MNIST |
+| `--epochs` | Number of epochs | 100 |
+| `--batch-size` | Batch size | 256 |
+| `--lr` | Learning rate | 0.01 |
+| `--T` | Number of timesteps | 10 |
+| `--seed` | Random seed | 42 |
+| `--quantization` | Enable quantization | False |
+
+## Project Structure
+
+```
+snn-training-benchmarking/
+├── main.py                 # Entry point
+├── configs/                # YAML configuration files
+│   ├── mnist_default.yaml
+│   ├── mnist_quantized.yaml
+│   └── ...
+├── src/
+│   ├── datasets/          # Data loaders
+│   ├── networks/          # Network architectures
+│   ├── trainers/          # Learning algorithms
+│   ├── utils/             # Utilities
+│   │   ├── config.py      # Configuration system
+│   │   ├── checkpoint.py  # Checkpointing
+│   │   └── experiment_logger.py  # Reproducibility logging
+│   └── LearningAlgorithms.py
+├── tests/                  # Test suite
+├── experiments/            # Experiment outputs (gitignored)
+├── requirements.txt
+└── pyproject.toml
+```
+
+## Reproducibility
+
+Every experiment automatically logs:
+
+- **Seeds**: Python, NumPy, PyTorch, CUDA seeds
+- **Environment**: Python version, PyTorch version, CUDA version, device info
+- **Code Version**: Git commit hash, branch, dirty state
+- **Configuration**: Complete config used for the run
+- **RNG State**: Full random state for exact reproducibility on resume
+
+All this information is saved to `experiment_context.json` in the experiment directory.
+
+## TensorBoard
+
+View training progress in TensorBoard:
+
+```bash
+tensorboard --logdir experiments/
+```
+
+## Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_config.py
+```
+
+## Code Quality
+
+```bash
+# Format code
+black src/ tests/ main.py
+
+# Check linting
+flake8 src/ tests/ main.py
+
+# Run all pre-commit hooks
+pre-commit run --all-files
+```
+
+## Adding New Learning Algorithms
+
+1. Create a new trainer in `src/trainers/`:
+
+```python
+from trainers.base_trainer import BaseTrainer
+
+class MyTrainer(BaseTrainer):
+    def __init__(self, network, lr, ...):
+        super().__init__()
+        self.network = network
+        # ...
+
+    def train_sample(self, data, target):
+        # Implement training logic
+        return loss, pred
+
+    def reset(self):
+        self.network.reset()
+```
+
+2. Register in `main.py`:
+
+```python
+def get_trainer(trainer_name):
+    trainers = {
+        "stsf": STSFTrainer,
+        "my_trainer": MyTrainer,  # Add here
+    }
+    return trainers[trainer_name]
+```
+
+3. Use in config:
+
+```yaml
+trainer:
+  name: "my_trainer"
+```
 
 ## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+
+- [ ] Additional learning algorithms (BPTT, e-prop, STDP)
+- [ ] Convolutional SNN architectures
+- [ ] NeuroBench integration
+- [ ] Benchmarking campaigns
+- [ ] Interactive visualization
+- [ ] MLflow integration
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make changes and ensure tests pass
+4. Format code with `black` and check with `flake8`
+5. Commit and push
+6. Create a merge request
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT License
+
+## Acknowledgments
+
+- [snntorch](https://github.com/jeshraghian/snntorch) - Spiking neural network library
+- [Tonic](https://github.com/neuromorphs/tonic) - Neuromorphic datasets

@@ -1,38 +1,101 @@
-# OS-generated files
-Thumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-.DS_Store
-
-# VS Code settings
-.vscode/
-
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
+
+# C extensions
 *.so
-*.egg
-*.egg-info/
-.eggs/
+
+# Distribution / packaging
 .Python
-*.sqlite3
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
 .env
-.venv/
+.venv
+env/
 venv/
 ENV/
-build/
-dist/
-pip-wheel-metadata/
-*.log
+env.bak/
+venv.bak/
 
-# Project output
-/output/
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Singularity containers
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Experiments and logs
+experiments/
+Log/
+logs/
+runs/
+tensorboard/
+
+# Data (keep structure, ignore large files)
+src/Data/MNIST/
+src/Data/CIFAR10/
+src/Data/FashionMNIST/
+src/Data/SVHN/
+src/Data/DVSGesture/
+*.pt
+*.pth
+!configs/*.pt
+
+# Singularity images
 *.sif
 
-# Dataset files
-src/Data/*
+# OS
+.DS_Store
+Thumbs.db
 
+# Local config
+local_config.yaml
+.env.local

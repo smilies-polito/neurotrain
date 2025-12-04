@@ -134,6 +134,22 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Train spiking network with different datasets and hyperparameters"
     )
+
+    # Configuration file
+    parser.add_argument(
+        "--config", type=str, default=None,
+        help="Path to YAML/JSON config file. CLI args override config file values."
+    )
+
+    # Resume from checkpoint
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Resume from latest checkpoint in experiment directory"
+    )
+    parser.add_argument(
+        "--resume-from", type=str, default=None,
+        help="Resume from specific checkpoint file path"
+    )
     
     # Dataset / architecture
     parser.add_argument(
