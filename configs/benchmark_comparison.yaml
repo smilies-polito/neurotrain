@@ -1,0 +1,33 @@
+# Benchmark Comparison Configuration
+# Compare SNN learning algorithms: BPTT (baseline) vs STSF (local learning)
+
+# Algorithms to compare
+algorithms:
+  - bptt    # Backpropagation Through Time (baseline)
+  - stsf    # Spiking Time Sparse Feedback (local)
+
+# Dataset configuration
+dataset: "MNIST"
+timesteps: 25
+
+# Architecture (same for all algorithms - fair comparison)
+# Format: [input, hidden..., output]
+layer_sizes: [784, 256, 10]
+
+# Network parameters
+beta: 0.9  # LIF neuron leak factor
+
+# Training hyperparameters
+epochs: 50
+batch_size: 128
+lr: 0.001
+
+# Checkpoint epochs (when to record accuracy for learning curves)
+checkpoint_epochs: [1, 5, 10, 25, 50]
+
+# Hardware configuration
+device: "cuda"  # "cuda" or "cpu"
+
+# Output directory for results
+output_dir: "./benchmark_results"
+
