@@ -99,7 +99,6 @@ CONTEXT:
 - Reference TASK_NEUROBENCH_BPTT_BASELINE.md for detailed requirements
 
 CORE PRINCIPLE: REUSE EXISTING LIBRARIES
-- Use snntorch.backprop.BPTT (do NOT reimplement BPTT)
 - Use snntorch.functional.* for loss functions
 - Use neurobench.models.SNNTorchModel for model wrapping
 - Use neurobench.benchmarks.Benchmark for evaluation harness
@@ -108,17 +107,17 @@ CORE PRINCIPLE: REUSE EXISTING LIBRARIES
 
 DELIVERABLES:
 
-1. src/trainers/bptt_trainer.py (~40 lines)
+1. src/trainers/bptt_trainer.py
    - Thin wrapper around snntorch.backprop.BPTT
    - Match BaseTrainer interface (train_sample, reset)
    - Use snntorch.functional loss functions
    
-2. src/utils/neurobench_eval.py (~30 lines)
+2. src/utils/neurobench_eval.py
    - Wrap network with neurobench.models.SNNTorchModel
    - Run neurobench.benchmarks.Benchmark
    - Return all NeuroBench metrics directly
 
-3. src/benchmark_runner.py (~150 lines)
+3. src/benchmark_runner.py
    - Orchestrate algorithm comparison
    - Use torch.profiler for CPU/CUDA timing
    - Run NeuroBench evaluation after training
