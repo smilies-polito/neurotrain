@@ -108,7 +108,6 @@ CORE PRINCIPLE: REUSE EXISTING LIBRARIES
 DELIVERABLES:
 
 1. src/trainers/bptt_trainer.py
-   - Thin wrapper around snntorch.backprop.BPTT
    - Match BaseTrainer interface (train_sample, reset)
    - Use snntorch.functional loss functions
    
