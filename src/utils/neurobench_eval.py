@@ -119,14 +119,24 @@ class NeuroBenchWrapper(torch.nn.Module):
         """
         # Handle different input formats
         if x.dim() == 3:
-            # Check if shape is [batch, timesteps, features] or [timesteps, batch, features]
+            # Determine input format using num_timesteps if available
             # Our convention is [timesteps, batch, features]
-            if x.shape[0] > x.shape[1]:
-                # Likely [timesteps, batch, features]
-                num_timesteps = x.shape[0]
+            if self.num_timesteps is not None:
+                # Use known timesteps to determine format
+                if x.shape[0] == self.num_timesteps:
+                    # Already [timesteps, batch, features]
+                    num_timesteps = x.shape[0]
+                elif x.shape[1] == self.num_timesteps:
+                    # Input is [batch, timesteps, features], transpose
+                    x = x.transpose(0, 1)
+                    num_timesteps = x.shape[0]
+                else:
+                    # Neither dimension matches, assume first dim is timesteps
+                    num_timesteps = x.shape[0]
             else:
-                # Likely [batch, timesteps, features], transpose
-                x = x.transpose(0, 1)
+                # No num_timesteps provided - assume input follows our convention
+                # [timesteps, batch, features] where timesteps is typically small (10-100)
+                # This is a fallback; prefer providing num_timesteps explicitly
                 num_timesteps = x.shape[0]
         else:
             num_timesteps = self.num_timesteps or 1
