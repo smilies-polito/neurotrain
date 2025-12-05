@@ -12,10 +12,12 @@ from torch.utils.data import DataLoader
 # NeuroBench imports
 from neurobench.models import SNNTorchModel
 from neurobench.benchmarks import Benchmark
-from neurobench.metrics.static import FootprintMemory, ConnectionSparsity
+from neurobench.metrics.static import Footprint, ConnectionSparsity, ParameterCount
 from neurobench.metrics.workload import (
     ActivationSparsity,
+    ActivationSparsityByLayer,
     SynapticOperations,
+    MembraneUpdates,
     ClassificationAccuracy,
 )
 
@@ -40,8 +42,9 @@ def run_neurobench(
         
     Returns:
         Dictionary containing all NeuroBench metrics:
-        - Static metrics: footprint_memory, connection_sparsity
-        - Workload metrics: activation_sparsity, synaptic_operations, classification_accuracy
+        - Static metrics: footprint, connection_sparsity, parameter_count
+        - Workload metrics: activation_sparsity, activation_sparsity_by_layer,
+          synaptic_operations, membrane_updates, classification_accuracy
     """
     # Move network to device and set to eval mode
     network.to(device)
@@ -56,15 +59,18 @@ def run_neurobench(
     
     # Configure static metrics (computed once on model)
     static_metrics = [
-        FootprintMemory(),
-        ConnectionSparsity(),
+        Footprint(),           # Memory footprint of the model
+        ConnectionSparsity(),  # Sparsity of weight connections
+        ParameterCount(),      # Total number of parameters
     ]
     
     # Configure workload metrics (computed during inference)
     workload_metrics = [
-        ActivationSparsity(),
-        SynapticOperations(),
-        ClassificationAccuracy(),
+        ActivationSparsity(),       # Overall spike sparsity
+        ActivationSparsityByLayer(),# Per-layer spike sparsity breakdown
+        SynapticOperations(),       # Number of synaptic operations (MACs)
+        MembraneUpdates(),          # Number of membrane potential updates
+        ClassificationAccuracy(),   # Classification accuracy
     ]
     
     # Create and run benchmark
@@ -161,8 +167,9 @@ def compute_static_metrics(network: torch.nn.Module) -> Dict[str, Any]:
     nb_model = SNNTorchModel(network)
     
     static_metrics = [
-        FootprintMemory(),
+        Footprint(),
         ConnectionSparsity(),
+        ParameterCount(),
     ]
     
     # Static metrics can be computed without a dataloader

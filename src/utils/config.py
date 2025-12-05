@@ -282,7 +282,13 @@ def validate_config(config: Config) -> List[str]:
     if config.data.timesteps <= 0:
         issues.append("data.timesteps must be positive")
 
-    valid_datasets = ["MNIST", "CIFAR10", "FashionMNIST", "SVHN", "DVSGesture"]
+    valid_datasets = [
+        # Standard image classification
+        "MNIST", "CIFAR10", "FashionMNIST", "SVHN", "DVSGesture",
+        # NeuroBench official benchmarks
+        "SpeechCommands", "WISDM",  # Classification
+        "PrimateReaching", "MackeyGlass",  # Regression
+    ]
     if config.data.dataset not in valid_datasets:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
