@@ -164,6 +164,9 @@ class MackeyGlassWrapper(Dataset):
         if data.shape[0] != self.timesteps:
             data = self._resample(data, self.timesteps)
         
+        # Ensure consistent output shape [timesteps, features]
+        data = data.reshape(self.timesteps, -1)
+        
         return data, target
     
     def _resample(self, data, target_len):
