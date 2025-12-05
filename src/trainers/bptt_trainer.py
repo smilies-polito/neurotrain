@@ -64,10 +64,12 @@ class BPTTTrainer(BaseTrainer):
         self.lr = lr
         self.batch_size = batch_size
         
-        # Create optimizer if not provided
+        # Store provided optimizer or mark for lazy creation after .to(device)
+        self._external_optimizer = optimizer
         if optimizer is not None:
             self.optimizer = optimizer
         else:
+            # Create optimizer - will be recreated in to() if device changes
             self.optimizer = torch.optim.Adam(network.parameters(), lr=lr)
         
         # Use snnTorch's built-in loss functions
@@ -133,4 +135,22 @@ class BPTTTrainer(BaseTrainer):
     def reset(self):
         """Reset all LIF neuron states in the network."""
         self.network.reset()
+
+    def to(self, device):
+        """
+        Move trainer and network to device, recreating optimizer with new parameters.
+        
+        This is necessary because optimizer holds references to parameter tensors.
+        When network.to(device) is called, new tensors are created on the target device,
+        but the optimizer still references the old CPU tensors.
+        """
+        # Move network to device (this creates new parameter tensors on target device)
+        super().to(device)
+        
+        # Recreate optimizer with the new device parameters
+        # (only if we created it ourselves, not if it was externally provided)
+        if self._external_optimizer is None:
+            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        
+        return self
 
