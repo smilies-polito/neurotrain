@@ -26,7 +26,7 @@ lr: 0.001
 checkpoint_epochs: [1, 5, 10, 25, 50]
 
 # Hardware configuration
-device: "cuda"  # "cuda" or "cpu"
+device: "cpu"  # "cuda" or "cpu" (use "cpu" if no GPU available)
 
 # Output directory for results
 output_dir: "./benchmark_results"

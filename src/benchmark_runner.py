@@ -267,7 +267,11 @@ def benchmark_algorithm(
         # Extract timing from profiler
         key_avg = prof.key_averages()
         cpu_ms = sum(e.cpu_time_total for e in key_avg) / 1000.0
-        cuda_ms = sum(e.cuda_time_total for e in key_avg) / 1000.0 if use_cuda else 0.0
+        # Only access cuda_time_total if using CUDA (attribute doesn't exist on CPU)
+        if use_cuda:
+            cuda_ms = sum(getattr(e, 'cuda_time_total', 0) for e in key_avg) / 1000.0
+        else:
+            cuda_ms = 0.0
         epoch_times_cpu.append(cpu_ms)
         epoch_times_cuda.append(cuda_ms)
         
