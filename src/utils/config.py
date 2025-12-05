@@ -211,7 +211,7 @@ def merge_config_with_args(config: Config, args) -> Config:
         "epochs": ("training", "epochs"),
         "batch_size": ("training", "batch_size"),
         "lr": ("training", "learning_rate"),
-        "optimizer": ("training", "optimizer"),
+        # Note: "optimizer" handled specially below (it's a boolean flag)
         # trainer
         "update_last": ("trainer", "update_last"),
         "update_every": ("trainer", "update_every"),
@@ -236,8 +236,9 @@ def merge_config_with_args(config: Config, args) -> Config:
             [args.in_size] + [layer_size] * n_layers + [args.n_class]
         )
 
-    # Handle optimizer flag
-    if hasattr(args, "optimizer") and args.optimizer:
+    # Handle optimizer flag (only override if explicitly set to True)
+    # When --optimizer is passed, use adam; otherwise keep config file value
+    if hasattr(args, "optimizer") and args.optimizer is True:
         config_dict["training"]["optimizer"] = "adam"
 
     return Config.from_dict(config_dict)

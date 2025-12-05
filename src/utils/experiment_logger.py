@@ -397,7 +397,18 @@ class ExperimentLogger:
         """Log hyperparameters with associated metrics to TensorBoard."""
         writer = self.get_tensorboard_writer()
         if writer is not None:
-            writer.add_hparams(hparams, metrics)
+            # Sanitize hparams: TensorBoard only accepts int, float, str, bool, or Tensor
+            sanitized_hparams = {}
+            for key, value in hparams.items():
+                if value is None:
+                    sanitized_hparams[key] = "None"
+                elif isinstance(value, (list, tuple)):
+                    sanitized_hparams[key] = str(value)
+                elif isinstance(value, (int, float, str, bool)):
+                    sanitized_hparams[key] = value
+                else:
+                    sanitized_hparams[key] = str(value)
+            writer.add_hparams(sanitized_hparams, metrics)
 
     def close(self):
         """Close any open resources."""
