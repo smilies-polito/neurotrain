@@ -98,7 +98,7 @@ Follow these conventions:
 Add BPTT baseline and NeuroBench v2.1.0 benchmarking infrastructure.
 
 CONTEXT:
-- Reference states_summary.md for current codebase structure
+- Reference docs/states_summary.md for current codebase structure
 - See "Key Code Patterns" section below for implementation details
 
 CRITICAL IMPLEMENTATION NOTES (lessons learned):
@@ -294,8 +294,8 @@ epoch_ms = (time.perf_counter() - epoch_start) * 1000.0
 Complete the benchmark suite with regression support and all NeuroBench datasets.
 
 CONTEXT:
-- Reference states_summary.md for current structure
-- See prompts_summary.md Prompt 2 for NeuroBench integration details
+- Reference docs/states_summary.md for current structure
+- See docs/prompts_summary.md Prompt 2 for NeuroBench integration details
 - Current state: BPTT + NeuroBench working for classification datasets
 
 DELIVERABLES:
@@ -365,8 +365,8 @@ DO NOT:
 Add [ALGORITHM_NAME] learning algorithm trainer.
 
 CONTEXT:
-- Reference states_summary.md for current structure
-- Reference existing trainers: stsf_trainer.py, bptt_trainer.py
+- Reference docs/states_summary.md for current structure
+- Reference existing trainers: src/trainers/stsf_trainer.py, src/trainers/bptt_trainer.py
 
 REQUIREMENTS:
 - Inherit from BaseTrainer
@@ -413,7 +413,7 @@ To reproduce any development phase:
 
 1. Checkout the previous state tag
 2. Copy the exact prompt for the target phase
-3. Run the prompt with full context (states_summary.md, prompts_summary.md)
+3. Run the prompt with full context (docs/states_summary.md, docs/prompts_summary.md)
 4. Verify deliverables match expected files
 5. Tag the new state
 

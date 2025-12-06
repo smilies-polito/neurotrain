@@ -62,18 +62,25 @@ Refactored into modular architecture with abstract base classes, YAML configurat
 ### Architecture
 
 ```
-src/
-├── trainers/
-│   ├── base_trainer.py      # Abstract interface
-│   └── stsf_trainer.py      # STSF implementation
-├── networks/
-│   └── fc_network.py        # FCNetwork with snnTorch
-├── datasets/                # 5 dataset loaders
-├── utils/
-│   ├── config.py            # Typed config system
-│   ├── checkpoint.py        # Checkpointing
-│   └── experiment_logger.py # Reproducibility
-└── LearningAlgorithms.py    # Train/eval loops
+snn-training-benchmarking/
+├── src/
+│   ├── trainers/
+│   │   ├── base_trainer.py      # Abstract interface
+│   │   └── stsf_trainer.py      # STSF implementation
+│   ├── networks/
+│   │   └── fc_network.py        # FCNetwork with snnTorch
+│   ├── datasets/                # 5 dataset loaders
+│   ├── utils/
+│   │   ├── config.py            # Typed config system
+│   │   ├── checkpoint.py        # Checkpointing
+│   │   └── experiment_logger.py # Reproducibility
+│   └── LearningAlgorithms.py    # Train/eval loops
+├── configs/                     # YAML configurations
+├── tests/                       # Pytest suite
+└── docs/                        # Documentation
+    ├── states_summary.md        # Project evolution
+    ├── prompts_summary.md       # Reproducible prompts
+    └── PROMPT_GUIDELINES.md     # General guidelines
 ```
 
 ### Capabilities
@@ -108,20 +115,46 @@ Complete benchmarking infrastructure with BPTT baseline trainer, NeuroBench v2.1
 | NeuroBench Metrics | ParameterCount, Footprint, ActivationSparsity, SynapticOperations (Effective + Dense MACs), MembraneUpdates |
 | Output | JSON results + formatted summary tables |
 
-### New Components
+### Full Project Structure
 
 ```
-src/
-├── trainers/
-│   └── bptt_trainer.py          # NEW: BPTT with snnTorch functional API
-├── datasets/
-│   └── neurobench_loaders.py    # NEW: SpeechCommands, WISDM, PrimateReaching, MackeyGlass
-├── utils/
-│   └── neurobench_eval.py       # NEW: NeuroBench v2.1.0 wrapper with custom postprocessor
-├── benchmark_runner.py          # NEW: Single-dataset benchmark runner
-run_all_benchmarks.py            # NEW: Multi-dataset benchmark orchestrator
-configs/
-└── benchmark_comparison.yaml    # NEW: Benchmark configuration
+snn-training-benchmarking/
+├── main.py                          # Main entry point
+├── run_all_benchmarks.py            # NEW: Multi-dataset benchmark orchestrator
+├── src/
+│   ├── trainers/
+│   │   ├── base_trainer.py          # Abstract interface
+│   │   ├── stsf_trainer.py          # STSF implementation
+│   │   └── bptt_trainer.py          # NEW: BPTT with snnTorch functional API
+│   ├── networks/
+│   │   └── fc_network.py            # FCNetwork with snnTorch
+│   ├── datasets/
+│   │   ├── mnist_loader.py          # MNIST loader
+│   │   ├── cifar10_loader.py        # CIFAR10 loader
+│   │   ├── fashionmnist_loader.py   # FashionMNIST loader
+│   │   ├── svhn_loader.py           # SVHN loader
+│   │   ├── dvsgesture_loader.py     # DVSGesture loader
+│   │   ├── neurobench_loaders.py    # NEW: SpeechCommands, WISDM, PrimateReaching, MackeyGlass
+│   │   └── get_loader.py            # Loader factory
+│   ├── utils/
+│   │   ├── config.py                # Typed config system
+│   │   ├── checkpoint.py            # Checkpointing
+│   │   ├── experiment_logger.py     # Reproducibility
+│   │   └── neurobench_eval.py       # NEW: NeuroBench v2.1.0 wrapper
+│   ├── benchmark_runner.py          # NEW: Single-dataset benchmark runner
+│   ├── LearningAlgorithms.py        # Train/eval loops
+│   └── snn-training-benchmarking.def # Singularity container definition
+├── configs/
+│   ├── mnist_default.yaml           # MNIST config
+│   ├── cifar10_default.yaml         # CIFAR10 config
+│   ├── fashionmnist_default.yaml    # FashionMNIST config
+│   └── benchmark_comparison.yaml    # NEW: Benchmark configuration
+├── tests/                           # Pytest suite
+├── docs/                            # Documentation
+│   ├── states_summary.md            # Project evolution (this file)
+│   ├── prompts_summary.md           # Reproducible prompts
+│   └── PROMPT_GUIDELINES.md         # General guidelines
+└── benchmark_results/               # Output directory (git-ignored)
 ```
 
 ### Key Implementation Details
