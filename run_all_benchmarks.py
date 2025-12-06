@@ -40,11 +40,11 @@ STANDARD_DATASETS = {
         "timesteps": 25,
         "task": "classification",
     },
-    # "SVHN": {
-    #     "layer_sizes": [3072, 512, 10],
-    #     "timesteps": 25,
-    #     "task": "classification",
-    # },
+    "SVHN": {
+        "layer_sizes": [3072, 512, 10],
+        "timesteps": 25,
+        "task": "classification",
+    },
     # "DVSGesture": {
     #     "layer_sizes": [1156, 256, 11],  # 34x34 = 1156
     #     "timesteps": 25,
@@ -57,16 +57,18 @@ STANDARD_DATASETS = {
 # ============================================================================
 NEUROBENCH_DATASETS = {
     # Classification tasks
-    "SpeechCommands": {
-        "layer_sizes": [1600, 256, 12],  # Resampled audio features -> 12 keywords
-        "timesteps": 100,
-        "task": "classification",
-    },
-    "WISDM": {
-        "layer_sizes": [3, 128, 6],  # 3-axis accel -> 6 activities
-        "timesteps": 200,
-        "task": "classification",
-    },
+    # SpeechCommands disabled - requires torchcodec not in container
+    # "SpeechCommands": {
+    #     "layer_sizes": [1600, 256, 12],  # Resampled audio features -> 12 keywords
+    #     "timesteps": 100,
+    #     "task": "classification",
+    # },
+    # WISDM disabled - requires pytorch_lightning not in container
+    # "WISDM": {
+    #     "layer_sizes": [3, 128, 6],  # 3-axis accel -> 6 activities
+    #     "timesteps": 200,
+    #     "task": "classification",
+    # },
     # Regression tasks (require different loss function)
     # "PrimateReaching": {
     #     "layer_sizes": [96, 128, 2],  # Neural channels -> 2D velocity

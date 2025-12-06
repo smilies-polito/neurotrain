@@ -186,8 +186,9 @@ def SpeechCommandsLoader(batch_size: int, timesteps: int):
     """
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     
-    train_dataset = SpeechCommands(root=DATA_ROOT.as_posix(), subset="training", download=True)
-    test_dataset = SpeechCommands(root=DATA_ROOT.as_posix(), subset="testing", download=True)
+    # NeuroBench v2.x uses 'path' parameter, not 'root'
+    train_dataset = SpeechCommands(path=DATA_ROOT.as_posix(), subset="training")
+    test_dataset = SpeechCommands(path=DATA_ROOT.as_posix(), subset="testing")
     
     train_wrapped = SpeechCommandsWrapper(train_dataset, timesteps)
     test_wrapped = SpeechCommandsWrapper(test_dataset, timesteps)

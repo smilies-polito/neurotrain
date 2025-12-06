@@ -1,4 +1,5 @@
 from pathlib import Path
+import torch
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader

@@ -22,6 +22,29 @@ from neurobench.metrics.workload import (
 )
 
 
+def spike_to_prediction(preds: torch.Tensor) -> torch.Tensor:
+    """
+    Postprocessor to convert spike outputs to class predictions.
+    
+    NeuroBench's ClassificationAccuracy expects predictions of shape [batch]
+    matching label shape. This converts spike outputs [batch, timesteps, classes]
+    to class predictions [batch] by summing over time and taking argmax.
+    
+    Note: Returns predictions on CPU to match labels from DataLoader.
+    
+    Args:
+        preds: Spike output tensor of shape [batch, timesteps, classes]
+        
+    Returns:
+        Class predictions of shape [batch] on CPU
+    """
+    # Sum spikes over time: [batch, timesteps, classes] -> [batch, classes]
+    spike_sum = preds.sum(dim=1)
+    # Get predicted class: [batch, classes] -> [batch]
+    # Move to CPU to match labels from DataLoader
+    return spike_sum.argmax(dim=1).cpu()
+
+
 def run_neurobench(
     network: torch.nn.Module,
     test_loader: DataLoader,
@@ -52,33 +75,41 @@ def run_neurobench(
     
     # Create a wrapper that handles the forward pass properly for NeuroBench
     # NeuroBench expects the model to return spikes in a specific format
-    wrapped_model = NeuroBenchWrapper(network, num_timesteps)
+    # Pass device so wrapper can move inputs to correct device
+    wrapped_model = NeuroBenchWrapper(network, num_timesteps, device)
+    wrapped_model.to(device)
     
     # Wrap with NeuroBench's SNNTorchModel
-    nb_model = SNNTorchModel(wrapped_model)
+    # Use custom_forward=True since our wrapper handles the full temporal loop
+    # and returns spikes in the correct format [timesteps, batch, classes]
+    nb_model = SNNTorchModel(wrapped_model, custom_forward=True)
     
     # Configure static metrics (computed once on model)
+    # NeuroBench v2.x expects metric CLASSES, not instances
     static_metrics = [
-        Footprint(),           # Memory footprint of the model
-        ConnectionSparsity(),  # Sparsity of weight connections
-        ParameterCount(),      # Total number of parameters
+        Footprint,             # Memory footprint of the model
+        ConnectionSparsity,    # Sparsity of weight connections
+        ParameterCount,        # Total number of parameters
     ]
     
     # Configure workload metrics (computed during inference)
     workload_metrics = [
-        ActivationSparsity(),       # Overall spike sparsity
-        ActivationSparsityByLayer(),# Per-layer spike sparsity breakdown
-        SynapticOperations(),       # Number of synaptic operations (MACs)
-        MembraneUpdates(),          # Number of membrane potential updates
-        ClassificationAccuracy(),   # Classification accuracy
+        ActivationSparsity,         # Overall spike sparsity
+        ActivationSparsityByLayer,  # Per-layer spike sparsity breakdown
+        SynapticOperations,         # Number of synaptic operations (MACs)
+        MembraneUpdates,            # Number of membrane potential updates
+        ClassificationAccuracy,     # Classification accuracy
     ]
     
     # Create and run benchmark
+    # NeuroBench v2.x uses metric_list=[static_metrics, workload_metrics]
+    # Postprocessor converts spike outputs [batch, T, classes] to predictions [batch]
     benchmark = Benchmark(
         model=nb_model,
         dataloader=test_loader,
-        static_metrics=static_metrics,
-        workload_metrics=workload_metrics,
+        preprocessors=[],
+        postprocessors=[spike_to_prediction],
+        metric_list=[static_metrics, workload_metrics],
     )
     
     results = benchmark.run()
@@ -94,17 +125,19 @@ class NeuroBenchWrapper(torch.nn.Module):
     This wrapper handles the timestep iteration and returns accumulated spikes.
     """
     
-    def __init__(self, network: torch.nn.Module, num_timesteps: Optional[int] = None):
+    def __init__(self, network: torch.nn.Module, num_timesteps: Optional[int] = None, device: str = "cpu"):
         """
         Initialize wrapper.
         
         Args:
             network: FCNetwork instance
             num_timesteps: Number of timesteps (inferred from input if None)
+            device: Device to run inference on (for moving inputs)
         """
         super().__init__()
         self.network = network
         self.num_timesteps = num_timesteps
+        self.device = device
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -117,6 +150,9 @@ class NeuroBenchWrapper(torch.nn.Module):
         Returns:
             Spike output tensor of shape [batch, num_classes]
         """
+        # Move input to the same device as the network
+        x = x.to(self.device)
+        
         # Handle different input formats
         if x.dim() == 3:
             # Determine input format using num_timesteps if available
@@ -144,20 +180,19 @@ class NeuroBenchWrapper(torch.nn.Module):
         # Reset network state
         self.network.reset()
         
-        # Forward through all timesteps
-        spk_sum = None
+        # Forward through all timesteps, collecting spikes for NeuroBench
         all_spikes = []
         
         for t in range(num_timesteps):
             spks, _ = self.network(x[t])
             all_spikes.append(spks[-1])  # Output layer spikes
-            if spk_sum is None:
-                spk_sum = spks[-1]
-            else:
-                spk_sum = spk_sum + spks[-1]
         
-        # Return spike sum for classification
-        return spk_sum
+        # Stack spikes: [timesteps, batch, classes]
+        # NeuroBench with custom_forward=True expects this format
+        # (it will transpose to [batch, timesteps, classes] internally)
+        spk_out = torch.stack(all_spikes, dim=0)
+        
+        return spk_out
     
     def reset(self):
         """Reset network state."""
@@ -177,17 +212,18 @@ def compute_static_metrics(network: torch.nn.Module) -> Dict[str, Any]:
     nb_model = SNNTorchModel(network)
     
     static_metrics = [
-        Footprint(),
-        ConnectionSparsity(),
-        ParameterCount(),
+        Footprint,
+        ConnectionSparsity,
+        ParameterCount,
     ]
     
     # Static metrics can be computed without a dataloader
     results = {}
-    for metric in static_metrics:
-        metric_name = metric.__class__.__name__
+    for metric_cls in static_metrics:
+        metric_name = metric_cls.__name__
         try:
-            results[metric_name] = metric(nb_model)
+            # Instantiate and call the metric
+            results[metric_name] = metric_cls()(nb_model)
         except Exception as e:
             results[metric_name] = f"Error: {e}"
     
