@@ -185,33 +185,135 @@ def run_all_benchmarks(
     print(f"Results saved to: {results_file}")
     
     # Print final summary table
-    print("\n" + "=" * 80)
-    print("FINAL SUMMARY")
-    print("=" * 80)
-    print(f"{'Dataset':<15} | {'BPTT Acc':<10} | {'STSF Acc':<10} | {'BPTT Time':<12} | {'STSF Time':<12}")
-    print("-" * 80)
+    print("\n" + "=" * 160)
+    print(f"FINAL SUMMARY ({epochs} epochs)")
+    print("=" * 160)
+    
+    print(f"{'Dataset':<14} | {'BPTT Acc':<9} | {'STSF Acc':<9} | {'BPTT Wall Time':<15} | {'STSF Wall Time':<15} | {'BPTT Time/epoch':<16} | {'STSF Time/epoch':<16}")
+    print("-" * 160)
     
     for dataset, algos in all_results.items():
-        bptt_acc = algos.get("bptt", {})
-        stsf_acc = algos.get("stsf", {})
+        bptt_res = algos.get("bptt", {})
+        stsf_res = algos.get("stsf", {})
         
-        bptt_acc_val = bptt_acc.final_accuracy if hasattr(bptt_acc, 'final_accuracy') else "N/A"
-        stsf_acc_val = stsf_acc.final_accuracy if hasattr(stsf_acc, 'final_accuracy') else "N/A"
-        bptt_time = bptt_acc.total_wall_time_s if hasattr(bptt_acc, 'total_wall_time_s') else "N/A"
-        stsf_time = stsf_acc.total_wall_time_s if hasattr(stsf_acc, 'total_wall_time_s') else "N/A"
+        # Accuracy
+        bptt_acc = bptt_res.final_accuracy if hasattr(bptt_res, 'final_accuracy') else None
+        stsf_acc = stsf_res.final_accuracy if hasattr(stsf_res, 'final_accuracy') else None
         
-        if isinstance(bptt_acc_val, float):
-            bptt_acc_val = f"{bptt_acc_val:.4f}"
-        if isinstance(stsf_acc_val, float):
-            stsf_acc_val = f"{stsf_acc_val:.4f}"
-        if isinstance(bptt_time, float):
-            bptt_time = f"{bptt_time:.2f}s"
-        if isinstance(stsf_time, float):
-            stsf_time = f"{stsf_time:.2f}s"
+        # Total wall time
+        bptt_total = bptt_res.total_wall_time_s if hasattr(bptt_res, 'total_wall_time_s') else None
+        stsf_total = stsf_res.total_wall_time_s if hasattr(stsf_res, 'total_wall_time_s') else None
+        
+        # Per-epoch wall-clock time (ms)
+        bptt_epoch = bptt_res.avg_epoch_cpu_ms if hasattr(bptt_res, 'avg_epoch_cpu_ms') else None
+        stsf_epoch = stsf_res.avg_epoch_cpu_ms if hasattr(stsf_res, 'avg_epoch_cpu_ms') else None
+        
+        # Format values
+        bptt_acc_str = f"{bptt_acc:.4f}" if bptt_acc is not None else "N/A"
+        stsf_acc_str = f"{stsf_acc:.4f}" if stsf_acc is not None else "N/A"
+        bptt_total_str = f"{bptt_total:.1f}s" if bptt_total is not None else "N/A"
+        stsf_total_str = f"{stsf_total:.1f}s" if stsf_total is not None else "N/A"
+        bptt_epoch_str = f"{bptt_epoch:.0f}ms" if bptt_epoch is not None else "N/A"
+        stsf_epoch_str = f"{stsf_epoch:.0f}ms" if stsf_epoch is not None else "N/A"
             
-        print(f"{dataset:<15} | {bptt_acc_val:<10} | {stsf_acc_val:<10} | {bptt_time:<12} | {stsf_time:<12}")
+        print(f"{dataset:<14} | {bptt_acc_str:<9} | {stsf_acc_str:<9} | {bptt_total_str:<15} | {stsf_total_str:<15} | {bptt_epoch_str:<16} | {stsf_epoch_str:<16}")
     
-    print("=" * 80)
+    print("=" * 160)
+    
+    # Print NeuroBench metrics summary
+    print("\n" + "=" * 180)
+    print("NEUROBENCH METRICS SUMMARY")
+    print("=" * 180)
+    print(f"{'Dataset':<14} | {'Algo':<6} | {'Params':<12} | {'Footprint':<12} | {'ActSpars':<10} | {'Eff. MACs':<14} | {'Dense MACs':<14} | {'Savings':<8} | {'MemUpdates':<12}")
+    print("-" * 180)
+    
+    for dataset, algos in all_results.items():
+        for algo_name in ["bptt", "stsf"]:
+            res = algos.get(algo_name, {})
+            if not hasattr(res, 'neurobench'):
+                continue
+            
+            nb = res.neurobench if hasattr(res, 'neurobench') else {}
+            if not nb:
+                continue
+            
+            # Extract NeuroBench metrics
+            params = nb.get("ParameterCount", "N/A")
+            footprint = nb.get("Footprint", "N/A")
+            act_sparsity = nb.get("ActivationSparsity", "N/A")
+            synops = nb.get("SynapticOperations", "N/A")
+            mem_updates = nb.get("MembraneUpdates", "N/A")
+            
+            # Format values
+            if isinstance(params, (int, float)):
+                params_str = f"{int(params):,}"
+            else:
+                params_str = str(params)[:12]
+            
+            # Footprint in KB or MB
+            if isinstance(footprint, (int, float)):
+                if footprint >= 1024 * 1024:
+                    footprint_str = f"{footprint / (1024*1024):.2f} MB"
+                elif footprint >= 1024:
+                    footprint_str = f"{footprint / 1024:.1f} KB"
+                else:
+                    footprint_str = f"{int(footprint)} B"
+            else:
+                footprint_str = str(footprint)[:12]
+            
+            if isinstance(act_sparsity, float):
+                act_str = f"{act_sparsity:.4f}"
+            else:
+                act_str = str(act_sparsity)[:10]
+            
+            # SynapticOperations returns a dict like {'Effective_MACs': value, 'Dense': value}
+            eff_macs = 0
+            dense_macs = 0
+            if isinstance(synops, dict):
+                eff_macs = synops.get("Effective_MACs", 0)
+                dense_macs = synops.get("Dense", 0)
+                eff_str = f"{int(eff_macs):,}" if isinstance(eff_macs, (int, float)) else str(eff_macs)[:14]
+                dense_str = f"{int(dense_macs):,}" if isinstance(dense_macs, (int, float)) else str(dense_macs)[:14]
+            elif isinstance(synops, (int, float)):
+                eff_str = f"{int(synops):,}"
+                dense_str = "N/A"
+            else:
+                eff_str = str(synops)[:14]
+                dense_str = "N/A"
+            
+            # Compute savings percentage
+            if isinstance(eff_macs, (int, float)) and isinstance(dense_macs, (int, float)) and dense_macs > 0:
+                savings = (1 - eff_macs / dense_macs) * 100
+                savings_str = f"{savings:.1f}%"
+            else:
+                savings_str = "N/A"
+            
+            # MembraneUpdates may also be a dict
+            if isinstance(mem_updates, dict):
+                mem_val = list(mem_updates.values())[0] if mem_updates else 0
+                mem_str = f"{int(mem_val):,}" if isinstance(mem_val, (int, float)) else str(mem_val)[:12]
+            elif isinstance(mem_updates, (int, float)):
+                mem_str = f"{int(mem_updates):,}"
+            else:
+                mem_str = str(mem_updates)[:12]
+            
+            print(f"{dataset:<14} | {algo_name.upper():<6} | {params_str:<12} | {footprint_str:<12} | {act_str:<10} | {eff_str:<14} | {dense_str:<14} | {savings_str:<8} | {mem_str:<12}")
+    
+    print("=" * 180)
+    
+    print("\nLegend:")
+    print("  Training Summary:")
+    print("    - Acc: Final test accuracy")
+    print("    - Wall Time: Total wall-clock time for all epochs")
+    print("    - Time/epoch: Average wall-clock time per epoch (includes compute + data loading)")
+    print("  NeuroBench Metrics:")
+    print("    - Params: Total number of model parameters")
+    print("    - Footprint: Memory footprint of the model (weights + buffers)")
+    print("    - ActSpars: Activation sparsity (fraction of zero spikes - higher = more efficient)")
+    print("    - Eff. MACs: Effective MACs (actual ops with spike sparsity)")
+    print("    - Dense MACs: Dense MACs (ops if all neurons fired)")
+    print("    - Savings: Compute reduction from spike sparsity ((1 - Eff/Dense) * 100%)")
+    print("    - MemUpdates: Number of membrane potential updates")
     
     return all_results
 

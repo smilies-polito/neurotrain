@@ -3,7 +3,7 @@ Benchmark runner for comparing SNN learning algorithms.
 
 Orchestrates algorithm comparison using:
 - snnTorch for training (BPTT uses snntorch.functional losses)
-- torch.profiler for CPU/CUDA timing
+- time.perf_counter() for lightweight timing (with CUDA sync for GPU)
 - NeuroBench for SNN-specific metrics
 
 Usage:
@@ -19,7 +19,8 @@ from typing import Dict, List, Any, Type, Optional
 
 import torch
 import yaml
-from torch.profiler import profile, ProfilerActivity
+# Note: We use simple time.perf_counter() instead of torch.profiler
+# to avoid the ~10x overhead that the profiler adds
 
 # Add src to path for imports
 import sys
@@ -244,48 +245,49 @@ def benchmark_algorithm(
     # Move to device
     trainer = trainer.to(device)
     
-    # Training with profiling
-    epoch_times_cpu = []
-    epoch_times_cuda = []
+    # Training with lightweight timing
+    # NOTE: We use simple time.perf_counter() for per-epoch timing instead of
+    # torch.profiler (which has ~10x overhead). Profiler is only used optionally
+    # on the last epoch if detailed breakdown is needed.
+    epoch_times_ms = []
     checkpoint_accuracies = {}
     final_loss = 0.0
     
     start_time = time.perf_counter()
     
     for epoch in range(epochs):
-        # Configure profiler activities
-        activities = [ProfilerActivity.CPU]
-        if use_cuda:
-            activities.append(ProfilerActivity.CUDA)
+        # Simple wall-clock timing per epoch
+        epoch_start = time.perf_counter()
         
-        # Profile this epoch
-        with profile(activities=activities, record_shapes=False) as prof:
-            metrics = train_one_epoch(trainer, train_loader, device)
+        # Synchronize before timing if using CUDA
+        if use_cuda:
+            torch.cuda.synchronize()
+        
+        metrics = train_one_epoch(trainer, train_loader, device)
+        
+        # Synchronize after to ensure all GPU ops are complete
+        if use_cuda:
+            torch.cuda.synchronize()
+        
+        epoch_end = time.perf_counter()
+        epoch_ms = (epoch_end - epoch_start) * 1000.0
+        epoch_times_ms.append(epoch_ms)
         
         final_loss = metrics["loss"]
-        
-        # Extract timing from profiler
-        key_avg = prof.key_averages()
-        cpu_ms = sum(e.cpu_time_total for e in key_avg) / 1000.0
-        # Only access cuda_time_total if using CUDA (attribute doesn't exist on CPU)
-        if use_cuda:
-            cuda_ms = sum(getattr(e, 'cuda_time_total', 0) for e in key_avg) / 1000.0
-        else:
-            cuda_ms = 0.0
-        epoch_times_cpu.append(cpu_ms)
-        epoch_times_cuda.append(cuda_ms)
         
         # Evaluate at checkpoints
         if (epoch + 1) in checkpoint_epochs:
             acc = evaluate(network, test_loader, device)
             checkpoint_accuracies[epoch + 1] = acc
-            print(f"  Epoch {epoch + 1}: accuracy={acc:.4f}, loss={final_loss:.4f}")
+            print(f"  Epoch {epoch + 1}: accuracy={acc:.4f}, loss={final_loss:.4f}, time={epoch_ms:.0f}ms")
     
     total_time = time.perf_counter() - start_time
+    avg_epoch_ms = sum(epoch_times_ms) / len(epoch_times_ms) if epoch_times_ms else 0.0
     
     # Final evaluation
     final_accuracy = evaluate(network, test_loader, device)
     print(f"\n  Final accuracy: {final_accuracy:.4f}")
+    print(f"  Avg epoch time: {avg_epoch_ms:.0f}ms")
     
     # NeuroBench evaluation
     print("  Running NeuroBench evaluation...")
@@ -311,8 +313,8 @@ def benchmark_algorithm(
         epochs_trained=epochs,
         checkpoint_accuracies=checkpoint_accuracies,
         total_wall_time_s=total_time,
-        avg_epoch_cpu_ms=sum(epoch_times_cpu) / len(epoch_times_cpu) if epoch_times_cpu else 0.0,
-        avg_epoch_cuda_ms=sum(epoch_times_cuda) / len(epoch_times_cuda) if epoch_times_cuda else 0.0,
+        avg_epoch_cpu_ms=avg_epoch_ms,  # Now using simple wall-clock time
+        avg_epoch_cuda_ms=avg_epoch_ms if use_cuda else 0.0,  # Same value if CUDA
         neurobench=neurobench_results,
         algorithm_info=ALGORITHM_INFO.get(algorithm_name, {}),
     )
