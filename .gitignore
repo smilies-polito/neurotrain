@@ -78,6 +78,7 @@ Log/
 logs/
 runs/
 tensorboard/
+benchmark_results/
 
 # Data (keep structure, ignore large files)
 src/Data/MNIST/
