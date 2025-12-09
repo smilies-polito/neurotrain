@@ -1,15 +1,16 @@
 # SNN Training Benchmarking
 
-A modular, scalable benchmarking platform for spiking neural network (SNN) learning algorithms. Supports plug-and-play algorithms, advanced logging, reproducibility, and systematic research analysis.
+A modular, scalable benchmarking platform for spiking neural network (SNN) learning algorithms. Supports plug-and-play algorithms, advanced logging, reproducibility, and systematic research analysis with **NeuroBench integration**.
 
 ## Features
 
 - **Reproducible Experiments**: Comprehensive seed management, environment logging, and git commit tracking
 - **Configuration System**: YAML/JSON config files with CLI override support
 - **Checkpointing**: Automatic checkpoint saving with resume capability
-- **Plug-and-Play Trainers**: Easily add new learning algorithms
+- **Plug-and-Play Trainers**: Easily add new learning algorithms (BPTT, STSF)
 - **TensorBoard Integration**: Real-time training visualization
-- **Multiple Datasets**: MNIST, FashionMNIST, CIFAR10, SVHN, DVSGesture
+- **NeuroBench Integration**: Official neuromorphic benchmark datasets and metrics
+- **Automated Benchmarking**: Compare algorithms across multiple datasets
 
 ## Installation
 
@@ -66,6 +67,145 @@ python main.py --config configs/mnist_default.yaml --resume
 python main.py --resume-from experiments/STSF_MNIST/20231128_120000/checkpoints/checkpoint_latest.pt
 ```
 
+## Comprehensive Benchmarking
+
+This platform supports systematic comparison of SNN learning algorithms across multiple datasets with NeuroBench integration.
+
+### Available Learning Algorithms
+
+| Algorithm | Type | Description |
+|-----------|------|-------------|
+| **STSF** | Local Learning | Spiking Time Sparse Feedback - bio-plausible, no backprop |
+| **BPTT** | Gradient-based | Backpropagation Through Time with surrogate gradients |
+
+### Available Datasets
+
+#### Standard Image Classification
+| Dataset | Input Size | Classes | Description |
+|---------|------------|---------|-------------|
+| MNIST | 784 | 10 | Handwritten digits |
+| FashionMNIST | 784 | 10 | Fashion items |
+| CIFAR10 | 3072 | 10 | Natural images |
+| SVHN | 3072 | 10 | Street view house numbers |
+| DVSGesture | 1156 | 11 | Event-based gestures |
+
+#### NeuroBench Official Benchmarks
+| Dataset | Task | Description |
+|---------|------|-------------|
+| SpeechCommands | Classification | Google Speech Commands (12 keywords) |
+| WISDM | Classification | Human Activity Recognition (6 activities) |
+| PrimateReaching | Regression | Motor prediction from neural recordings |
+| MackeyGlass | Regression | Chaotic time series prediction |
+
+### Run Full Benchmark Suite
+
+Compare BPTT vs STSF across all classification datasets:
+
+```bash
+# Run comprehensive benchmark (all datasets, both algorithms)
+python run_all_benchmarks.py --epochs 50 --device cuda
+
+# With custom settings
+python run_all_benchmarks.py \
+    --epochs 100 \
+    --batch-size 128 \
+    --lr 0.001 \
+    --device cuda \
+    --output-dir ./benchmark_results
+```
+
+This will:
+1. Train both **BPTT** and **STSF** on each dataset
+2. Profile CPU/GPU timing with PyTorch profiler
+3. Run **NeuroBench evaluation** for SNN-specific metrics
+4. Save comprehensive results to JSON
+5. Print comparison summary tables
+
+### Single Algorithm Comparison
+
+```bash
+# Run benchmark on specific config
+python src/benchmark_runner.py --config configs/benchmark_comparison.yaml
+
+# Override output directory
+python src/benchmark_runner.py --config configs/benchmark_comparison.yaml --output-dir ./my_results
+```
+
+### NeuroBench Metrics
+
+The benchmark automatically computes these NeuroBench metrics:
+
+**Static Metrics** (model properties):
+- `Footprint` - Memory footprint
+- `ConnectionSparsity` - Weight sparsity
+- `ParameterCount` - Total parameters
+
+**Workload Metrics** (inference efficiency):
+- `ActivationSparsity` - Overall spike sparsity
+- `ActivationSparsityByLayer` - Per-layer breakdown
+- `SynapticOperations` - Computational cost (like MACs)
+- `MembraneUpdates` - Neuron update overhead
+- `ClassificationAccuracy` - Test accuracy
+
+### Benchmark Output
+
+Results are saved to `benchmark_results/full_benchmark_<timestamp>.json`:
+
+```json
+{
+  "MNIST": {
+    "bptt": {
+      "final_accuracy": 0.9823,
+      "total_wall_time_s": 245.3,
+      "avg_epoch_cpu_ms": 4521.2,
+      "neurobench": {
+        "ActivationSparsity": 0.92,
+        "SynapticOperations": 156000,
+        ...
+      }
+    },
+    "stsf": {
+      "final_accuracy": 0.9172,
+      "total_wall_time_s": 89.1,
+      ...
+    }
+  },
+  ...
+}
+```
+
+### Using Singularity Container
+
+For HPC environments, use the provided Singularity container:
+
+```bash
+# Build container (requires fakeroot or sudo)
+cd src
+singularity build --fakeroot snn-training-benchmarking.sif snn-training-benchmarking.def
+
+# Run training
+singularity exec snn-training-benchmarking.sif python3 main.py --config configs/mnist_default.yaml
+
+# Run full benchmark
+singularity exec snn-training-benchmarking.sif python3 run_all_benchmarks.py --epochs 50 --device cuda
+
+# Interactive shell
+singularity shell snn-training-benchmarking.sif
+```
+
+### TensorBoard Visualization
+
+Monitor training in real-time:
+
+```bash
+# Inside container
+singularity exec snn-training-benchmarking.sif tensorboard --logdir=experiments --bind_all
+
+# Then open http://localhost:6006 in browser
+# For remote servers, use SSH port forwarding:
+# ssh -L 6006:localhost:6006 user@server
+```
+
 ## Configuration
 
 ### Config File Structure
@@ -117,10 +257,11 @@ checkpoint:
 
 | Config | Description |
 |--------|-------------|
-| `mnist_default.yaml` | Standard MNIST training |
-| `mnist_quantized.yaml` | Quantized training for hardware |
-| `fashionmnist_default.yaml` | FashionMNIST training |
-| `cifar10_default.yaml` | CIFAR10 training |
+| `mnist_default.yaml` | Standard MNIST training with STSF |
+| `mnist_quantized.yaml` | Quantized training for hardware deployment |
+| `fashionmnist_default.yaml` | FashionMNIST training with STSF |
+| `cifar10_default.yaml` | CIFAR10 training with STSF |
+| `benchmark_comparison.yaml` | Algorithm comparison config (BPTT vs STSF) |
 
 ## CLI Arguments
 
@@ -248,11 +389,13 @@ trainer:
 
 ## Roadmap
 
-- [ ] Additional learning algorithms (BPTT, e-prop, STDP)
+- [x] BPTT (Backpropagation Through Time) trainer
+- [x] NeuroBench integration (datasets + metrics)
+- [x] Automated benchmarking campaigns
+- [ ] Additional learning algorithms (e-prop, STDP)
 - [ ] Convolutional SNN architectures
-- [ ] NeuroBench integration
-- [ ] Benchmarking campaigns
-- [ ] Interactive visualization
+- [ ] Regression task support for NeuroBench
+- [ ] Interactive visualization dashboard
 - [ ] MLflow integration
 
 ## Contributing
@@ -271,4 +414,5 @@ MIT License
 ## Acknowledgments
 
 - [snntorch](https://github.com/jeshraghian/snntorch) - Spiking neural network library
+- [NeuroBench](https://neurobench.ai) - Neuromorphic computing benchmarks and metrics
 - [Tonic](https://github.com/neuromorphs/tonic) - Neuromorphic datasets

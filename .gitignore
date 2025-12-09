@@ -78,13 +78,16 @@ Log/
 logs/
 runs/
 tensorboard/
+benchmark_results/
 
 # Data (keep structure, ignore large files)
+src/Data/
 src/Data/MNIST/
 src/Data/CIFAR10/
 src/Data/FashionMNIST/
 src/Data/SVHN/
 src/Data/DVSGesture/
+src/Data/NeuroBench/
 *.pt
 *.pth
 !configs/*.pt

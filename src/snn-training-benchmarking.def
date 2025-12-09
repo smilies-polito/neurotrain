@@ -27,8 +27,14 @@ From: ubuntu:22.04
     pip3 install --no-cache-dir snntorch==0.9.4
     pip3 install --no-cache-dir neurobench==2.1.0
     pip3 install --no-cache-dir matplotlib
-    pip install torchvision
-    pip install -U "ray[all]"
+    pip3 install --no-cache-dir torchvision
+    pip3 install --no-cache-dir torchaudio  # Required for NeuroBench SpeechCommands
+    pip3 install --no-cache-dir torchcodec  # Required for torchaudio audio loading
+    pip3 install --no-cache-dir tensorboard
+    pip3 install --no-cache-dir pytorch_lightning  # Required for NeuroBench WISDM dataset
+    pip3 install --no-cache-dir pyyaml
+    pip3 install --no-cache-dir tqdm
+    pip3 install --no-cache-dir -U "ray[all]"
 
 
 %environment

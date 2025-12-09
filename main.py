@@ -39,6 +39,7 @@ from utils.experiment_logger import (
 from datasets.get_loader import get_loader
 from networks.fc_network import FCNetwork
 from trainers.stsf_trainer import STSFTrainer
+from trainers.bptt_trainer import BPTTTrainer
 from LearningAlgorithms import LearningAlgorithms
 
 
@@ -102,7 +103,9 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         optimizer = None
 
     # Create the trainer
-    torch.set_grad_enabled(False)
+    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF)
+    requires_grad = config.trainer.name == "bptt"
+    torch.set_grad_enabled(requires_grad)
     trainer = trainer_class(
         network=network,
         lr=config.training.learning_rate,
@@ -201,8 +204,8 @@ def get_trainer(trainer_name: str):
     """Get trainer class by name."""
     trainers = {
         "stsf": STSFTrainer,
+        "bptt": BPTTTrainer,
         # Future trainers will be added here:
-        # "bptt": BPTTTrainer,
         # "eprop": EpropTrainer,
         # "stdp": STDPTrainer,
     }

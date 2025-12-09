@@ -1,5 +1,5 @@
 from pathlib import Path
-from torchvision.datasets import MNIST
+from torchvision.datasets import SVHN
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
 from datasets.rate import Rate
