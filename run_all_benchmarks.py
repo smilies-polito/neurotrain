@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 from benchmark_runner import benchmark_algorithm, print_comparison_summary, BenchmarkResult
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -88,6 +89,7 @@ DATASETS = {**STANDARD_DATASETS, **NEUROBENCH_DATASETS}
 ALGORITHMS = {
     "bptt": BPTTTrainer,
     "stsf": STSFTrainer,
+    "decolle": DECOLLETrainer,
 }
 
 
@@ -111,7 +113,7 @@ def run_all_benchmarks(
     all_results = {}
     
     print("\n" + "=" * 80)
-    print("FULL BENCHMARK SUITE: BPTT vs STSF")
+    print("FULL BENCHMARK SUITE: BPTT vs STSF vs DECOLLE")
     print("=" * 80)
     print(f"Algorithms: {list(ALGORITHMS.keys())}")
     print(f"Datasets: {list(DATASETS.keys())}")
@@ -189,34 +191,41 @@ def run_all_benchmarks(
     print(f"FINAL SUMMARY ({epochs} epochs)")
     print("=" * 160)
     
-    print(f"{'Dataset':<14} | {'BPTT Acc':<9} | {'STSF Acc':<9} | {'BPTT Wall Time':<15} | {'STSF Wall Time':<15} | {'BPTT Time/epoch':<16} | {'STSF Time/epoch':<16}")
-    print("-" * 160)
+    print(f"{'Dataset':<14} | {'BPTT Acc':<9} | {'STSF Acc':<9} | {'DECOLLE Acc':<11} | {'BPTT Wall Time':<15} | {'STSF Wall Time':<15} | {'DECOLLE Wall Time':<17} | {'BPTT Time/epoch':<16} | {'STSF Time/epoch':<16} | {'DECOLLE Time/epoch':<19}")
+    print("-" * 210)
     
     for dataset, algos in all_results.items():
         bptt_res = algos.get("bptt", {})
         stsf_res = algos.get("stsf", {})
+        decolle_res = algos.get("decolle", {})
         
         # Accuracy
         bptt_acc = bptt_res.final_accuracy if hasattr(bptt_res, 'final_accuracy') else None
         stsf_acc = stsf_res.final_accuracy if hasattr(stsf_res, 'final_accuracy') else None
+        decolle_acc = decolle_res.final_accuracy if hasattr(decolle_res, 'final_accuracy') else None
         
         # Total wall time
         bptt_total = bptt_res.total_wall_time_s if hasattr(bptt_res, 'total_wall_time_s') else None
         stsf_total = stsf_res.total_wall_time_s if hasattr(stsf_res, 'total_wall_time_s') else None
+        decolle_total = decolle_res.total_wall_time_s if hasattr(decolle_res, 'total_wall_time_s') else None
         
         # Per-epoch wall-clock time (ms)
         bptt_epoch = bptt_res.avg_epoch_cpu_ms if hasattr(bptt_res, 'avg_epoch_cpu_ms') else None
         stsf_epoch = stsf_res.avg_epoch_cpu_ms if hasattr(stsf_res, 'avg_epoch_cpu_ms') else None
+        decolle_epoch = decolle_res.avg_epoch_cpu_ms if hasattr(decolle_res, 'avg_epoch_cpu_ms') else None
         
         # Format values
         bptt_acc_str = f"{bptt_acc:.4f}" if bptt_acc is not None else "N/A"
         stsf_acc_str = f"{stsf_acc:.4f}" if stsf_acc is not None else "N/A"
+        decolle_acc_str = f"{decolle_acc:.4f}" if decolle_acc is not None else "N/A"
         bptt_total_str = f"{bptt_total:.1f}s" if bptt_total is not None else "N/A"
         stsf_total_str = f"{stsf_total:.1f}s" if stsf_total is not None else "N/A"
+        decolle_total_str = f"{decolle_total:.1f}s" if decolle_total is not None else "N/A"
         bptt_epoch_str = f"{bptt_epoch:.0f}ms" if bptt_epoch is not None else "N/A"
         stsf_epoch_str = f"{stsf_epoch:.0f}ms" if stsf_epoch is not None else "N/A"
+        decolle_epoch_str = f"{decolle_epoch:.0f}ms" if decolle_epoch is not None else "N/A"
             
-        print(f"{dataset:<14} | {bptt_acc_str:<9} | {stsf_acc_str:<9} | {bptt_total_str:<15} | {stsf_total_str:<15} | {bptt_epoch_str:<16} | {stsf_epoch_str:<16}")
+        print(f"{dataset:<14} | {bptt_acc_str:<9} | {stsf_acc_str:<9} | {decolle_acc_str:<11} | {bptt_total_str:<15} | {stsf_total_str:<15} | {decolle_total_str:<17} | {bptt_epoch_str:<16} | {stsf_epoch_str:<16} | {decolle_epoch_str:<19}")
     
     print("=" * 160)
     

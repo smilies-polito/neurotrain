@@ -30,7 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 from networks.fc_network import FCNetwork
+from networks.decolle_network import DecolleNetwork
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
 
@@ -48,6 +50,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (stsf_trainer.py)",
+    },
+    "decolle": {
+        "name": "Deep Continuous Local Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (decolle_trainer.py)",
     },
 }
 
@@ -157,11 +165,12 @@ def evaluate(
         network.reset()
         spk_sum = None
         for t in range(data.size(0)):
-            spk, _ = network(data[t])
-            if spk_sum is None:
-                spk_sum = spk[-1]
+            out = network(data[t])
+            if isinstance(out, (tuple, list)):
+                spk = out[0]
             else:
-                spk_sum = spk_sum + spk[-1]
+                spk = out
+            spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
         
         preds = spk_sum.argmax(dim=1)
         correct += preds.eq(target).sum().item()
@@ -219,7 +228,10 @@ def benchmark_algorithm(
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
     
     # Create network
-    network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
+    if algorithm_name == "decolle":
+        network = DecolleNetwork(layer_sizes=layer_sizes)
+    else:
+        network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
     
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
@@ -231,7 +243,7 @@ def benchmark_algorithm(
             batch_size=batch_size,
         )
     else:
-        # STSF uses local learning
+        # Local learning algorithms (STSF, DECOLLE)
         torch.set_grad_enabled(False)
         trainer = trainer_class(
             network=network,
@@ -351,6 +363,7 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
     trainers = {
         "bptt": BPTTTrainer,
         "stsf": STSFTrainer,
+        "decolle": DECOLLETrainer,
     }
     
     results = {}
