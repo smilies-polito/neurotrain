@@ -31,8 +31,6 @@ class OTTTTrainer(BaseTrainer):
         quant: Kept for interface compatibility (unused)
         use_optimizer: If True, populate .grad and call optimizer.step()
         optimizer: Optional optimizer instance
-        update_last/update_every/seq_batch_size: Accepted for compatibility,
-            not used in this implementation.
     """
 
     def __init__(
@@ -46,9 +44,6 @@ class OTTTTrainer(BaseTrainer):
         quant: bool = False,
         use_optimizer: bool = False,
         optimizer=None,
-        update_last: bool = False,  # noqa: ARG002 - kept for signature compatibility
-        update_every: int = 1,  # noqa: ARG002 - kept for signature compatibility
-        seq_batch_size: int = 1,  # noqa: ARG002 - kept for signature compatibility
         **kwargs,
     ):
         super().__init__()

@@ -40,6 +40,7 @@ from datasets.get_loader import get_loader
 from networks.fc_network import FCNetwork
 from trainers.stsf_trainer import STSFTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.ottt_trainer import OTTTTrainer
 from LearningAlgorithms import LearningAlgorithms
 
 
@@ -106,17 +107,23 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
     # Enable gradients for BPTT (gradient-based), disable for local learners (STSF)
     requires_grad = config.trainer.name == "bptt"
     torch.set_grad_enabled(requires_grad)
-    trainer = trainer_class(
-        network=network,
-        lr=config.training.learning_rate,
-        batch_size=config.training.batch_size,
-        quant=config.model.quantization,
-        use_optimizer=config.training.optimizer is not None,
-        optimizer=optimizer,
-        update_last=config.trainer.update_last,
-        update_every=config.trainer.update_every,
-        seq_batch_size=config.trainer.seq_batch,
-    ).to(device)
+    trainer_kwargs = {
+        "network": network,
+        "lr": config.training.learning_rate,
+        "batch_size": config.training.batch_size,
+        "quant": config.model.quantization,
+        "use_optimizer": config.training.optimizer is not None,
+        "optimizer": optimizer,
+    }
+
+    if issubclass(trainer_class, STSFTrainer):
+        trainer_kwargs.update(
+            update_last=config.trainer.update_last,
+            update_every=config.trainer.update_every,
+            seq_batch_size=config.trainer.seq_batch,
+        )
+
+    trainer = trainer_class(**trainer_kwargs).to(device)
 
     trainer.network.train()
 
