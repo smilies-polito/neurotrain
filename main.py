@@ -205,6 +205,7 @@ def get_trainer(trainer_name: str):
     trainers = {
         "stsf": STSFTrainer,
         "bptt": BPTTTrainer,
+        "ottt": OTTTTrainer,
         # Future trainers will be added here:
         # "eprop": EpropTrainer,
         # "stdp": STDPTrainer,

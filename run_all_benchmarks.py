@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run BPTT vs STSF benchmarks across all available datasets.
+Run BPTT vs STSF vs OTTT benchmarks across all available datasets.
 
 Usage:
     python run_all_benchmarks.py [--epochs 50] [--device cuda]
@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from benchmark_runner import benchmark_algorithm, print_comparison_summary, BenchmarkResult
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 
 
@@ -88,6 +89,7 @@ DATASETS = {**STANDARD_DATASETS, **NEUROBENCH_DATASETS}
 ALGORITHMS = {
     "bptt": BPTTTrainer,
     "stsf": STSFTrainer,
+    "ottt": OTTTTrainer,
 }
 
 
@@ -111,7 +113,7 @@ def run_all_benchmarks(
     all_results = {}
     
     print("\n" + "=" * 80)
-    print("FULL BENCHMARK SUITE: BPTT vs STSF")
+    print("FULL BENCHMARK SUITE: " + " vs ".join(name.upper() for name in ALGORITHMS.keys()))
     print("=" * 80)
     print(f"Algorithms: {list(ALGORITHMS.keys())}")
     print(f"Datasets: {list(DATASETS.keys())}")
@@ -188,36 +190,42 @@ def run_all_benchmarks(
     print("\n" + "=" * 160)
     print(f"FINAL SUMMARY ({epochs} epochs)")
     print("=" * 160)
-    
-    print(f"{'Dataset':<14} | {'BPTT Acc':<9} | {'STSF Acc':<9} | {'BPTT Wall Time':<15} | {'STSF Wall Time':<15} | {'BPTT Time/epoch':<16} | {'STSF Time/epoch':<16}")
-    print("-" * 160)
-    
+
+    algo_names = list(ALGORITHMS.keys())
+    header_parts = [f"{'Dataset':<14}"]
+    for name in algo_names:
+        header_parts.extend(
+            [
+                f"{name.upper()} Acc".ljust(10),
+                f"{name.upper()} Wall".ljust(15),
+                f"{name.upper()} /epoch".ljust(16),
+            ]
+        )
+    header_line = " | ".join(header_parts)
+    print(header_line)
+    print("-" * len(header_line))
+
     for dataset, algos in all_results.items():
-        bptt_res = algos.get("bptt", {})
-        stsf_res = algos.get("stsf", {})
-        
-        # Accuracy
-        bptt_acc = bptt_res.final_accuracy if hasattr(bptt_res, 'final_accuracy') else None
-        stsf_acc = stsf_res.final_accuracy if hasattr(stsf_res, 'final_accuracy') else None
-        
-        # Total wall time
-        bptt_total = bptt_res.total_wall_time_s if hasattr(bptt_res, 'total_wall_time_s') else None
-        stsf_total = stsf_res.total_wall_time_s if hasattr(stsf_res, 'total_wall_time_s') else None
-        
-        # Per-epoch wall-clock time (ms)
-        bptt_epoch = bptt_res.avg_epoch_cpu_ms if hasattr(bptt_res, 'avg_epoch_cpu_ms') else None
-        stsf_epoch = stsf_res.avg_epoch_cpu_ms if hasattr(stsf_res, 'avg_epoch_cpu_ms') else None
-        
-        # Format values
-        bptt_acc_str = f"{bptt_acc:.4f}" if bptt_acc is not None else "N/A"
-        stsf_acc_str = f"{stsf_acc:.4f}" if stsf_acc is not None else "N/A"
-        bptt_total_str = f"{bptt_total:.1f}s" if bptt_total is not None else "N/A"
-        stsf_total_str = f"{stsf_total:.1f}s" if stsf_total is not None else "N/A"
-        bptt_epoch_str = f"{bptt_epoch:.0f}ms" if bptt_epoch is not None else "N/A"
-        stsf_epoch_str = f"{stsf_epoch:.0f}ms" if stsf_epoch is not None else "N/A"
-            
-        print(f"{dataset:<14} | {bptt_acc_str:<9} | {stsf_acc_str:<9} | {bptt_total_str:<15} | {stsf_total_str:<15} | {bptt_epoch_str:<16} | {stsf_epoch_str:<16}")
-    
+        row_parts = [f"{dataset:<14}"]
+        for name in algo_names:
+            res = algos.get(name, {})
+            acc = res.final_accuracy if hasattr(res, "final_accuracy") else None
+            total = res.total_wall_time_s if hasattr(res, "total_wall_time_s") else None
+            epoch_time = (res.avg_epoch_cpu_ms if hasattr(res, "avg_epoch_cpu_ms") else None)
+
+            acc_str = f"{acc:.4f}" if acc is not None else "N/A"
+            total_str = f"{total:.1f}s" if total is not None else "N/A"
+            epoch_str = f"{epoch_time:.0f}ms" if epoch_time is not None else "N/A"
+
+            row_parts.extend(
+                [
+                    f"{acc_str:<10}",
+                    f"{total_str:<15}",
+                    f"{epoch_str:<16}",
+                ]
+            )
+        print(" | ".join(row_parts))
+
     print("=" * 160)
     
     # Print NeuroBench metrics summary
@@ -228,7 +236,7 @@ def run_all_benchmarks(
     print("-" * 180)
     
     for dataset, algos in all_results.items():
-        for algo_name in ["bptt", "stsf"]:
+        for algo_name in ALGORITHMS.keys():
             res = algos.get(algo_name, {})
             if not hasattr(res, 'neurobench'):
                 continue

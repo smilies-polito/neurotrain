@@ -3,8 +3,9 @@
 
 # Algorithms to compare
 algorithms:
-  - bptt    # Backpropagation Through Time (baseline)
-  - stsf    # Spiking Time Sparse Feedback (local)
+    - bptt # Backpropagation Through Time (baseline)
+    - stsf # Spiking Time Sparse Feedback (local)
+    - ottt # Online Training Through Time (local, eligibility traces)
 
 # Dataset configuration
 dataset: "MNIST"

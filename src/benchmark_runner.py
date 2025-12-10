@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from networks.fc_network import FCNetwork
 from datasets.get_loader import get_loader
@@ -48,6 +49,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (stsf_trainer.py)",
+    },
+    "ottt": {
+        "name": "Online Training Through Time",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (ottt_trainer.py)",
     },
 }
 
@@ -230,6 +237,20 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
         )
+    elif algorithm_name == "ottt":
+        # OTTT: online/local learning with eligibility traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr * 10.0,  # stronger updates than gradient baseline
+            batch_size=batch_size,
+            trace_decay=beta,
+            surrogate_slope=5.0,
+            online_updates=True,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+        )
     else:
         # STSF uses local learning
         torch.set_grad_enabled(False)
@@ -351,6 +372,7 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
     trainers = {
         "bptt": BPTTTrainer,
         "stsf": STSFTrainer,
+        "ottt": OTTTTrainer,
     }
     
     results = {}

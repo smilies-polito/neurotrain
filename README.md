@@ -77,6 +77,7 @@ This platform supports systematic comparison of SNN learning algorithms across m
 |-----------|------|-------------|
 | **STSF** | Local Learning | Spiking Time Sparse Feedback - bio-plausible, no backprop |
 | **BPTT** | Gradient-based | Backpropagation Through Time with surrogate gradients |
+| **OTTT** | Local Learning | Online Training Through Time with eligibility traces |
 
 ### Available Datasets
 
@@ -99,7 +100,7 @@ This platform supports systematic comparison of SNN learning algorithms across m
 
 ### Run Full Benchmark Suite
 
-Compare BPTT vs STSF across all classification datasets:
+Compare BPTT vs STSF vs OTTT across all classification datasets:
 
 ```bash
 # Run comprehensive benchmark (all datasets, both algorithms)
