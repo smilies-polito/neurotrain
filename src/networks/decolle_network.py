@@ -34,6 +34,7 @@ class DecolleNetwork(nn.Module):
         tau_ref: float | Sequence[float] = 2.0,
         rho: float | Sequence[float] = 1.0,
         delta: float | Sequence[float] = 0.5,
+        threshold: float | Sequence[float] = 1.0,
         use_bias: bool = True,
     ):
         super().__init__()
@@ -64,6 +65,7 @@ class DecolleNetwork(nn.Module):
         )
         self.rho = _to_layer_list(rho, self.n_layers, "rho")
         self.delta = _to_layer_list(delta, self.n_layers, "delta")
+        self.threshold = _to_layer_list(threshold, self.n_layers, "threshold")
 
         # Trainable parameters (updated manually by DECOLLETrainer)
         self.weights = nn.ModuleList(
@@ -148,7 +150,7 @@ class DecolleNetwork(nn.Module):
 
             # Membrane potential using UPDATED P trace
             u = torch.matmul(p_next, weight.weight.t()) - self.rho[idx] * r_prev + bias
-            s = (u >= 0).float()
+            s = (u >= self.threshold[idx]).float()
 
             # Refractory state update after spike
             r_next = self.gamma[idx] * r_prev + (1.0 - self.gamma[idx]) * s

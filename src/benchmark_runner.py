@@ -242,8 +242,20 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
         )
+    elif algorithm_name == "decolle":
+        # DECOLLE requires smaller learning rate due to local three-factor rule
+        decolle_lr = lr * 0.1  # Scale down LR for DECOLLE (e.g., 0.001 -> 0.0001)
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=decolle_lr,
+            batch_size=batch_size,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+        )
     else:
-        # Local learning algorithms (STSF, DECOLLE)
+        # Local learning algorithms (STSF)
         torch.set_grad_enabled(False)
         trainer = trainer_class(
             network=network,

@@ -50,7 +50,7 @@ class DECOLLETrainer(BaseTrainer):
         h_with_noise: bool = False,
         omega_std: float = 0.0,
         surrogate: str = "sigmoid",  # "sigmoid" (original) or "boxcar"
-        surrogate_scale: float = 1.0,  # scale for sigmoid surrogate
+        surrogate_scale: float = 5.0,  # scale for sigmoid surrogate (higher = sharper gradient near threshold)
     ):
         super().__init__()
         if use_optimizer or optimizer is not None:
@@ -89,6 +89,8 @@ class DECOLLETrainer(BaseTrainer):
 
         # Surrogate gradient window per layer
         self.delta = _expand_param(self.network.delta, self.n_layers, "delta")
+        # Store threshold for surrogate computation (centered around threshold)
+        self.threshold = _expand_param(self.network.threshold, self.n_layers, "threshold")
         self.loss_fn = nn.MSELoss()
 
     @torch.no_grad()
@@ -153,15 +155,18 @@ class DECOLLETrainer(BaseTrainer):
                 # h_mat is [n_post, C], need [B, C] @ [C, n_post] = [B, n_post]
                 err_l = torch.matmul(delta_y, h_mat.t())  # [B, n_post]
 
-                # Surrogate gradient gate
+                # Surrogate gradient gate (centered around threshold)
+                thresh = self.threshold[layer_idx]
+                u_centered = u_l - thresh  # center around threshold
+                
                 if self.surrogate == "sigmoid":
                     # Sigmoid surrogate (original DECOLLE implementation)
-                    # σ'(U) = σ(U) * (1 - σ(U)) scaled
-                    sig = torch.sigmoid(self.surrogate_scale * u_l)
+                    # σ'(U - θ) = σ(U - θ) * (1 - σ(U - θ)) scaled
+                    sig = torch.sigmoid(self.surrogate_scale * u_centered)
                     g_l = self.surrogate_scale * sig * (1.0 - sig)
                 else:
-                    # Boxcar surrogate (piecewise linear, per paper spec)
-                    g_l = ((u_l >= -self.delta[layer_idx]) & (u_l <= self.delta[layer_idx])).float()
+                    # Boxcar surrogate (piecewise linear window around threshold)
+                    g_l = ((u_centered >= -self.delta[layer_idx]) & (u_centered <= self.delta[layer_idx])).float()
 
                 mod = err_l * g_l  # modulatory factor
 
