@@ -283,8 +283,10 @@ def validate_config(config: Config) -> List[str]:
         issues.append("data.timesteps must be positive")
 
     valid_datasets = [
-        # Standard image classification
-        "MNIST", "CIFAR10", "FashionMNIST", "SVHN", "DVSGesture",
+        # Rate-coded image classification
+        "MNIST", "CIFAR10", "FashionMNIST", "SVHN",
+        # Event-based neuromorphic (ideal for DECOLLE)
+        "NMNIST", "DVSGesture",
         # NeuroBench official benchmarks
         "SpeechCommands", "WISDM",  # Classification
         "PrimateReaching", "MackeyGlass",  # Regression

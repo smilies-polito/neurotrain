@@ -9,7 +9,6 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
-from networks.decolle_network import DecolleNetwork
 from trainers.base_trainer import BaseTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.decolle_trainer import DECOLLETrainer
@@ -215,11 +214,11 @@ class TestSTSFTrainer:
 
 
 class TestDECOLLETrainer:
-    """Test DECOLLETrainer class."""
+    """Test DECOLLETrainer class (now uses FCNetwork)."""
 
     @pytest.fixture
     def network(self):
-        return DecolleNetwork(layer_sizes=[32, 16, 4])
+        return FCNetwork(layer_sizes=[32, 16, 4], beta=0.9)
 
     @pytest.fixture
     def trainer(self, network):
@@ -230,7 +229,7 @@ class TestDECOLLETrainer:
         )
 
     def test_trainer_creation(self, trainer):
-        assert isinstance(trainer.network, DecolleNetwork)
+        assert isinstance(trainer.network, FCNetwork)
 
     def test_trainer_train_sample(self, trainer):
         data = torch.randint(0, 2, (6, 8, 32)).float()
@@ -242,7 +241,8 @@ class TestDECOLLETrainer:
     def test_trainer_updates_weights(self, trainer, network):
         data = torch.randint(0, 2, (4, 8, 32)).float()
         target = torch.randint(0, 4, (8,))
-        before = network.weights[0].weight.clone()
+        # FCNetwork uses layers[0::2] for Linear layers
+        before = network.layers[0].weight.clone()
         trainer.train_sample(data, target)
-        assert not torch.allclose(before, network.weights[0].weight)
+        assert not torch.allclose(before, network.layers[0].weight)
 

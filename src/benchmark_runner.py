@@ -32,7 +32,6 @@ from trainers.bptt_trainer import BPTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from networks.fc_network import FCNetwork
-from networks.decolle_network import DecolleNetwork
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
 
@@ -227,11 +226,8 @@ def benchmark_algorithm(
     # Get data loaders
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
     
-    # Create network
-    if algorithm_name == "decolle":
-        network = DecolleNetwork(layer_sizes=layer_sizes)
-    else:
-        network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
+    # Create network (all algorithms use FCNetwork now)
+    network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
     
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
@@ -243,16 +239,22 @@ def benchmark_algorithm(
             batch_size=batch_size,
         )
     elif algorithm_name == "decolle":
-        # DECOLLE requires smaller learning rate due to local three-factor rule
-        decolle_lr = lr * 0.1  # Scale down LR for DECOLLE (e.g., 0.001 -> 0.0001)
+        # DECOLLE hyperparameters tuned for rate-coded inputs (25 timesteps)
+        # Use same LR as other algorithms - per-layer scaling handles the rest
         torch.set_grad_enabled(False)
         trainer = trainer_class(
             network=network,
-            lr=decolle_lr,
+            lr=lr,  # Base LR (e.g., 0.001), layer scaling will adjust
             batch_size=batch_size,
             quant=False,
             use_optimizer=False,
             optimizer=None,
+            # Medium trace dynamics
+            tau_syn=5.0,
+            tau_mem=10.0,
+            # Sigmoid surrogate - always has gradient even for sub-threshold membrane
+            surrogate="sigmoid",
+            surrogate_scale=2.0,
         )
     else:
         # Local learning algorithms (STSF)

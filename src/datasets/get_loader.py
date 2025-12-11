@@ -14,6 +14,7 @@ from datasets.cifar10_loader import CIFAR10Loader
 from datasets.fashionmnist_loader import FashionMNISTLoader
 from datasets.svhn_loader import SVHNLoader
 from datasets.dvsgesture_loader import DVSGestureLoader
+from datasets.nmnist_loader import NMNISTLoader
 # NeuroBench official benchmark loaders
 from datasets.neurobench_loaders import (
     SpeechCommandsLoader,
@@ -27,8 +28,14 @@ from datasets.neurobench_loaders import (
 _REPO_ROOT = Path(__file__).resolve().parent  # .../stsf/main
 DATA_ROOT  = Path(os.environ.get("STSF_DATA", (_REPO_ROOT / "../Data").resolve()))
 
-# Standard image classification datasets
-STANDARD_DATASETS = ["MNIST", "CIFAR10", "FashionMNIST", "SVHN", "DVSGesture"]
+# Standard image classification datasets (rate-coded)
+RATE_CODED_DATASETS = ["MNIST", "CIFAR10", "FashionMNIST", "SVHN"]
+
+# Event-based neuromorphic datasets (ideal for DECOLLE)
+EVENT_BASED_DATASETS = ["NMNIST", "DVSGesture"]
+
+# All standard datasets
+STANDARD_DATASETS = RATE_CODED_DATASETS + EVENT_BASED_DATASETS
 
 # NeuroBench official benchmarks
 NEUROBENCH_CLASSIFICATION = ["SpeechCommands", "WISDM"]
@@ -50,6 +57,9 @@ def get_loader(name, batch_size, T):
         return SVHNLoader(batch_size, T)
     elif name == "DVSGesture":
         return DVSGestureLoader(batch_size, T)
+    # Event-based neuromorphic datasets
+    elif name == "NMNIST":
+        return NMNISTLoader(batch_size, T)
     # NeuroBench official benchmarks (classification)
     elif name == "SpeechCommands":
         return SpeechCommandsLoader(batch_size, T)

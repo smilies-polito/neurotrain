@@ -9,7 +9,6 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
-from networks.decolle_network import DecolleNetwork
 
 
 class TestFCNetwork:
@@ -174,30 +173,3 @@ class TestFCNetwork:
             # Should produce valid outputs
             assert not torch.isnan(spk[-1]).any()
             assert not torch.isnan(mem[-1]).any()
-
-
-class TestDecolleNetwork:
-    """Basic tests for DecolleNetwork dynamics."""
-
-    def test_decolle_creation(self):
-        net = DecolleNetwork(layer_sizes=[784, 128, 10])
-        assert net.input_size == 784
-        assert net.hidden_size == [128]
-        assert net.n_classes == 10
-
-    def test_decolle_forward_shape(self):
-        net = DecolleNetwork(layer_sizes=[32, 16, 4])
-        x = torch.randint(0, 2, (8, 32)).float()
-        spk_list, mem_list, p_list = net(x)
-
-        assert len(spk_list) == 2
-        assert spk_list[-1].shape == (8, 4)
-        assert mem_list[-1].shape == (8, 4)
-        assert p_list[0].shape == (8, 32)
-
-    def test_decolle_reset(self):
-        net = DecolleNetwork(layer_sizes=[10, 5, 2])
-        x = torch.randint(0, 2, (2, 10)).float()
-        net(x)
-        net.reset()  # should not raise
-

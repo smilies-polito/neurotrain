@@ -23,35 +23,55 @@ from trainers.decolle_trainer import DECOLLETrainer
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
 # ============================================================================
-# STANDARD IMAGE CLASSIFICATION DATASETS
+# RATE-CODED IMAGE CLASSIFICATION DATASETS
 # ============================================================================
-STANDARD_DATASETS = {
+RATE_CODED_DATASETS = {
     "MNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "FashionMNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "CIFAR10": {
         "layer_sizes": [3072, 512, 10],  # 32x32x3 = 3072
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "SVHN": {
         "layer_sizes": [3072, 512, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
-    # "DVSGesture": {
-    #     "layer_sizes": [1156, 256, 11],  # 34x34 = 1156
-    #     "timesteps": 25,
-    #     "task": "classification",
-    # },
 }
+
+# ============================================================================
+# EVENT-BASED NEUROMORPHIC DATASETS (ideal for DECOLLE)
+# ============================================================================
+EVENT_BASED_DATASETS = {
+    "NMNIST": {
+        "layer_sizes": [1156, 256, 10],  # 34x34 = 1156, 10 digits
+        "timesteps": 25,
+        "task": "classification",
+        "type": "event-based",
+    },
+    "DVSGesture": {
+        "layer_sizes": [16384, 512, 11],  # 128x128 = 16384, 11 gestures
+        "timesteps": 50,
+        "task": "classification",
+        "type": "event-based",
+    },
+}
+
+# Combined standard datasets
+STANDARD_DATASETS = {**RATE_CODED_DATASETS, **EVENT_BASED_DATASETS}
 
 # ============================================================================
 # NEUROBENCH OFFICIAL BENCHMARK DATASETS
@@ -116,7 +136,8 @@ def run_all_benchmarks(
     print("FULL BENCHMARK SUITE: BPTT vs STSF vs DECOLLE")
     print("=" * 80)
     print(f"Algorithms: {list(ALGORITHMS.keys())}")
-    print(f"Datasets: {list(DATASETS.keys())}")
+    print(f"Rate-coded datasets: {list(RATE_CODED_DATASETS.keys())}")
+    print(f"Event-based datasets: {list(EVENT_BASED_DATASETS.keys())} (ideal for DECOLLE)")
     print(f"Epochs: {epochs}")
     print(f"Device: {device}")
     print("=" * 80)
@@ -237,7 +258,7 @@ def run_all_benchmarks(
     print("-" * 180)
     
     for dataset, algos in all_results.items():
-        for algo_name in ["bptt", "stsf"]:
+        for algo_name in ["bptt", "stsf", "decolle"]:
             res = algos.get(algo_name, {})
             if not hasattr(res, 'neurobench'):
                 continue

@@ -81,14 +81,19 @@ This platform supports systematic comparison of SNN learning algorithms across m
 
 ### Available Datasets
 
-#### Standard Image Classification
+#### Rate-Coded Image Classification
 | Dataset | Input Size | Classes | Description |
 |---------|------------|---------|-------------|
 | MNIST | 784 | 10 | Handwritten digits |
 | FashionMNIST | 784 | 10 | Fashion items |
 | CIFAR10 | 3072 | 10 | Natural images |
 | SVHN | 3072 | 10 | Street view house numbers |
-| DVSGesture | 1156 | 11 | Event-based gestures |
+
+#### Event-Based Neuromorphic (ideal for DECOLLE)
+| Dataset | Input Size | Classes | Description |
+|---------|------------|---------|-------------|
+| N-MNIST | 1156 | 10 | Neuromorphic MNIST (DVS recordings) |
+| DVSGesture | 16384 | 11 | Event-based hand gestures |
 
 #### NeuroBench Official Benchmarks
 | Dataset | Task | Description |
