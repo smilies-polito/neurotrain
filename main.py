@@ -40,6 +40,7 @@ from datasets.get_loader import get_loader
 from networks.fc_network import FCNetwork
 from trainers.stsf_trainer import STSFTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.eprop_trainer import EpropTrainer
 from LearningAlgorithms import LearningAlgorithms
 
 
@@ -85,12 +86,34 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         config.data.timesteps,
     )
 
-    # Create the network
-    network = FCNetwork(
-        layer_sizes=config.model.layer_sizes,
-        beta=config.model.beta,
-        quant=config.model.quantization,
-    )
+    # Create the network (supports fc and recurrent architectures)
+    if config.model.architecture == "recurrent":
+        from networks.recurrent_srnn import RecurrentSRNN
+
+        # Match original e-prop defaults for comparison
+        n_in = config.model.layer_sizes[0]
+        n_rec = config.model.layer_sizes[1] if len(config.model.layer_sizes) > 2 else config.model.layer_sizes[1] if len(config.model.layer_sizes) > 1 else 100
+        n_out = config.model.layer_sizes[-1]
+        network = RecurrentSRNN(
+            n_in=n_in,
+            n_rec=n_rec,
+            n_out=n_out,
+            threshold=config.model.threshold,
+            tau_mem=2.0,
+            tau_out=0.02,
+            bias_out=0.0,
+            gamma=0.3,
+            dt=1e-3,
+        )
+        # Attach for compatibility
+        network.n_classes = n_out
+        network.hidden_size = [n_rec]
+    else:
+        network = FCNetwork(
+            layer_sizes=config.model.layer_sizes,
+            beta=config.model.beta,
+            quant=config.model.quantization,
+        )
 
     # Optimizer
     if config.training.optimizer == "adam":
@@ -205,8 +228,8 @@ def get_trainer(trainer_name: str):
     trainers = {
         "stsf": STSFTrainer,
         "bptt": BPTTTrainer,
+        "eprop": EpropTrainer,
         # Future trainers will be added here:
-        # "eprop": EpropTrainer,
         # "stdp": STDPTrainer,
     }
     if trainer_name not in trainers:
