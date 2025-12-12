@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.eprop_trainer import EpropTrainer
 from networks.fc_network import FCNetwork
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
@@ -48,6 +49,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (stsf_trainer.py)",
+    },
+    "eprop": {
+        "name": "Eligibility Propagation",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (eprop_trainer.py) - Bellec et al. 2020",
     },
 }
 
@@ -230,6 +237,16 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
         )
+    elif algorithm_name == "eprop":
+        # E-prop uses local learning rules (no autograd)
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            use_optimizer=False,
+            optimizer=None,
+        )
     else:
         # STSF uses local learning
         torch.set_grad_enabled(False)
@@ -351,6 +368,7 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
     trainers = {
         "bptt": BPTTTrainer,
         "stsf": STSFTrainer,
+        "eprop": EpropTrainer,
     }
     
     results = {}
