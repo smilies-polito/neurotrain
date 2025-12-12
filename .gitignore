@@ -102,3 +102,6 @@ Thumbs.db
 # Local config
 local_config.yaml
 .env.local
+
+# Eprop implementation Frankler
+eprop/
