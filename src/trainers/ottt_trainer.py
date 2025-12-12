@@ -7,7 +7,7 @@ per time-step using presynaptic traces and surrogate derivatives of the
 postsynaptic membrane potential.
 """
 
-from typing import List
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -24,10 +24,10 @@ class OTTTTrainer(BaseTrainer):
         network: FCNetwork to train (forward pass left untouched)
         lr: Learning rate for manual updates
         batch_size: Training batch size
-        trace_decay: Eligibility trace decay (lambda)
+        trace_decay: Eligibility trace decay (lambda); defaults to neuron leak if None
         surrogate_slope: Slope for sigmoid surrogate derivative
-        online_updates: If True apply updates every timestep (online),
-            otherwise accumulate over the sequence
+        online_updates: If True apply updates every timestep (online) and step the
+            optimizer each step when enabled, otherwise accumulate over the sequence
         quant: Kept for interface compatibility (unused)
         use_optimizer: If True, populate .grad and call optimizer.step()
         optimizer: Optional optimizer instance
@@ -38,7 +38,7 @@ class OTTTTrainer(BaseTrainer):
         network: nn.Module,
         lr: float,
         batch_size: int,
-        trace_decay: float = 0.9,
+        trace_decay: Optional[float] = None,
         surrogate_slope: float = 10.0,
         online_updates: bool = False,
         quant: bool = False,
@@ -67,6 +67,9 @@ class OTTTTrainer(BaseTrainer):
         ]
         self.num_layers = len(self.linear_layers)
 
+        if self.trace_decay is None:
+            self.trace_decay = self._infer_trace_decay()
+
         if self.use_optimizer and self.optimizer is None:
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
 
@@ -76,15 +79,39 @@ class OTTTTrainer(BaseTrainer):
         sig = torch.sigmoid(x)
         return self.surrogate_slope * sig * (1 - sig)
 
-    def _apply_update(self, layer: nn.Linear, grad_w: torch.Tensor) -> None:
+    def _infer_trace_decay(self) -> float:
+        """Default trace decay to the network leak (beta) when available."""
+        for layer in getattr(self.network, "layers", []):
+            beta = getattr(layer, "beta", None)
+            if beta is None:
+                continue
+            try:
+                return float(beta)
+            except (TypeError, ValueError):
+                try:
+                    return float(beta.item())
+                except Exception:
+                    continue
+        return 0.9
+
+    def _apply_update(
+        self, layer: nn.Linear, grad_w: torch.Tensor, grad_b: Optional[torch.Tensor] = None
+    ) -> None:
         """Apply or accumulate weight updates."""
         if self.use_optimizer and self.optimizer is not None:
             if layer.weight.grad is None:
                 layer.weight.grad = grad_w.clone()
             else:
                 layer.weight.grad += grad_w
+            if grad_b is not None and layer.bias is not None:
+                if layer.bias.grad is None:
+                    layer.bias.grad = grad_b.clone()
+                else:
+                    layer.bias.grad += grad_b
         else:
             layer.weight.data -= self.lr * grad_w
+            if grad_b is not None and layer.bias is not None:
+                layer.bias.data -= self.lr * grad_b
 
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
@@ -116,11 +143,13 @@ class OTTTTrainer(BaseTrainer):
         ]
 
         # Accumulate gradients across time if not updating online
-        accum_grads = (
-            [torch.zeros_like(layer.weight.data) for layer in self.linear_layers]
-            if not self.online_updates
-            else None
-        )
+        accum_grads_w = [
+            torch.zeros_like(layer.weight.data) for layer in self.linear_layers
+        ] if not self.online_updates else None
+        accum_grads_b = [
+            torch.zeros_like(layer.bias.data) if layer.bias is not None else None
+            for layer in self.linear_layers
+        ] if not self.online_updates else None
 
         total_loss = torch.zeros(1, device=device)
         spk_sum = None
@@ -142,12 +171,12 @@ class OTTTTrainer(BaseTrainer):
                 )
                 total_loss += loss_t
 
-                # Output error signal and membrane gradient
+                # Output error signal and membrane gradient (scaled by 1/T)
                 probs = torch.softmax(logits, dim=1)
-                delta = probs - target_one_hot
+                delta = (probs - target_one_hot) / num_timesteps
 
                 g_u = [torch.zeros_like(m) for m in mems]
-                g_u[-1] = delta * self.surrogate_derivative(mems[-1])
+                g_u[-1] = delta
 
                 # Backpropagate error across layers (same timestep)
                 for l in reversed(range(self.num_layers - 1)):
@@ -161,18 +190,30 @@ class OTTTTrainer(BaseTrainer):
                     grad_w = (
                         torch.matmul(g_u[l].transpose(0, 1), traces[l]) / batch_size
                     )
+                    grad_b = (
+                        g_u[l].sum(dim=0) / batch_size if layer.bias is not None else None
+                    )
                     if self.online_updates:
-                        self._apply_update(layer, grad_w)
+                        self._apply_update(layer, grad_w, grad_b)
                     else:
-                        accum_grads[l] += grad_w
+                        accum_grads_w[l] += grad_w
+                        if accum_grads_b is not None and grad_b is not None:
+                            if accum_grads_b[l] is None:
+                                accum_grads_b[l] = grad_b.clone()
+                            else:
+                                accum_grads_b[l] += grad_b
+
+                if self.online_updates and self.use_optimizer and self.optimizer is not None:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
 
         # Apply accumulated updates after sequence
-        if not self.online_updates and accum_grads is not None:
-            for layer, grad_w in zip(self.linear_layers, accum_grads):
-                self._apply_update(layer, grad_w)
-
-        if self.use_optimizer and self.optimizer is not None:
-            self.optimizer.step()
+        if not self.online_updates and accum_grads_w is not None:
+            for layer, grad_w, grad_b in zip(self.linear_layers, accum_grads_w, accum_grads_b):
+                self._apply_update(layer, grad_w, grad_b)
+            if self.use_optimizer and self.optimizer is not None:
+                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
 
         # Predictions from spike counts
         pred = spk_sum.argmax(dim=1, keepdim=True)
