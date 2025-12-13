@@ -12,10 +12,12 @@ References:
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Sequence
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import snntorch as snn
 
 from trainers.base_trainer import BaseTrainer
@@ -112,15 +114,25 @@ class DECOLLETrainer(BaseTrainer):
 
         for idx, linear in enumerate(self.linear_layers):
             n_post = linear.out_features
-            g = (2 * g_scale * torch.rand(self.n_classes, n_post) - g_scale)
-            self.G.append(nn.Parameter(g, requires_grad=False))
+            is_output_layer = idx == (self.n_layers - 1) and n_post == self.n_classes
 
-            if h_with_noise:
-                omega = torch.normal(mean=torch.ones_like(g).t(), std=omega_std)
-                omega = torch.clamp(omega, min=0)
-                h = g.t() * omega
-            else:
+            if is_output_layer:
+                # Match decolle-public's `with_output_layer=True` behavior:
+                # the last layer acts as the classifier (identity readout).
+                g = torch.eye(self.n_classes)
                 h = g.t()
+            else:
+                # Match decolle-public local classifier init: Uniform(-a/sqrt(fan_in), a/sqrt(fan_in))
+                stdv = g_scale / math.sqrt(n_post)
+                g = torch.empty(self.n_classes, n_post).uniform_(-stdv, stdv)
+                if h_with_noise:
+                    omega = torch.normal(mean=torch.ones_like(g).t(), std=omega_std)
+                    omega = torch.clamp(omega, min=0)
+                    h = g.t() * omega
+                else:
+                    h = g.t()
+
+            self.G.append(nn.Parameter(g, requires_grad=False))
             self.H.append(nn.Parameter(h, requires_grad=False))
 
         # Eligibility trace state (initialized lazily)
@@ -158,7 +170,9 @@ class DECOLLETrainer(BaseTrainer):
         layer's beta instead of introducing separate tau_syn/tau_mem.
         """
         beta_lif = self.layer_beta[layer_idx]
-        self.P[layer_idx] = beta_lif * self.P[layer_idx] + (1.0 - beta_lif) * s_pre
+        # snnTorch Leaky: mem[t+1] = beta * mem[t] + W @ s_pre[t+1] (+ reset)
+        # so dmem/dW follows the same recursion: P[t+1] = beta * P[t] + s_pre[t+1]
+        self.P[layer_idx] = beta_lif * self.P[layer_idx] + s_pre
 
         return self.P[layer_idx]
 
@@ -184,7 +198,7 @@ class DECOLLETrainer(BaseTrainer):
         self._ensure_traces(batch_size, device)
 
         spk_sum = torch.zeros(batch_size, self.n_classes, device=device)
-        total_loss = 0.0
+        total_loss = torch.tensor(0.0, device=device)
         total_counts = 0
 
         # Diagnostics (accumulated over timesteps)
@@ -219,39 +233,57 @@ class DECOLLETrainer(BaseTrainer):
                 g_mat = self.G[layer_idx]
                 h_mat = self.H[layer_idx]
 
-                # Local readout and loss
-                y_l = torch.matmul(spk_l, g_mat.t())  # [B, C]
-                delta_y = y_l - tgt
-                total_loss += 0.5 * (delta_y.pow(2)).mean()
-                if self.activity_regularizer > 0.0:
-                    total_loss += 0.5 * self.activity_regularizer * spk_l.pow(2).mean()
-                total_counts += 1
+                is_output_layer = layer_idx == (self.n_layers - 1) and spk_l.shape[1] == self.n_classes
 
-                if not apply_learning:
-                    s_pre = spk_l
-                    continue
-
-                # Local error via feedback alignment
-                err_l = torch.matmul(delta_y, h_mat.t())  # [B, n_post]
-
-                # Surrogate gradient centered around the layer threshold
+                # Surrogate gradient centered around the layer threshold (used by hidden layers,
+                # and for the optional spike activity regularizer).
                 u_centered = mem_l - threshold
-
                 if self.surrogate == "sigmoid":
                     sig = torch.sigmoid(self.surrogate_scale * u_centered)
                     g_l = self.surrogate_scale * sig * (1.0 - sig)
                 else:
                     g_l = ((u_centered >= -self.delta[layer_idx]) &
                            (u_centered <= self.delta[layer_idx])).float()
-
-                # Accumulate surrogate gradient diagnostic
                 self._diag_surr_grad_mean[layer_idx] += g_l.mean().item() / num_timesteps
 
-                # Three-factor modulation
-                mod = err_l * g_l
-                if self.activity_regularizer > 0.0:
-                    # Optional spike L2 regularizer: d/dmem (0.5 * λ * s^2) ≈ λ * s * g
-                    mod = mod + self.activity_regularizer * spk_l * g_l
+                if is_output_layer:
+                    # Output layer: train on membrane logits (no spike surrogate needed for CE term),
+                    # consistent with decolle-public's output-layer handling.
+                    logits = mem_l
+                    total_loss += F.cross_entropy(logits, target)
+                    if self.activity_regularizer > 0.0:
+                        total_loss += 0.5 * self.activity_regularizer * spk_l.pow(2).mean()
+                    total_counts += 1
+
+                    if not apply_learning:
+                        s_pre = spk_l
+                        continue
+
+                    # d/dlogits CE(mean) per sample is (softmax - one_hot); batch mean is applied below.
+                    mod = torch.softmax(logits, dim=1) - tgt  # [B, C]
+                    if self.activity_regularizer > 0.0:
+                        mod = mod + self.activity_regularizer * spk_l * g_l
+                else:
+                    # Hidden layers: local readout on spikes with fixed random classifier.
+                    y_l = torch.matmul(spk_l, g_mat.t())  # [B, C]
+                    delta_y = y_l - tgt
+                    total_loss += 0.5 * (delta_y.pow(2)).mean()
+                    if self.activity_regularizer > 0.0:
+                        total_loss += 0.5 * self.activity_regularizer * spk_l.pow(2).mean()
+                    total_counts += 1
+
+                    if not apply_learning:
+                        s_pre = spk_l
+                        continue
+
+                    # d/dy for 0.5 * mean((y-tgt)^2): divide by classes here; batch mean below.
+                    dldy = delta_y / float(self.n_classes)
+                    err_l = torch.matmul(dldy, h_mat.t())  # [B, n_post]
+
+                    # Three-factor modulation
+                    mod = err_l * g_l
+                    if self.activity_regularizer > 0.0:
+                        mod = mod + self.activity_regularizer * spk_l * g_l
 
                 # Weight update: ΔW = -η * (mod^T @ P) / batch_size
                 dw = torch.einsum("bi,bj->ij", mod, p_l) / batch_size
