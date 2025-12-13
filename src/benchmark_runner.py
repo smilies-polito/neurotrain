@@ -249,9 +249,6 @@ def benchmark_algorithm(
             quant=False,
             use_optimizer=False,
             optimizer=None,
-            # Medium trace dynamics
-            tau_syn=5.0,
-            tau_mem=10.0,
             # Sigmoid surrogate - always has gradient even for sub-threshold membrane
             surrogate="sigmoid",
             surrogate_scale=2.0,
@@ -507,4 +504,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
