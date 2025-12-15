@@ -5,7 +5,7 @@ PYTHON ?= python3
 
 # Full test suite
 full-test:
-	$(PYTHON) run_all_benchmarks.py --epoch 30
+	$(PYTHON) run_all_benchmarks.py --epoch 40
 
 # Focused, faster subset of tests for quick feedback
 quick-test:
