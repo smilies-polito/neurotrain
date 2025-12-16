@@ -12,25 +12,28 @@ Usage:
 
 import argparse
 import json
+import os
+
+# Note: We use simple time.perf_counter() instead of torch.profiler
+# to avoid the ~10x overhead that the profiler adds
+# Add src to path for imports
+import sys
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Any, Type, Optional
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 import yaml
-# Note: We use simple time.perf_counter() instead of torch.profiler
-# to avoid the ~10x overhead that the profiler adds
 
-# Add src to path for imports
-import sys
-import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 from networks.fc_network import FCNetwork
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
@@ -50,6 +53,18 @@ ALGORITHM_INFO = {
         "requires_backprop": False,
         "source": "custom (stsf_trainer.py)",
     },
+    "ottt": {
+        "name": "Online Training Through Time",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (ottt_trainer.py)",
+    },
+    "decolle": {
+        "name": "Deep Continuous Local Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (decolle_trainer.py)",
+    },
     "eprop": {
         "name": "Eligibility Propagation",
         "is_local": True,
@@ -62,6 +77,7 @@ ALGORITHM_INFO = {
 @dataclass
 class EpochMetrics:
     """Metrics for a single epoch."""
+
     epoch: int
     accuracy: float
     loss: float
@@ -72,26 +88,27 @@ class EpochMetrics:
 @dataclass
 class BenchmarkResult:
     """Results from one benchmark run."""
+
     algorithm: str
     dataset: str
     architecture: List[int]
-    
+
     # Training results
     final_accuracy: float
     final_loss: float
     epochs_trained: int
-    
+
     # Accuracy at checkpoints
     checkpoint_accuracies: Dict[int, float] = field(default_factory=dict)
-    
+
     # Timing (from PyTorch profiler)
     total_wall_time_s: float = 0.0
     avg_epoch_cpu_ms: float = 0.0
     avg_epoch_cuda_ms: float = 0.0
-    
+
     # NeuroBench metrics (from their harness)
     neurobench: Dict[str, Any] = field(default_factory=dict)
-    
+
     # Algorithm info
     algorithm_info: Dict[str, Any] = field(default_factory=dict)
 
@@ -103,12 +120,12 @@ def train_one_epoch(
 ) -> Dict[str, float]:
     """
     Train for one epoch.
-    
+
     Args:
         trainer: Trainer instance (BPTT or STSF)
         train_loader: Training data loader
         device: Torch device
-        
+
     Returns:
         Dictionary with loss and accuracy
     """
@@ -116,20 +133,20 @@ def train_one_epoch(
     total_loss = 0.0
     total_correct = 0
     total_samples = 0
-    
+
     for data, target in train_loader:
         # Data shape: [batch, features] -> transpose to [timesteps, batch, features]
         data = data.transpose(0, 1).to(device)
         target = target.to(device)
         batch_size = data.size(1)
-        
+
         trainer.reset()
         loss, pred = trainer.train_sample(data, target)
-        
+
         total_loss += loss.item() * batch_size
         total_correct += pred.eq(target.view_as(pred)).sum().item()
         total_samples += batch_size
-    
+
     return {
         "loss": total_loss / total_samples if total_samples > 0 else 0.0,
         "accuracy": total_correct / total_samples if total_samples > 0 else 0.0,
@@ -144,36 +161,37 @@ def evaluate(
 ) -> float:
     """
     Evaluate network accuracy.
-    
+
     Args:
         network: Network to evaluate
         test_loader: Test data loader
         device: Torch device
-        
+
     Returns:
         Test accuracy as float
     """
     network.eval()
     correct = 0
     total = 0
-    
+
     for data, target in test_loader:
         data = data.transpose(0, 1).to(device)
         target = target.to(device)
-        
+
         network.reset()
         spk_sum = None
         for t in range(data.size(0)):
-            spk, _ = network(data[t])
-            if spk_sum is None:
-                spk_sum = spk[-1]
+            out = network(data[t])
+            if isinstance(out, (tuple, list)):
+                spk = out[0]
             else:
-                spk_sum = spk_sum + spk[-1]
-        
+                spk = out
+            spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
+
         preds = spk_sum.argmax(dim=1)
         correct += preds.eq(target).sum().item()
         total += target.size(0)
-    
+
     return correct / total if total > 0 else 0.0
 
 
@@ -192,12 +210,12 @@ def benchmark_algorithm(
 ) -> BenchmarkResult:
     """
     Run benchmark for a single algorithm.
-    
+
     Uses:
     - snnTorch loss functions (for BPTT trainer)
     - torch.profiler for timing
     - NeuroBench for SNN metrics
-    
+
     Args:
         algorithm_name: Name of algorithm ("bptt", "stsf")
         trainer_class: Trainer class to instantiate
@@ -210,24 +228,26 @@ def benchmark_algorithm(
         checkpoint_epochs: Epochs at which to record accuracy
         device: Device string ("cpu", "cuda")
         beta: LIF neuron beta parameter
-        
+
     Returns:
         BenchmarkResult with all metrics
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Benchmarking: {algorithm_name.upper()}")
-    print(f"{'='*60}")
-    
+    print(f"{'=' * 60}")
+
     # Setup device
-    device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
+    device = torch.device(
+        device if torch.cuda.is_available() or device == "cpu" else "cpu"
+    )
     use_cuda = device.type == "cuda"
-    
+
     # Get data loaders
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
-    
-    # Create network
+
+    # Create network (all algorithms use FCNetwork now)
     network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
-    
+
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
         # BPTT uses gradient-based training
@@ -247,8 +267,37 @@ def benchmark_algorithm(
             use_optimizer=False,
             optimizer=None,
         )
+    elif algorithm_name == "ottt":
+        # OTTT: online/local learning with eligibility traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr * 10.0,  # stronger updates than gradient baseline
+            batch_size=batch_size,
+            trace_decay=beta,
+            surrogate_slope=5.0,
+            online_updates=True,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+        )
+    elif algorithm_name == "decolle":
+        # DECOLLE hyperparameters tuned for rate-coded inputs (25 timesteps)
+        # Use same LR as other algorithms - per-layer scaling handles the rest
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,  # Base LR (e.g., 0.001), layer scaling will adjust
+            batch_size=batch_size,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+            # Sigmoid surrogate - always has gradient even for sub-threshold membrane
+            surrogate="sigmoid",
+            surrogate_scale=2.0,
+        )
     else:
-        # STSF uses local learning
+        # Local learning algorithms (STSF)
         torch.set_grad_enabled(False)
         trainer = trainer_class(
             network=network,
@@ -258,10 +307,10 @@ def benchmark_algorithm(
             use_optimizer=False,
             optimizer=None,
         )
-    
+
     # Move to device
     trainer = trainer.to(device)
-    
+
     # Training with lightweight timing
     # NOTE: We use simple time.perf_counter() for per-epoch timing instead of
     # torch.profiler (which has ~10x overhead). Profiler is only used optionally
@@ -269,49 +318,51 @@ def benchmark_algorithm(
     epoch_times_ms = []
     checkpoint_accuracies = {}
     final_loss = 0.0
-    
+
     start_time = time.perf_counter()
-    
+
     for epoch in range(epochs):
         # Simple wall-clock timing per epoch
         epoch_start = time.perf_counter()
-        
+
         # Synchronize before timing if using CUDA
         if use_cuda:
             torch.cuda.synchronize()
-        
+
         metrics = train_one_epoch(trainer, train_loader, device)
-        
+
         # Synchronize after to ensure all GPU ops are complete
         if use_cuda:
             torch.cuda.synchronize()
-        
+
         epoch_end = time.perf_counter()
         epoch_ms = (epoch_end - epoch_start) * 1000.0
         epoch_times_ms.append(epoch_ms)
-        
+
         final_loss = metrics["loss"]
-        
+
         # Evaluate at checkpoints
         if (epoch + 1) in checkpoint_epochs:
             acc = evaluate(network, test_loader, device)
             checkpoint_accuracies[epoch + 1] = acc
-            print(f"  Epoch {epoch + 1}: accuracy={acc:.4f}, loss={final_loss:.4f}, time={epoch_ms:.0f}ms")
-    
+            print(
+                f"  Epoch {epoch + 1}: accuracy={acc:.4f}, loss={final_loss:.4f}, time={epoch_ms:.0f}ms"
+            )
+
     total_time = time.perf_counter() - start_time
     avg_epoch_ms = sum(epoch_times_ms) / len(epoch_times_ms) if epoch_times_ms else 0.0
-    
+
     # Final evaluation
     final_accuracy = evaluate(network, test_loader, device)
     print(f"\n  Final accuracy: {final_accuracy:.4f}")
     print(f"  Avg epoch time: {avg_epoch_ms:.0f}ms")
-    
+
     # NeuroBench evaluation
     print("  Running NeuroBench evaluation...")
     try:
         neurobench_results = run_neurobench(
-            network, 
-            test_loader, 
+            network,
+            test_loader,
             device=str(device),
             num_timesteps=timesteps,
         )
@@ -320,7 +371,7 @@ def benchmark_algorithm(
     except Exception as e:
         print(f"  Warning: NeuroBench evaluation failed: {e}")
         neurobench_results = {"error": str(e)}
-    
+
     return BenchmarkResult(
         algorithm=algorithm_name,
         dataset=dataset,
@@ -345,7 +396,7 @@ def _make_serializable(obj: Any) -> Any:
         return [_make_serializable(v) for v in obj]
     elif isinstance(obj, torch.Tensor):
         return obj.cpu().numpy().tolist()
-    elif hasattr(obj, 'item'):
+    elif hasattr(obj, "item"):
         return obj.item()
     elif isinstance(obj, (int, float, str, bool, type(None))):
         return obj
@@ -353,14 +404,16 @@ def _make_serializable(obj: Any) -> Any:
         return str(obj)
 
 
-def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, BenchmarkResult]:
+def run_comparison(
+    config: Dict[str, Any], output_dir: Path
+) -> Dict[str, BenchmarkResult]:
     """
     Run comparison benchmark across multiple algorithms.
-    
+
     Args:
         config: Configuration dictionary with benchmark settings
         output_dir: Directory to save results
-        
+
     Returns:
         Dictionary mapping algorithm names to BenchmarkResult
     """
@@ -369,15 +422,17 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
         "bptt": BPTTTrainer,
         "stsf": STSFTrainer,
         "eprop": EpropTrainer,
+        "decolle": DECOLLETrainer,
+        "ottt": OTTTTrainer,
     }
-    
+
     results = {}
-    
+
     for algo_name in config["algorithms"]:
         if algo_name not in trainers:
             print(f"Warning: Unknown algorithm '{algo_name}', skipping")
             continue
-        
+
         result = benchmark_algorithm(
             algorithm_name=algo_name,
             trainer_class=trainers[algo_name],
@@ -392,11 +447,11 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
             beta=config.get("beta", 0.9),
         )
         results[algo_name] = result
-    
+
     # Save results to JSON
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "benchmark_results.json"
-    
+
     with open(output_file, "w") as f:
         json.dump(
             {k: asdict(v) for k, v in results.items()},
@@ -404,12 +459,12 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
             indent=2,
             default=str,
         )
-    
+
     print(f"\nResults saved to: {output_file}")
-    
+
     # Print comparison summary
     print_comparison_summary(results)
-    
+
     return results
 
 
@@ -418,28 +473,30 @@ def print_comparison_summary(results: Dict[str, BenchmarkResult]) -> None:
     print("\n" + "=" * 80)
     print("COMPARISON RESULTS")
     print("=" * 80)
-    
+
     header = f"{'Algorithm':<12} | {'Accuracy':<10} | {'Wall Time (s)':<13} | {'Local':<6} | {'Backprop':<8}"
     print(header)
     print("-" * 80)
-    
+
     for name, r in results.items():
         is_local = r.algorithm_info.get("is_local", "?")
         requires_bp = r.algorithm_info.get("requires_backprop", "?")
-        print(f"{name:<12} | {r.final_accuracy:<10.4f} | {r.total_wall_time_s:<13.2f} | {str(is_local):<6} | {str(requires_bp):<8}")
-    
+        print(
+            f"{name:<12} | {r.final_accuracy:<10.4f} | {r.total_wall_time_s:<13.2f} | {str(is_local):<6} | {str(requires_bp):<8}"
+        )
+
     print("=" * 80)
-    
+
     # Print checkpoint accuracy comparison
     if len(results) > 1:
         print("\nCheckpoint Accuracy Comparison:")
         print("-" * 60)
-        
+
         # Get all checkpoint epochs
         all_epochs = set()
         for r in results.values():
             all_epochs.update(r.checkpoint_accuracies.keys())
-        
+
         for epoch in sorted(all_epochs):
             line = f"  Epoch {epoch:>3}: "
             for name, r in results.items():
@@ -472,15 +529,19 @@ def main():
         default=None,
         help="Output directory (overrides config)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Load configuration
     config = load_config(args.config)
-    
+
     # Determine output directory
-    output_dir = Path(args.output_dir if args.output_dir else config.get("output_dir", "./benchmark_results"))
-    
+    output_dir = Path(
+        args.output_dir
+        if args.output_dir
+        else config.get("output_dir", "./benchmark_results")
+    )
+
     print("\n" + "=" * 60)
     print("SNN LEARNING ALGORITHM BENCHMARK")
     print("=" * 60)
@@ -491,11 +552,10 @@ def main():
     print(f"Architecture: {config['layer_sizes']}")
     print(f"Epochs: {config['epochs']}")
     print("=" * 60)
-    
+
     # Run comparison
     run_comparison(config, output_dir)
 
 
 if __name__ == "__main__":
     main()
-

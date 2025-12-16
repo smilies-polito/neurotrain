@@ -173,4 +173,3 @@ class TestFCNetwork:
             # Should produce valid outputs
             assert not torch.isnan(spk[-1]).any()
             assert not torch.isnan(mem[-1]).any()
-

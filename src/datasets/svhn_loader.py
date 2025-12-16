@@ -18,11 +18,11 @@ def SVHNLoader(batch_size, T):
         Lambda(lambda x: x.flatten(start_dim=1))
     ])
     trainloader = DataLoader(
-        SVHN("../Data/SVHN", split="train", download=True, transform=transform),
+        SVHN(DATA_ROOT.as_posix(), split="train", download=True, transform=transform),
         batch_size=batch_size, shuffle=True, num_workers=4
     )
     testloader = DataLoader(
-        SVHN("../Data/SVHN", split="test", download=True, transform=transform),
+        SVHN(DATA_ROOT.as_posix(), split="test", download=True, transform=transform),
         batch_size=batch_size, shuffle=False, num_workers=4
     )
     return trainloader, testloader

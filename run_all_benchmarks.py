@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Run BPTT vs STSF benchmarks across all available datasets.
+Run SNN learning algorithm benchmarks across all available datasets.
 
 Usage:
-    python run_all_benchmarks.py [--epochs 50] [--device cuda]
+    python run_all_benchmarks.py [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf,eprop]
 """
 
 import argparse
@@ -17,40 +17,63 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from benchmark_runner import benchmark_algorithm, print_comparison_summary, BenchmarkResult
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.decolle_trainer import DECOLLETrainer
+from trainers.eprop_trainer import EpropTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
 # ============================================================================
-# STANDARD IMAGE CLASSIFICATION DATASETS
+# RATE-CODED IMAGE CLASSIFICATION DATASETS
 # ============================================================================
-STANDARD_DATASETS = {
+RATE_CODED_DATASETS = {
     "MNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "FashionMNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "CIFAR10": {
         "layer_sizes": [3072, 512, 10],  # 32x32x3 = 3072
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "SVHN": {
         "layer_sizes": [3072, 512, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
-    # "DVSGesture": {
-    #     "layer_sizes": [1156, 256, 11],  # 34x34 = 1156
-    #     "timesteps": 25,
-    #     "task": "classification",
-    # },
 }
+
+# ============================================================================
+# EVENT-BASED NEUROMORPHIC DATASETS (ideal for DECOLLE)
+# ============================================================================
+EVENT_BASED_DATASETS = {
+    "NMNIST": {
+        "layer_sizes": [1156, 256, 10],  # 34x34 = 1156, 10 digits
+        "timesteps": 25,
+        "task": "classification",
+        "type": "event-based",
+    },
+    "DVSGesture": {
+        "layer_sizes": [16384, 512, 11],  # 128x128 = 16384, 11 gestures
+        "timesteps": 50,
+        "task": "classification",
+        "type": "event-based",
+    },
+}
+
+# Combined standard datasets
+STANDARD_DATASETS = {**RATE_CODED_DATASETS, **EVENT_BASED_DATASETS}
 
 # ============================================================================
 # NEUROBENCH OFFICIAL BENCHMARK DATASETS
@@ -88,7 +111,107 @@ DATASETS = {**STANDARD_DATASETS, **NEUROBENCH_DATASETS}
 ALGORITHMS = {
     "bptt": BPTTTrainer,
     "stsf": STSFTrainer,
+    "eprop": EpropTrainer,
+    "decolle": DECOLLETrainer,
+    "ottt": OTTTTrainer,
 }
+
+def _parse_csv_list(value: str):
+    if value is None:
+        return None
+    items = [part.strip() for part in value.split(",")]
+    items = [item for item in items if item]
+    return items or None
+
+
+def _format_float(value, decimals: int = 4) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.{decimals}f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _format_seconds(value) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.1f}s"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _format_ms(value) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.0f}ms"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _print_final_summary(all_results: dict, algo_names: list, epochs: int) -> None:
+    """
+    Print a readable final summary table.
+
+    Format: one row per (dataset, algorithm) to avoid wide, hard-to-scan tables.
+    """
+    rows = []
+    for dataset_name, algos in all_results.items():
+        first = True
+        for algo_name in algo_names:
+            res = algos.get(algo_name)
+            dataset_cell = dataset_name if first else ""
+            first = False
+
+            if res is None:
+                rows.append(
+                    {
+                        "dataset": dataset_cell,
+                        "algo": algo_name.upper(),
+                        "acc": "N/A",
+                        "loss": "N/A",
+                        "wall": "N/A",
+                        "epoch": "N/A",
+                    }
+                )
+                continue
+
+            rows.append(
+                {
+                    "dataset": dataset_cell,
+                    "algo": algo_name.upper(),
+                    "acc": _format_float(getattr(res, "final_accuracy", None), 4),
+                    "loss": _format_float(getattr(res, "final_loss", None), 4),
+                    "wall": _format_seconds(getattr(res, "total_wall_time_s", None)),
+                    "epoch": _format_ms(getattr(res, "avg_epoch_cpu_ms", None)),
+                }
+            )
+
+    headers = {
+        "dataset": "Dataset",
+        "algo": "Algo",
+        "acc": "Acc",
+        "loss": "Loss",
+        "wall": "Wall",
+        "epoch": "/epoch",
+    }
+    columns = ["dataset", "algo", "acc", "loss", "wall", "epoch"]
+    widths = {
+        col: max(len(headers[col]), *(len(r[col]) for r in rows)) if rows else len(headers[col])
+        for col in columns
+    }
+
+    print("\n" + "=" * 80)
+    print(f"FINAL SUMMARY ({epochs} epochs)")
+    print("=" * 80)
+    header_line = " | ".join(headers[c].ljust(widths[c]) for c in columns)
+    print(header_line)
+    print("-" * len(header_line))
+    for r in rows:
+        print(" | ".join(r[c].ljust(widths[c]) for c in columns))
+    print("=" * 80)
 
 
 def run_all_benchmarks(
@@ -99,6 +222,8 @@ def run_all_benchmarks(
     beta: float = 0.9,
     checkpoint_epochs: list = None,
     output_dir: str = "./benchmark_results",
+    datasets: list = None,
+    algorithms: list = None,
 ):
     """Run benchmarks for all algorithms on all datasets."""
     
@@ -109,24 +234,61 @@ def run_all_benchmarks(
     output_path.mkdir(parents=True, exist_ok=True)
     
     all_results = {}
+
+    selected_datasets = DATASETS
+    if datasets:
+        dataset_key_map = {name.lower(): name for name in DATASETS.keys()}
+        resolved = []
+        unknown = []
+        for name in datasets:
+            key = dataset_key_map.get(name.lower())
+            if key is None:
+                unknown.append(name)
+            else:
+                resolved.append(key)
+        if unknown:
+            raise ValueError(
+                f"Unknown dataset(s): {', '.join(unknown)}. Available: {', '.join(DATASETS.keys())}"
+            )
+        selected_datasets = {name: DATASETS[name] for name in resolved}
+
+    selected_algorithms = ALGORITHMS
+    if algorithms:
+        resolved = []
+        unknown = []
+        for name in algorithms:
+            key = name.lower().strip()
+            if key not in ALGORITHMS:
+                unknown.append(name)
+            else:
+                resolved.append(key)
+        if unknown:
+            raise ValueError(
+                f"Unknown algorithm(s): {', '.join(unknown)}. Available: {', '.join(ALGORITHMS.keys())}"
+            )
+        selected_algorithms = {name: ALGORITHMS[name] for name in resolved}
     
     print("\n" + "=" * 80)
-    print("FULL BENCHMARK SUITE: BPTT vs STSF")
+    print("FULL BENCHMARK SUITE: " + " vs ".join(name.upper() for name in selected_algorithms.keys()))
     print("=" * 80)
-    print(f"Algorithms: {list(ALGORITHMS.keys())}")
-    print(f"Datasets: {list(DATASETS.keys())}")
+    print(f"Algorithms: {list(selected_algorithms.keys())}")
+    if datasets:
+        print(f"Datasets: {list(selected_datasets.keys())}")
+    else:
+        print(f"Rate-coded datasets: {list(RATE_CODED_DATASETS.keys())}")
+        print(f"Event-based datasets: {list(EVENT_BASED_DATASETS.keys())} (ideal for DECOLLE)")
     print(f"Epochs: {epochs}")
     print(f"Device: {device}")
     print("=" * 80)
     
-    for dataset_name, dataset_config in DATASETS.items():
+    for dataset_name, dataset_config in selected_datasets.items():
         print(f"\n{'#' * 80}")
         print(f"# DATASET: {dataset_name}")
         print(f"{'#' * 80}")
         
         dataset_results = {}
         
-        for algo_name, trainer_class in ALGORITHMS.items():
+        for algo_name, trainer_class in selected_algorithms.items():
             try:
                 result = benchmark_algorithm(
                     algorithm_name=algo_name,
@@ -185,40 +347,8 @@ def run_all_benchmarks(
     print(f"Results saved to: {results_file}")
     
     # Print final summary table
-    print("\n" + "=" * 160)
-    print(f"FINAL SUMMARY ({epochs} epochs)")
-    print("=" * 160)
-    
-    print(f"{'Dataset':<14} | {'BPTT Acc':<9} | {'STSF Acc':<9} | {'BPTT Wall Time':<15} | {'STSF Wall Time':<15} | {'BPTT Time/epoch':<16} | {'STSF Time/epoch':<16}")
-    print("-" * 160)
-    
-    for dataset, algos in all_results.items():
-        bptt_res = algos.get("bptt", {})
-        stsf_res = algos.get("stsf", {})
-        
-        # Accuracy
-        bptt_acc = bptt_res.final_accuracy if hasattr(bptt_res, 'final_accuracy') else None
-        stsf_acc = stsf_res.final_accuracy if hasattr(stsf_res, 'final_accuracy') else None
-        
-        # Total wall time
-        bptt_total = bptt_res.total_wall_time_s if hasattr(bptt_res, 'total_wall_time_s') else None
-        stsf_total = stsf_res.total_wall_time_s if hasattr(stsf_res, 'total_wall_time_s') else None
-        
-        # Per-epoch wall-clock time (ms)
-        bptt_epoch = bptt_res.avg_epoch_cpu_ms if hasattr(bptt_res, 'avg_epoch_cpu_ms') else None
-        stsf_epoch = stsf_res.avg_epoch_cpu_ms if hasattr(stsf_res, 'avg_epoch_cpu_ms') else None
-        
-        # Format values
-        bptt_acc_str = f"{bptt_acc:.4f}" if bptt_acc is not None else "N/A"
-        stsf_acc_str = f"{stsf_acc:.4f}" if stsf_acc is not None else "N/A"
-        bptt_total_str = f"{bptt_total:.1f}s" if bptt_total is not None else "N/A"
-        stsf_total_str = f"{stsf_total:.1f}s" if stsf_total is not None else "N/A"
-        bptt_epoch_str = f"{bptt_epoch:.0f}ms" if bptt_epoch is not None else "N/A"
-        stsf_epoch_str = f"{stsf_epoch:.0f}ms" if stsf_epoch is not None else "N/A"
-            
-        print(f"{dataset:<14} | {bptt_acc_str:<9} | {stsf_acc_str:<9} | {bptt_total_str:<15} | {stsf_total_str:<15} | {bptt_epoch_str:<16} | {stsf_epoch_str:<16}")
-    
-    print("=" * 160)
+    algo_names = list(selected_algorithms.keys())
+    _print_final_summary(all_results, algo_names, epochs)
     
     # Print NeuroBench metrics summary
     print("\n" + "=" * 180)
@@ -228,7 +358,7 @@ def run_all_benchmarks(
     print("-" * 180)
     
     for dataset, algos in all_results.items():
-        for algo_name in ["bptt", "stsf"]:
+        for algo_name in algo_names:
             res = algos.get(algo_name, {})
             if not hasattr(res, 'neurobench'):
                 continue
@@ -325,18 +455,34 @@ def main():
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     parser.add_argument("--output-dir", type=str, default="./benchmark_results", help="Output directory")
+    parser.add_argument(
+        "--datasets",
+        type=str,
+        default=None,
+        help="Comma-separated dataset names to run (default: all)",
+    )
+    parser.add_argument(
+        "--algorithms",
+        type=str,
+        default=None,
+        help="Comma-separated algorithm names to run (default: all)",
+    )
     
     args = parser.parse_args()
     
-    run_all_benchmarks(
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        device=args.device,
-        output_dir=args.output_dir,
-    )
+    try:
+        run_all_benchmarks(
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            device=args.device,
+            output_dir=args.output_dir,
+            datasets=_parse_csv_list(args.datasets),
+            algorithms=_parse_csv_list(args.algorithms),
+        )
+    except ValueError as e:
+        parser.error(str(e))
 
 
 if __name__ == "__main__":
     main()
-

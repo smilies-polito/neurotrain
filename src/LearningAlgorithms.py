@@ -106,7 +106,9 @@ class LearningAlgorithms:
             network.reset()
             spk_sum = None
             for t in range(data.size(0)):  # Iterate over timesteps
-                spk, _ = network(data[t])
+                out = network(data[t])
+                # Support both (spk, mem) and (spk, mem, p) returns
+                spk = out[0] if isinstance(out, (tuple, list)) else out
                 spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
 
             # Compute predictions

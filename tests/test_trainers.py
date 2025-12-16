@@ -10,9 +10,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
 from trainers.base_trainer import BaseTrainer
-from trainers.stsf_trainer import STSFTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.stsf_trainer import STSFTrainer
 
 
 class TestBaseTrainer:
@@ -390,3 +391,36 @@ class TestEpropTrainer:
         """Test that EpropTrainer properly inherits from BaseTrainer."""
         assert isinstance(trainer, BaseTrainer)
 
+
+class TestDECOLLETrainer:
+    """Test DECOLLETrainer class (now uses FCNetwork)."""
+
+    @pytest.fixture
+    def network(self):
+        return FCNetwork(layer_sizes=[32, 16, 4], beta=0.9)
+
+    @pytest.fixture
+    def trainer(self, network):
+        return DECOLLETrainer(
+            network=network,
+            lr=0.05,
+            batch_size=8,
+        )
+
+    def test_trainer_creation(self, trainer):
+        assert isinstance(trainer.network, FCNetwork)
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randint(0, 2, (6, 8, 32)).float()
+        target = torch.randint(0, 4, (8,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert pred.shape == (8, 1)
+
+    def test_trainer_updates_weights(self, trainer, network):
+        data = torch.randint(0, 2, (4, 8, 32)).float()
+        target = torch.randint(0, 4, (8,))
+        # FCNetwork uses layers[0::2] for Linear layers
+        before = network.layers[0].weight.clone()
+        trainer.train_sample(data, target)
+        assert not torch.allclose(before, network.layers[0].weight)

@@ -9,11 +9,11 @@ Supports:
 - TensorBoard integration
 """
 
-import sys
 import os
+import statistics
+import sys
 from collections import deque
 from pathlib import Path
-import statistics
 
 import torch
 from torch.optim import Adam
@@ -22,27 +22,28 @@ from torch.optim import Adam
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
 # Core imports
-from utils.parameters import parse_args
+from datasets.get_loader import get_loader
+from LearningAlgorithms import LearningAlgorithms
+from networks.fc_network import FCNetwork
+from trainers.bptt_trainer import BPTTTrainer
+from trainers.decolle_trainer import DECOLLETrainer
+from trainers.eprop_trainer import EpropTrainer
+from trainers.ottt_trainer import OTTTTrainer
+from trainers.stsf_trainer import STSFTrainer
+from utils.checkpoint import CheckpointManager, resume_training
 from utils.config import (
     Config,
     load_config,
     merge_config_with_args,
-    validate_config,
     print_config,
+    validate_config,
 )
-from utils.checkpoint import CheckpointManager, resume_training
 from utils.experiment_logger import (
     ExperimentLogger,
-    set_all_seeds,
     print_experiment_info,
+    set_all_seeds,
 )
-from datasets.get_loader import get_loader
-from networks.fc_network import FCNetwork
-from trainers.stsf_trainer import STSFTrainer
-from trainers.bptt_trainer import BPTTTrainer
-from trainers.eprop_trainer import EpropTrainer
-from LearningAlgorithms import LearningAlgorithms
-
+from utils.parameters import parse_args
 
 ############
 # TRAINING #
@@ -64,7 +65,13 @@ def get_device(config: Config) -> torch.device:
         return torch.device(device_str)
 
 
-def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoint_manager: CheckpointManager, start_epoch: int = 0):
+def trainable(
+    config: Config,
+    trainer_class,
+    logger: ExperimentLogger,
+    checkpoint_manager: CheckpointManager,
+    start_epoch: int = 0,
+):
     """
     Main training function.
 
@@ -92,7 +99,13 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
 
         # Match original e-prop defaults for comparison
         n_in = config.model.layer_sizes[0]
-        n_rec = config.model.layer_sizes[1] if len(config.model.layer_sizes) > 2 else config.model.layer_sizes[1] if len(config.model.layer_sizes) > 1 else 100
+        n_rec = (
+            config.model.layer_sizes[1]
+            if len(config.model.layer_sizes) > 2
+            else config.model.layer_sizes[1]
+            if len(config.model.layer_sizes) > 1
+            else 100
+        )
         n_out = config.model.layer_sizes[-1]
         network = RecurrentSRNN(
             n_in=n_in,
@@ -126,27 +139,31 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         optimizer = None
 
     # Create the trainer
-    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF)
+    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF/DECOLLE)
     requires_grad = config.trainer.name == "bptt"
     torch.set_grad_enabled(requires_grad)
-    trainer = trainer_class(
-        network=network,
-        lr=config.training.learning_rate,
-        batch_size=config.training.batch_size,
-        quant=config.model.quantization,
-        use_optimizer=config.training.optimizer is not None,
-        optimizer=optimizer,
-        update_last=config.trainer.update_last,
-        update_every=config.trainer.update_every,
-        seq_batch_size=config.trainer.seq_batch,
-    ).to(device)
+    trainer_kwargs = {
+        "network": network,
+        "lr": config.training.learning_rate,
+        "batch_size": config.training.batch_size,
+        "quant": config.model.quantization,
+        "use_optimizer": config.training.optimizer is not None,
+        "optimizer": optimizer,
+    }
+
+    if issubclass(trainer_class, STSFTrainer):
+        trainer_kwargs.update(
+            update_last=config.trainer.update_last,
+            update_every=config.trainer.update_every,
+            seq_batch_size=config.trainer.seq_batch,
+        )
+
+    trainer = trainer_class(**trainer_kwargs).to(device)
 
     trainer.network.train()
 
     # Setup graceful exit (save checkpoint on Ctrl+C)
-    checkpoint_manager.setup_graceful_exit(
-        trainer.network, optimizer, config.to_dict()
-    )
+    checkpoint_manager.setup_graceful_exit(trainer.network, optimizer, config.to_dict())
 
     # Tracking
     rolling_acc = deque(maxlen=5)
@@ -191,15 +208,16 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         logger.log_metrics(metrics, step=epoch, prefix="train")
 
         # Print progress
-        print({
-            "epoch": epoch + 1,
-            "testing_accuracy": testing_accuracy,
-            "training_accuracy": training_accuracy,
-            "training_loss": training_loss,
-            "test_acc_std_last5": std_last5,
-            "test_acc_delta": delta,
-        })
-
+        print(
+            {
+                "epoch": epoch + 1,
+                "testing_accuracy": testing_accuracy,
+                "training_accuracy": training_accuracy,
+                "training_loss": training_loss,
+                "test_acc_std_last5": std_last5,
+                "test_acc_delta": delta,
+            }
+        )
         # Save checkpoint if needed
         checkpoint_manager.save_if_needed(
             model=trainer.network,
@@ -229,6 +247,8 @@ def get_trainer(trainer_name: str):
         "stsf": STSFTrainer,
         "bptt": BPTTTrainer,
         "eprop": EpropTrainer,
+        "decolle": DECOLLETrainer,
+        "ottt": OTTTTrainer,
         # Future trainers will be added here:
         # "stdp": STDPTrainer,
     }

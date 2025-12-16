@@ -1,8 +1,12 @@
 """
-DVS Gesture dataset loader using Tonic library.
+N-MNIST (Neuromorphic MNIST) dataset loader using Tonic library.
 
-DVS Gesture is an event-based dataset recorded with a Dynamic Vision Sensor (DVS).
-Contains 11 hand gesture classes recorded by 29 subjects under 3 lighting conditions.
+N-MNIST is created by recording MNIST digits with a DVS camera while
+performing saccadic eye movements. This creates event-based spike trains
+that preserve temporal information - ideal for SNNs and DECOLLE.
+
+Reference: Orchard et al., "Converting Static Image Datasets to Spiking 
+Neuromorphic Datasets Using Saccades", 2015.
 """
 from pathlib import Path
 
@@ -11,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 
 try:
-    from tonic.datasets import DVSGesture
+    from tonic.datasets import NMNIST
     from tonic import transforms as tonic_transforms
     TONIC_AVAILABLE = True
 except ImportError:
@@ -20,12 +24,12 @@ except ImportError:
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def DVSGestureLoader(batch_size, T):
+def NMNISTLoader(batch_size, T):
     """
-    Returns DataLoaders for IBM's DVS Gesture dataset.
+    Returns DataLoaders for N-MNIST (Neuromorphic MNIST) dataset.
     
-    Bins events into T frames of size 128×128 and flattens to [T, 128*128].
-    This is EVENT-BASED data, not rate-coded - ideal for DECOLLE.
+    Bins events into T frames of size 34×34 and flattens to [T, 34*34].
+    This is EVENT-BASED data recorded with a DVS camera - ideal for DECOLLE.
     
     Args:
         batch_size: Batch size for DataLoader
@@ -35,17 +39,17 @@ def DVSGestureLoader(batch_size, T):
         trainloader, testloader: DataLoader instances
         
     Note:
-        - Input size: 128*128 = 16384 (flattened)
-        - Output classes: 11 gestures
+        - Input size: 34*34 = 1156 (flattened)
+        - Output classes: 10 digits
         - Requires tonic library: pip install tonic
     """
     if not TONIC_AVAILABLE:
         raise ImportError(
-            "DVSGesture requires the 'tonic' library. "
+            "N-MNIST requires the 'tonic' library. "
             "Install with: pip install tonic"
         )
     
-    sensor_size = (128, 128, 2)  # DVS128 sensor: 128x128, 2 polarities
+    sensor_size = (34, 34, 2)  # N-MNIST sensor: 34x34, 2 polarities
     
     # Transform pipeline: bin events into frames
     transform = tonic_transforms.Compose([
@@ -62,15 +66,15 @@ def DVSGestureLoader(batch_size, T):
         labels_list = []
         
         for events, label in batch:
-            # events shape: [T, 2, 128, 128] (2 polarities)
+            # events shape: [T, 2, 34, 34] (2 polarities)
             # Merge polarities and flatten spatial dims
             if events.ndim == 4:
-                # Sum polarities: [T, 2, 128, 128] -> [T, 128, 128]
+                # Sum polarities: [T, 2, 34, 34] -> [T, 34, 34]
                 frame = events.sum(axis=1)
             else:
                 frame = events
             
-            # Flatten spatial: [T, 128, 128] -> [T, 16384]
+            # Flatten spatial: [T, 34, 34] -> [T, 1156]
             frame = frame.reshape(T, -1)
             
             # Normalize to [0, 1] (events are counts)
@@ -86,13 +90,13 @@ def DVSGestureLoader(batch_size, T):
         return frames, labels
     
     # Load datasets
-    train_ds = DVSGesture(
-        save_to=str(DATA_ROOT / "DVSGesture"),
+    train_ds = NMNIST(
+        save_to=str(DATA_ROOT / "NMNIST"),
         train=True,
         transform=transform,
     )
-    test_ds = DVSGesture(
-        save_to=str(DATA_ROOT / "DVSGesture"),
+    test_ds = NMNIST(
+        save_to=str(DATA_ROOT / "NMNIST"),
         train=False,
         transform=transform,
     )
@@ -116,9 +120,10 @@ def DVSGestureLoader(batch_size, T):
 
 
 # Dataset info for benchmarking
-DVSGESTURE_INFO = {
-    "input_size": 128 * 128,  # 16384
-    "num_classes": 11,
-    "default_timesteps": 50,  # Events spread over 50 bins
+NMNIST_INFO = {
+    "input_size": 34 * 34,  # 1156
+    "num_classes": 10,
+    "default_timesteps": 25,  # Events spread over 25 bins
     "type": "event-based",
 }
+
