@@ -38,9 +38,6 @@ class BPTTTrainer(BaseTrainer):
         quant: bool = False,
         use_optimizer: bool = True,
         optimizer=None,
-        update_last: bool = False,
-        update_every: int = 1,
-        seq_batch_size: int = 1,
         **kwargs,
     ):
         """
@@ -54,9 +51,6 @@ class BPTTTrainer(BaseTrainer):
             quant: Quantization flag (unused for BPTT, kept for interface compatibility)
             use_optimizer: Whether to use optimizer (always True for BPTT)
             optimizer: Pre-configured optimizer (if None, creates Adam)
-            update_last: Unused, kept for interface compatibility
-            update_every: Unused, kept for interface compatibility
-            seq_batch_size: Unused, kept for interface compatibility
             **kwargs: Additional arguments (ignored)
         """
         super().__init__()
@@ -153,4 +147,3 @@ class BPTTTrainer(BaseTrainer):
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         
         return self
-
