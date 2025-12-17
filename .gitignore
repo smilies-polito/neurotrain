@@ -94,6 +94,7 @@ src/Data/NeuroBench/
 
 # Singularity images
 *.sif
+containers/
 
 # OS
 .DS_Store
@@ -102,3 +103,6 @@ Thumbs.db
 # Local config
 local_config.yaml
 .env.local
+
+# Eprop implementation Frankler
+eprop/

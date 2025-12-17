@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Run BPTT vs STSF vs OTTT benchmarks across all available datasets.
+Run SNN learning algorithm benchmarks across all available datasets.
 
 Usage:
-    python run_all_benchmarks.py [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf]
+    python run_all_benchmarks.py [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf,eprop]
 """
 
 import argparse
@@ -20,6 +20,7 @@ from trainers.bptt_trainer import BPTTTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+from trainers.eprop_trainer import EpropTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -110,6 +111,7 @@ DATASETS = {**STANDARD_DATASETS, **NEUROBENCH_DATASETS}
 ALGORITHMS = {
     "bptt": BPTTTrainer,
     "stsf": STSFTrainer,
+    "eprop": EpropTrainer,
     "decolle": DECOLLETrainer,
     "ottt": OTTTTrainer,
 }
@@ -120,6 +122,96 @@ def _parse_csv_list(value: str):
     items = [part.strip() for part in value.split(",")]
     items = [item for item in items if item]
     return items or None
+
+
+def _format_float(value, decimals: int = 4) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.{decimals}f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _format_seconds(value) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.1f}s"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _format_ms(value) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.0f}ms"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _print_final_summary(all_results: dict, algo_names: list, epochs: int) -> None:
+    """
+    Print a readable final summary table.
+
+    Format: one row per (dataset, algorithm) to avoid wide, hard-to-scan tables.
+    """
+    rows = []
+    for dataset_name, algos in all_results.items():
+        first = True
+        for algo_name in algo_names:
+            res = algos.get(algo_name)
+            dataset_cell = dataset_name if first else ""
+            first = False
+
+            if res is None:
+                rows.append(
+                    {
+                        "dataset": dataset_cell,
+                        "algo": algo_name.upper(),
+                        "acc": "N/A",
+                        "loss": "N/A",
+                        "wall": "N/A",
+                        "epoch": "N/A",
+                    }
+                )
+                continue
+
+            rows.append(
+                {
+                    "dataset": dataset_cell,
+                    "algo": algo_name.upper(),
+                    "acc": _format_float(getattr(res, "final_accuracy", None), 4),
+                    "loss": _format_float(getattr(res, "final_loss", None), 4),
+                    "wall": _format_seconds(getattr(res, "total_wall_time_s", None)),
+                    "epoch": _format_ms(getattr(res, "avg_epoch_cpu_ms", None)),
+                }
+            )
+
+    headers = {
+        "dataset": "Dataset",
+        "algo": "Algo",
+        "acc": "Acc",
+        "loss": "Loss",
+        "wall": "Wall",
+        "epoch": "/epoch",
+    }
+    columns = ["dataset", "algo", "acc", "loss", "wall", "epoch"]
+    widths = {
+        col: max(len(headers[col]), *(len(r[col]) for r in rows)) if rows else len(headers[col])
+        for col in columns
+    }
+
+    print("\n" + "=" * 80)
+    print(f"FINAL SUMMARY ({epochs} epochs)")
+    print("=" * 80)
+    header_line = " | ".join(headers[c].ljust(widths[c]) for c in columns)
+    print(header_line)
+    print("-" * len(header_line))
+    for r in rows:
+        print(" | ".join(r[c].ljust(widths[c]) for c in columns))
+    print("=" * 80)
 
 
 def run_all_benchmarks(
@@ -255,46 +347,8 @@ def run_all_benchmarks(
     print(f"Results saved to: {results_file}")
     
     # Print final summary table
-    print("\n" + "=" * 160)
-    print(f"FINAL SUMMARY ({epochs} epochs)")
-    print("=" * 160)
-
     algo_names = list(selected_algorithms.keys())
-    header_parts = [f"{'Dataset':<14}"]
-    for name in algo_names:
-        header_parts.extend(
-            [
-                f"{name.upper()} Acc".ljust(10),
-                f"{name.upper()} Wall".ljust(15),
-                f"{name.upper()} /epoch".ljust(16),
-            ]
-        )
-    header_line = " | ".join(header_parts)
-    print(header_line)
-    print("-" * len(header_line))
-
-    for dataset, algos in all_results.items():
-        row_parts = [f"{dataset:<14}"]
-        for name in algo_names:
-            res = algos.get(name, {})
-            acc = res.final_accuracy if hasattr(res, "final_accuracy") else None
-            total = res.total_wall_time_s if hasattr(res, "total_wall_time_s") else None
-            epoch_time = (res.avg_epoch_cpu_ms if hasattr(res, "avg_epoch_cpu_ms") else None)
-
-            acc_str = f"{acc:.4f}" if acc is not None else "N/A"
-            total_str = f"{total:.1f}s" if total is not None else "N/A"
-            epoch_str = f"{epoch_time:.0f}ms" if epoch_time is not None else "N/A"
-
-            row_parts.extend(
-                [
-                    f"{acc_str:<10}",
-                    f"{total_str:<15}",
-                    f"{epoch_str:<16}",
-                ]
-            )
-        print(" | ".join(row_parts))
-
-    print("=" * 160)
+    _print_final_summary(all_results, algo_names, epochs)
     
     # Print NeuroBench metrics summary
     print("\n" + "=" * 180)

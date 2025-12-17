@@ -7,7 +7,7 @@ A modular, scalable benchmarking platform for spiking neural network (SNN) learn
 - **Reproducible Experiments**: Comprehensive seed management, environment logging, and git commit tracking
 - **Configuration System**: YAML/JSON config files with CLI override support
 - **Checkpointing**: Automatic checkpoint saving with resume capability
-- **Plug-and-Play Trainers**: Easily add new learning algorithms (BPTT, STSF)
+- **Plug-and-Play Trainers**: Easily add new learning algorithms (BPTT, STSF, E-prop)
 - **TensorBoard Integration**: Real-time training visualization
 - **NeuroBench Integration**: Official neuromorphic benchmark datasets and metrics
 - **Automated Benchmarking**: Compare algorithms across multiple datasets
@@ -47,6 +47,12 @@ pip install -r requirements.txt
 # Run with default MNIST config
 python main.py --config configs/mnist_default.yaml
 
+# Run feedforward e-prop on MNIST
+python main.py --config configs/mnist_eprop.yaml
+
+# Run recurrent (reference-like) e-prop on MNIST
+python main.py --config configs/mnist_eprop_recurrent.yaml
+
 # Override specific parameters via CLI
 python main.py --config configs/mnist_default.yaml --lr 0.001 --epochs 50
 ```
@@ -56,6 +62,7 @@ python main.py --config configs/mnist_default.yaml --lr 0.001 --epochs 50
 ```bash
 python main.py --dataset MNIST --epochs 100 --batch-size 256 --lr 0.01
 ```
+> Note: When a config file is provided, the config controls the experiment name. If you want to override it from CLI, pass `--exp-name <NAME>`.
 
 ### Resume Training
 
@@ -78,6 +85,7 @@ This platform supports systematic comparison of SNN learning algorithms across m
 | **STSF** | Local Learning | Spiking Time Sparse Feedback - bio-plausible, no backprop |
 | **DECOLLE** | Local Learning | Deep Continuous Local Learning with per-layer random readouts |
 | **BPTT** | Gradient-based | Backpropagation Through Time with surrogate gradients |
+| **E-prop** | Local / eligibility | Eligibility propagation with feedforward adapter and reference-style recurrent SRNN |
 | **OTTT** | Local Learning | Online Training Through Time with eligibility traces |
 
 ### Available Datasets
@@ -268,7 +276,9 @@ checkpoint:
 | `mnist_quantized.yaml` | Quantized training for hardware deployment |
 | `fashionmnist_default.yaml` | FashionMNIST training with STSF |
 | `cifar10_default.yaml` | CIFAR10 training with STSF |
-| `benchmark_comparison.yaml` | Algorithm comparison config (BPTT vs STSF) |
+| `mnist_eprop.yaml` | Feedforward e-prop on MNIST (FC network) |
+| `mnist_eprop_recurrent.yaml` | Reference-style recurrent e-prop SRNN on MNIST |
+| `benchmark_comparison.yaml` | Algorithm comparison config (BPTT vs STSF; extendable to e-prop) |
 
 ## CLI Arguments
 

@@ -6,6 +6,7 @@ Uses dataclasses for typed, validated configuration.
 """
 
 import json
+import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -196,6 +197,17 @@ def merge_config_with_args(config: Config, args) -> Config:
     """
     config_dict = config.to_dict()
 
+    def _flag_passed(flag_name: str) -> bool:
+        """
+        Return True if a given CLI flag (long form) was explicitly provided.
+        We only override config values when the user actually passed the flag.
+        """
+        flag = f"--{flag_name.replace('_', '-')}"
+        for raw in sys.argv[1:]:
+            if raw.split("=")[0] == flag:
+                return True
+        return False
+
     # Map CLI args to config sections
     cli_mappings = {
         # experiment
@@ -223,18 +235,40 @@ def merge_config_with_args(config: Config, args) -> Config:
 
     # Apply overrides from CLI
     for cli_arg, (section, key) in cli_mappings.items():
-        if hasattr(args, cli_arg):
-            value = getattr(args, cli_arg)
-            if value is not None:
-                config_dict[section][key] = value
+        if not hasattr(args, cli_arg):
+            continue
+        value = getattr(args, cli_arg)
 
-    # Special handling for layer_sizes construction
+        # When a config file is provided, only override if the user explicitly passed the flag
+        if args.config and not _flag_passed(cli_arg):
+            continue
+
+        # Avoid overriding experiment name with legacy defaults unless explicitly set
+        if cli_arg == "exp_name" and args.config:
+            if value and not str(value).startswith("STSF_"):
+                config_dict[section][key] = value
+            continue
+
+        if value is not None:
+            config_dict[section][key] = value
+
+    # Special handling for layer_sizes construction (respect config unless flags provided)
     if hasattr(args, "in_size") and hasattr(args, "n_class"):
-        n_layers = getattr(args, "n_layers", 1)
-        layer_size = getattr(args, "layer_size", 200)
-        config_dict["model"]["layer_sizes"] = (
-            [args.in_size] + [layer_size] * n_layers + [args.n_class]
-        )
+        # Only rebuild layer_sizes if:
+        # - no config file is used, or
+        # - the user explicitly passed --n-layers or --layer-size
+        rebuild_layers = False
+        if not args.config:
+            rebuild_layers = True
+        else:
+            if _flag_passed("n_layers") or _flag_passed("layer_size"):
+                rebuild_layers = True
+        if rebuild_layers:
+            n_layers = getattr(args, "n_layers", 1)
+            layer_size = getattr(args, "layer_size", 200)
+            config_dict["model"]["layer_sizes"] = (
+                [args.in_size] + [layer_size] * n_layers + [args.n_class]
+            )
 
     # Handle optimizer flag (only override if explicitly set to True)
     # When --optimizer is passed, use adam; otherwise keep config file value

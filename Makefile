@@ -5,14 +5,15 @@ EPOCHS ?= 50
 
 .PHONY: test full-test quick-test run-all-mnist clean
 
+## FULL TESTS
 # Full test suite
-full-test:
-	$(PYTHON) run_all_benchmarks.py --epochs 40 --device $(DEVICE)
-
+complete-test-long:
+	$(PYTHON) run_all_benchmarks.py --epochs 50 --device $(DEVICE)
 # Focused, faster subset of tests for quick feedback
-quick-test:
+complete-test-short:
 	$(PYTHON) run_all_benchmarks.py --epochs 1 --device $(DEVICE)
 
+## TESTS ON DATASETS
 # Convenience target: run all algorithms on MNIST only
 run-all-mnist:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)

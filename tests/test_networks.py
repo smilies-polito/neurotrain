@@ -9,6 +9,7 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
+from networks.recurrent_srnn import RecurrentSRNN
 
 
 class TestFCNetwork:
@@ -173,3 +174,27 @@ class TestFCNetwork:
             # Should produce valid outputs
             assert not torch.isnan(spk[-1]).any()
             assert not torch.isnan(mem[-1]).any()
+
+
+class TestRecurrentSRNN:
+    """Test RecurrentSRNN class."""
+
+    def test_network_creation(self):
+        network = RecurrentSRNN(n_in=8, n_rec=16, n_out=4)
+        assert network.n_in == 8
+        assert network.n_rec == 16
+        assert network.n_out == 4
+
+    def test_network_forward_shape(self):
+        network = RecurrentSRNN(n_in=8, n_rec=16, n_out=4)
+        x = torch.randn(32, 8)
+        spk_rec, mem_rec = network(x)
+        assert len(spk_rec) == 1
+        assert spk_rec[-1].shape == (32, 4)
+        assert mem_rec[-1].shape == (32, 4)
+
+    def test_network_reset(self):
+        network = RecurrentSRNN(n_in=8, n_rec=16, n_out=4)
+        x = torch.randn(1, 8)
+        network(x)
+        network.reset()
