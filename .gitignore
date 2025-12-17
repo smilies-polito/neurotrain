@@ -94,6 +94,7 @@ src/Data/NeuroBench/
 
 # Singularity images
 *.sif
+containers/
 
 # OS
 .DS_Store

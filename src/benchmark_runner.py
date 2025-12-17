@@ -245,8 +245,26 @@ def benchmark_algorithm(
     # Get data loaders
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
 
-    # Create network (all algorithms use FCNetwork now)
-    network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
+    # Create network
+    if algorithm_name == "eprop":
+        from networks.recurrent_srnn import RecurrentSRNN
+
+        if len(layer_sizes) < 3:
+            raise ValueError(
+                "E-prop requires a recurrent architecture encoded as "
+                "`layer_sizes=[n_in, n_rec, n_out]`."
+            )
+        network = RecurrentSRNN(
+            n_in=layer_sizes[0],
+            n_rec=layer_sizes[1],
+            n_out=layer_sizes[-1],
+            threshold=1.0,
+            tau_mem=2.0,
+            tau_out=0.02,
+            dt=1e-3,
+        )
+    else:
+        network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
 
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":

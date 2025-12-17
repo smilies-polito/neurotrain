@@ -9,6 +9,7 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
+from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
@@ -220,10 +221,15 @@ class TestEpropTrainer:
 
     @pytest.fixture
     def network(self):
-        """Create a test network."""
-        return FCNetwork(
-            layer_sizes=[784, 100, 10],
-            beta=0.9,
+        """Create a test recurrent network."""
+        return RecurrentSRNN(
+            n_in=784,
+            n_rec=100,
+            n_out=10,
+            threshold=1.0,
+            tau_mem=2.0,
+            tau_out=0.02,
+            dt=1e-3,
         )
 
     @pytest.fixture
@@ -245,15 +251,6 @@ class TestEpropTrainer:
     def test_trainer_has_network(self, trainer, network):
         """Test that trainer has network reference."""
         assert trainer.network is network
-
-    def test_trainer_has_feedback_weights(self, trainer):
-        """Test that trainer creates feedback weights for learning signal."""
-        assert len(trainer.feedback) > 0
-
-        # Check feedback weight shapes
-        for fb in trainer.feedback:
-            assert fb.shape[0] == 10  # n_classes
-            assert fb.requires_grad is False
 
     def test_trainer_reset(self, trainer):
         """Test trainer reset."""
@@ -355,7 +352,7 @@ class TestEpropTrainer:
         )
 
         # Get initial weights
-        initial_weights = network.layers[0].weight.data.clone()
+        initial_weights = network.w_in.data.clone()
 
         # Train on a batch
         data = torch.randn(10, 32, 784)
@@ -363,7 +360,7 @@ class TestEpropTrainer:
         trainer.train_sample(data, target)
 
         # Weights should have changed
-        assert not torch.allclose(initial_weights, network.layers[0].weight.data)
+        assert not torch.allclose(initial_weights, network.w_in.data)
 
     def test_trainer_surrogate_gradient_parameter(self, network):
         """Test that surrogate gradient parameter can be customized."""

@@ -1,46 +1,33 @@
 """
 E-prop (Eligibility Propagation) trainer for snnTorch-based networks.
 
-Implements the e-prop learning algorithm adapted for feedforward SNNs
-with snnTorch neurons. Based on:
+Implements the e-prop learning algorithm for recurrent spiking neural networks
+(RSNNs) using snnTorch neurons. Based on:
 
     [G. Bellec et al., "A solution to the learning dilemma for recurrent networks
      of spiking neurons," Nature communications, vol. 11, no. 3625, 2020]
 
-This implementation adapts the original recurrent e-prop algorithm for feedforward
-networks, computing eligibility traces and learning signals per layer.
-
-The key e-prop components:
-1. Surrogate gradient for non-differentiable spike function
-2. Eligibility traces that track which weights contributed to recent activity  
-3. Learning signals that propagate error information through feedback weights
-
-For feedforward networks, we use symmetric feedback (output weights) to compute
-the learning signal for hidden layers.
+This implementation follows the recurrent formulation and performs *online*
+updates: weights are updated at each timestep rather than once per full sample.
 """
 
-import math
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from trainers.base_trainer import BaseTrainer
-from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 
 
 class EpropTrainer(BaseTrainer):
     """
-    E-prop (Eligibility Propagation) trainer for feedforward SNNs.
+    E-prop (Eligibility Propagation) trainer for recurrent SNNs (RSNNs).
     
-    Implements a local learning rule that approximates BPTT by:
-    1. Computing eligibility traces from local activity
-    2. Propagating learning signals through feedback weights
-    3. Combining traces and signals for weight updates
+    Implements a local learning rule that approximates BPTT by combining
+    eligibility traces with a learning signal computed from output errors.
     
     Attributes:
-        network: FCNetwork instance to train
+        network: RecurrentSRNN instance to train
         lr: Learning rate
         batch_size: Batch size for training
         gamma: Surrogate gradient magnitude parameter
@@ -51,7 +38,7 @@ class EpropTrainer(BaseTrainer):
     
     def __init__(
         self,
-        network: FCNetwork,
+        network: RecurrentSRNN,
         lr: float,
         batch_size: int,
         gamma: float = 0.3,
@@ -97,16 +84,14 @@ class EpropTrainer(BaseTrainer):
         self.seq_batch_size = seq_batch_size
         
         # Time constants (decay factors)
-        if hasattr(network, "is_recurrent") and network.is_recurrent:
-            # For recurrent SRNN we derive from network alpha/kappa
-            self.alpha = network.alpha
-            self.kappa = network.kappa
-            self.threshold = network.threshold
-        else:
-            # Use network's beta if available, otherwise provided defaults
-            self.alpha = network.layers[1].beta if hasattr(network.layers[1], "beta") else tau_mem
-            self.kappa = tau_out
-            self.threshold = network.layers[1].threshold if hasattr(network.layers[1], "threshold") else 1.0
+        if not (hasattr(network, "is_recurrent") and network.is_recurrent):
+            raise TypeError(
+                "EpropTrainer now supports recurrent RSNNs only; "
+                f"got network={type(network).__name__}."
+            )
+        self.alpha = float(network.alpha)
+        self.kappa = float(network.kappa)
+        self.threshold = float(network.threshold)
         
         # Per-layer learning rate modulation
         self.lr_layer = lr_layer_norm
@@ -123,29 +108,7 @@ class EpropTrainer(BaseTrainer):
                 self.optimizer = torch.optim.Adam(network.parameters(), lr=lr)
         else:
             self.optimizer = None
-            
-        # Initialize feedback weights for learning signal propagation
-        # Feedback weights connect output error to hidden layer eligibility traces
-        self._init_feedback_weights()
-        
-    def _init_feedback_weights(self):
-        """Initialize feedback weights for learning signal computation.
-        
-        For feedforward networks, we use the output layer weights (transposed)
-        as feedback weights, implementing symmetric e-prop.
-        """
-        # For symmetric e-prop, feedback weights are initialized 
-        # proportionally to output weights and fixed during training
-        n_out = self.network.n_classes
-        hidden_sizes = self.network.hidden_size
-        
-        self.feedback = nn.ParameterList()
-        for h in hidden_sizes:
-            # Initialize feedback with random weights (random e-prop)
-            # Alternative: use w_out.T for symmetric e-prop
-            fb = torch.randn(n_out, h) * (1.0 / math.sqrt(h))
-            self.feedback.append(nn.Parameter(fb, requires_grad=False))
-    
+
     def _surrogate_gradient(self, mem: torch.Tensor) -> torch.Tensor:
         """
         Compute surrogate gradient for the spike function.
@@ -169,237 +132,126 @@ class EpropTrainer(BaseTrainer):
     
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
-        Train on a single batch using e-prop.
-        
-        Implements e-prop for feedforward SNNs:
-        1. Forward pass collecting spikes and membrane potentials
-        2. Compute eligibility traces per layer
-        3. Compute learning signals from output error
-        4. Update weights using trace * signal
-        
+        Train on a single batch using recurrent e-prop with online updates.
+
         Args:
             data: Input tensor of shape [num_timesteps, batch_size, in_features]
             target: Target labels of shape [batch_size]
-            
+
         Returns:
             loss: Scalar loss tensor
             pred: Predictions of shape [batch_size, 1]
         """
-        num_timesteps, batch_size, in_features = data.shape
-        n_classes = self.network.n_classes if hasattr(self.network, "n_classes") else self.network.n_out
+        num_timesteps, batch_size, _ = data.shape
         device = data.device
 
-        # One-hot encode target
-        tgt = torch.zeros(batch_size, n_classes, device=device)
-        tgt.scatter_(1, target.unsqueeze(1), 1.0)
+        n_out = self.network.n_out
 
-        if hasattr(self.network, "is_recurrent") and self.network.is_recurrent:
-            return self._train_recurrent(data, tgt, target)
+        tgt_onehot = torch.zeros(batch_size, n_out, device=device)
+        tgt_onehot.scatter_(1, target.view(-1, 1), 1.0)
+        return self._train_recurrent_online(data, tgt_onehot)
 
-        # -------- Feedforward path (existing implementation) -------- #
-        self.network.reset()
+    def _train_recurrent_online(self, data: torch.Tensor, tgt_onehot: torch.Tensor):
+        """Online recurrent e-prop: update parameters each timestep."""
+        num_timesteps, batch_size, _ = data.shape
+        device = data.device
+
+        n_in = self.network.n_in
+        n_rec = self.network.n_rec
+        n_out = self.network.n_out
+
+        self.network.reset(device=device)
 
         if self.use_optimizer and self.optimizer is not None:
             self.optimizer.zero_grad()
 
-        num_layers = len(self.network.hidden_size) + 1  # hidden layers + output
-        weight_grads = [
-            torch.zeros_like(self.network.layers[i * 2].weight)
-            for i in range(num_layers)
-        ]
+        x_in_bar = torch.zeros(batch_size, n_in, device=device)
+        z_bar = torch.zeros(batch_size, n_rec, device=device)
 
-        all_spks = []
-        all_mems = []
-        spk_sum = None
+        trace_in = torch.zeros(batch_size, n_rec, n_in, device=device)
+        trace_rec = torch.zeros(batch_size, n_rec, n_rec, device=device)
+        trace_out = torch.zeros(batch_size, n_rec, device=device)
 
-        vo = torch.zeros(batch_size, n_classes, device=device)
-        vo_rec = []
+        vo = torch.zeros(batch_size, n_out, device=device)
+        vo_sum = None
 
         for t in range(num_timesteps):
-            spks, mems = self.network(data[t])
-            all_spks.append(spks)
-            all_mems.append(mems)
+            z_t, v_t, vo = self.network.step(data[t], vo)
 
-            if spk_sum is None:
-                spk_sum = spks[-1].clone()
-            else:
-                spk_sum = spk_sum + spks[-1]
+            if z_t.shape == (n_rec, batch_size):
+                z_t = z_t.t()
+            if v_t.shape == (n_rec, batch_size):
+                v_t = v_t.t()
+            if vo.shape == (n_out, batch_size):
+                vo = vo.t()
 
-            vo = self.kappa * vo + spks[-1]
-            vo_rec.append(vo.clone())
+            if z_t.shape != (batch_size, n_rec):
+                raise RuntimeError(
+                    f"Recurrent spike shape mismatch: expected {(batch_size, n_rec)}, got {tuple(z_t.shape)}"
+                )
+            if v_t.shape != (batch_size, n_rec):
+                raise RuntimeError(
+                    f"Recurrent membrane shape mismatch: expected {(batch_size, n_rec)}, got {tuple(v_t.shape)}"
+                )
+            if vo.shape != (batch_size, n_out):
+                raise RuntimeError(
+                    f"Output membrane shape mismatch: expected {(batch_size, n_out)}, got {tuple(vo.shape)}"
+                )
 
-        output = F.softmax(torch.stack(vo_rec, dim=0), dim=2)  # [T, B, C]
-        error = output - tgt.unsqueeze(0).expand(num_timesteps, -1, -1)
+            vo_sum = vo.clone() if vo_sum is None else (vo_sum + vo)
 
-        for t in range(num_timesteps):
             if self.update_last and t < num_timesteps - 1:
                 continue
             if not ((t + 1) % self.update_every == 0):
                 continue
 
-            spks_t = all_spks[t]
-            mems_t = all_mems[t]
+            yo_t = F.softmax(vo, dim=1)
+            err_t = yo_t - tgt_onehot
 
-            surrogates = [
-                self._surrogate_gradient(mems_t[i])
-                for i in range(len(self.network.hidden_size))
-            ]
+            h_t = self._surrogate_gradient(v_t)
 
-            err_t = error[t]
+            x_in_bar = self.alpha * x_in_bar + data[t]
+            z_bar = self.alpha * z_bar + z_t
 
-            for layer_idx in range(len(self.network.hidden_size)):
-                x_pre = data[t] if layer_idx == 0 else spks_t[layer_idx - 1]
-                x_post = spks_t[layer_idx]
-                h_t = surrogates[layer_idx]
+            e_in = h_t.unsqueeze(2) * x_in_bar.unsqueeze(1)
+            e_rec = h_t.unsqueeze(2) * z_bar.unsqueeze(1)
 
-                L = err_t @ self.feedback[layer_idx]
+            trace_in = self.kappa * trace_in + e_in
+            trace_rec = self.kappa * trace_rec + e_rec
+            trace_out = self.kappa * trace_out + z_t
 
-                modulated_post = L * h_t * x_post
-                dw = modulated_post.T @ x_pre
-                dw = self.lr_layer[min(layer_idx, len(self.lr_layer) - 1)] * dw
-                weight_grads[layer_idx] += dw
+            L_t = err_t @ self.network.w_out
 
-            x_out_pre = spks_t[-2] if len(spks_t) > 1 else spks_t[0]
-            dw_out = err_t.T @ x_out_pre
-            dw_out = self.lr_layer[-1] * dw_out
-            weight_grads[-1] += dw_out
+            w_in_grad_t = self.lr_layer[0] * torch.einsum("br,bri->ri", L_t, trace_in)
+            w_rec_grad_t = self.lr_layer[1] * torch.einsum("br,brj->rj", L_t, trace_rec)
+            w_out_grad_t = self.lr_layer[2] * (err_t.t() @ trace_out)
 
-        if self.use_optimizer and self.optimizer is not None:
-            for i in range(num_layers):
-                self.network.layers[i * 2].weight.grad = weight_grads[i]
-            self.optimizer.step()
-        else:
-            for i in range(num_layers):
-                self.network.layers[i * 2].weight.data -= (
-                    self.lr * weight_grads[i] / batch_size
+            if self.use_optimizer and self.optimizer is not None:
+                self.network.w_in.grad = (
+                    w_in_grad_t
+                    if self.network.w_in.grad is None
+                    else self.network.w_in.grad + w_in_grad_t
                 )
+                self.network.w_rec.grad = (
+                    w_rec_grad_t
+                    if self.network.w_rec.grad is None
+                    else self.network.w_rec.grad + w_rec_grad_t
+                )
+                self.network.w_out.grad = (
+                    w_out_grad_t
+                    if self.network.w_out.grad is None
+                    else self.network.w_out.grad + w_out_grad_t
+                )
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+            else:
+                self.network.w_in.data -= self.lr * w_in_grad_t / batch_size
+                self.network.w_rec.data -= self.lr * w_rec_grad_t / batch_size
+                self.network.w_out.data -= self.lr * w_out_grad_t / batch_size
 
-        loss = self.loss_fn(spk_sum, tgt)
-        pred = spk_sum.argmax(dim=1, keepdim=True)
-
-        return loss.detach(), pred
-
-    def _train_recurrent(
-        self, data: torch.Tensor, tgt_onehot: torch.Tensor, target: torch.Tensor
-    ):
-        """
-        Recurrent e-prop path closely matching the reference implementation.
-        """
-        num_timesteps, batch_size, _ = data.shape
-        device = data.device
-        n_in = self.network.n_in
-        n_rec = self.network.n_rec
-        n_out = self.network.n_out
-
-        # Reset state holders
-        self.network.reset(device=device)
-
-        # Prepare tensors for full sequence (for eligibility computation)
-        v = torch.zeros(num_timesteps, batch_size, n_rec, device=device)
-        z = torch.zeros_like(v)
-        vo = torch.zeros(num_timesteps, batch_size, n_out, device=device)
-
-        # Forward unroll (no autograd)
-        for t in range(num_timesteps - 1):
-            v[t + 1] = (
-                self.alpha * v[t]
-                + torch.mm(z[t], self.network.w_rec.t())
-                + torch.mm(data[t], self.network.w_in.t())
-                - z[t] * self.network.threshold
-            )
-            z[t + 1] = (v[t + 1] > self.network.threshold).float()
-            vo[t + 1] = (
-                self.kappa * vo[t]
-                + torch.mm(z[t + 1], self.network.w_out.t())
-                + self.network.b_out
-            )
-
-        yo = F.softmax(vo, dim=2)
-
-        # Surrogate derivatives
-        h = self.gamma * torch.clamp(
-            1.0 - torch.abs((v - self.network.threshold) / self.network.threshold), min=0.0
-        )
-
-        # Eligibility traces (vectorized, matching reference)
-        alpha_conv = torch.tensor(
-            [self.alpha ** (num_timesteps - i - 1) for i in range(num_timesteps)],
-            device=device,
-        ).float().view(1, 1, -1)
-
-        trace_in = F.conv1d(
-            data.permute(1, 2, 0),
-            alpha_conv.expand(n_in, -1, -1),
-            padding=num_timesteps,
-            groups=n_in,
-        )[:, :, 1 : num_timesteps + 1].unsqueeze(1).expand(-1, n_rec, -1, -1)
-        trace_in = torch.einsum("tbr,brit->brit", h, trace_in)
-
-        trace_rec = F.conv1d(
-            z.permute(1, 2, 0),
-            alpha_conv.expand(n_rec, -1, -1),
-            padding=num_timesteps,
-            groups=n_rec,
-        )[:, :, :num_timesteps].unsqueeze(1).expand(-1, n_rec, -1, -1)
-        trace_rec = torch.einsum("tbr,brit->brit", h, trace_rec)
-        trace_reg = trace_rec
-
-        kappa_conv = torch.tensor(
-            [self.kappa ** (num_timesteps - i - 1) for i in range(num_timesteps)],
-            device=device,
-        ).float().view(1, 1, -1)
-
-        trace_out = F.conv1d(
-            z.permute(1, 2, 0),
-            kappa_conv.expand(n_rec, -1, -1),
-            padding=num_timesteps,
-            groups=n_rec,
-        )[:, :, 1 : num_timesteps + 1]
-
-        trace_in = F.conv1d(
-            trace_in.reshape(batch_size, n_in * n_rec, num_timesteps),
-            kappa_conv.expand(n_in * n_rec, -1, -1),
-            padding=num_timesteps,
-            groups=n_in * n_rec,
-        )[:, :, 1 : num_timesteps + 1].reshape(batch_size, n_rec, n_in, num_timesteps)
-
-        trace_rec = F.conv1d(
-            trace_rec.reshape(batch_size, n_rec * n_rec, num_timesteps),
-            kappa_conv.expand(n_rec * n_rec, -1, -1),
-            padding=num_timesteps,
-            groups=n_rec * n_rec,
-        )[:, :, 1 : num_timesteps + 1].reshape(
-            batch_size, n_rec, n_rec, num_timesteps
-        )
-
-        err = yo - tgt_onehot
-        L = torch.einsum("tbo,or->brt", err, self.network.w_out)
-
-        # Gradients
-        w_in_grad = (
-            self.lr_layer[0] * torch.sum(L.unsqueeze(2).expand(-1, -1, n_in, -1) * trace_in, dim=(0, 3))
-        )
-        w_rec_grad = (
-            self.lr_layer[1] * torch.sum(L.unsqueeze(2).expand(-1, -1, n_rec, -1) * trace_rec, dim=(0, 3))
-        )
-        w_out_grad = self.lr_layer[2] * torch.einsum("tbo,brt->or", err, trace_out)
-
-        if self.use_optimizer and self.optimizer is not None:
-            self.optimizer.zero_grad()
-            self.network.w_in.grad = w_in_grad
-            self.network.w_rec.grad = w_rec_grad
-            self.network.w_out.grad = w_out_grad
-            self.optimizer.step()
-        else:
-            self.network.w_in.data -= self.lr * w_in_grad / batch_size
-            self.network.w_rec.data -= self.lr * w_rec_grad / batch_size
-            self.network.w_out.data -= self.lr * w_out_grad / batch_size
-
-        # Predictions from summed output membrane
         with torch.no_grad():
-            spk_sum = vo.sum(dim=0)
-            pred = spk_sum.argmax(dim=1, keepdim=True)
-            loss = self.loss_fn(spk_sum, tgt_onehot)
+            pred = vo_sum.argmax(dim=1, keepdim=True)
+            loss = self.loss_fn(vo_sum, tgt_onehot)
 
         return loss.detach(), pred
     
@@ -424,4 +276,3 @@ class EpropTrainer(BaseTrainer):
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         
         return self
-
