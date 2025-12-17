@@ -283,8 +283,10 @@ def validate_config(config: Config) -> List[str]:
         issues.append("data.timesteps must be positive")
 
     valid_datasets = [
-        # Standard image classification
-        "MNIST", "CIFAR10", "FashionMNIST", "SVHN", "DVSGesture",
+        # Rate-coded image classification
+        "MNIST", "CIFAR10", "FashionMNIST", "SVHN",
+        # Event-based neuromorphic (ideal for DECOLLE)
+        "NMNIST", "DVSGesture",
         # NeuroBench official benchmarks
         "SpeechCommands", "WISDM",  # Classification
         "PrimateReaching", "MackeyGlass",  # Regression
@@ -293,7 +295,7 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "eprop", "stdp"]
+    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "stdp"]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 

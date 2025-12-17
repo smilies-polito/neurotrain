@@ -184,7 +184,9 @@ class NeuroBenchWrapper(torch.nn.Module):
         all_spikes = []
         
         for t in range(num_timesteps):
-            spks, _ = self.network(x[t])
+            out = self.network(x[t])
+            # Handle networks returning 2 values (spk, mem) or 3 values (spk, mem, traces)
+            spks = out[0]
             all_spikes.append(spks[-1])  # Output layer spikes
         
         # Stack spikes: [timesteps, batch, classes]

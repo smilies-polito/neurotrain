@@ -31,6 +31,7 @@ from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 from networks.fc_network import FCNetwork
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
@@ -55,6 +56,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (ottt_trainer.py)",
+    },
+    "decolle": {
+        "name": "Deep Continuous Local Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (decolle_trainer.py)",
     },
 }
 
@@ -164,11 +171,12 @@ def evaluate(
         network.reset()
         spk_sum = None
         for t in range(data.size(0)):
-            spk, _ = network(data[t])
-            if spk_sum is None:
-                spk_sum = spk[-1]
+            out = network(data[t])
+            if isinstance(out, (tuple, list)):
+                spk = out[0]
             else:
-                spk_sum = spk_sum + spk[-1]
+                spk = out
+            spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
         
         preds = spk_sum.argmax(dim=1)
         correct += preds.eq(target).sum().item()
@@ -225,7 +233,7 @@ def benchmark_algorithm(
     # Get data loaders
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
     
-    # Create network
+    # Create network (all algorithms use FCNetwork now)
     network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
     
     # Create trainer with appropriate settings
@@ -251,8 +259,23 @@ def benchmark_algorithm(
             use_optimizer=False,
             optimizer=None,
         )
+    elif algorithm_name == "decolle":
+        # DECOLLE hyperparameters tuned for rate-coded inputs (25 timesteps)
+        # Use same LR as other algorithms - per-layer scaling handles the rest
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,  # Base LR (e.g., 0.001), layer scaling will adjust
+            batch_size=batch_size,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+            # Sigmoid surrogate - always has gradient even for sub-threshold membrane
+            surrogate="sigmoid",
+            surrogate_scale=2.0,
+        )
     else:
-        # STSF uses local learning
+        # Local learning algorithms (STSF)
         torch.set_grad_enabled(False)
         trainer = trainer_class(
             network=network,
@@ -372,6 +395,7 @@ def run_comparison(config: Dict[str, Any], output_dir: Path) -> Dict[str, Benchm
     trainers = {
         "bptt": BPTTTrainer,
         "stsf": STSFTrainer,
+        "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
     }
     
@@ -502,4 +526,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

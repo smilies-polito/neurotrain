@@ -3,7 +3,7 @@
 Run BPTT vs STSF vs OTTT benchmarks across all available datasets.
 
 Usage:
-    python run_all_benchmarks.py [--epochs 50] [--device cuda]
+    python run_all_benchmarks.py [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf]
 """
 
 import argparse
@@ -19,39 +19,60 @@ from benchmark_runner import benchmark_algorithm, print_comparison_summary, Benc
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
 # ============================================================================
-# STANDARD IMAGE CLASSIFICATION DATASETS
+# RATE-CODED IMAGE CLASSIFICATION DATASETS
 # ============================================================================
-STANDARD_DATASETS = {
+RATE_CODED_DATASETS = {
     "MNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "FashionMNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "CIFAR10": {
         "layer_sizes": [3072, 512, 10],  # 32x32x3 = 3072
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
     "SVHN": {
         "layer_sizes": [3072, 512, 10],
         "timesteps": 25,
         "task": "classification",
+        "type": "rate-coded",
     },
-    # "DVSGesture": {
-    #     "layer_sizes": [1156, 256, 11],  # 34x34 = 1156
-    #     "timesteps": 25,
-    #     "task": "classification",
-    # },
 }
+
+# ============================================================================
+# EVENT-BASED NEUROMORPHIC DATASETS (ideal for DECOLLE)
+# ============================================================================
+EVENT_BASED_DATASETS = {
+    "NMNIST": {
+        "layer_sizes": [1156, 256, 10],  # 34x34 = 1156, 10 digits
+        "timesteps": 25,
+        "task": "classification",
+        "type": "event-based",
+    },
+    "DVSGesture": {
+        "layer_sizes": [16384, 512, 11],  # 128x128 = 16384, 11 gestures
+        "timesteps": 50,
+        "task": "classification",
+        "type": "event-based",
+    },
+}
+
+# Combined standard datasets
+STANDARD_DATASETS = {**RATE_CODED_DATASETS, **EVENT_BASED_DATASETS}
 
 # ============================================================================
 # NEUROBENCH OFFICIAL BENCHMARK DATASETS
@@ -89,8 +110,16 @@ DATASETS = {**STANDARD_DATASETS, **NEUROBENCH_DATASETS}
 ALGORITHMS = {
     "bptt": BPTTTrainer,
     "stsf": STSFTrainer,
+    "decolle": DECOLLETrainer,
     "ottt": OTTTTrainer,
 }
+
+def _parse_csv_list(value: str):
+    if value is None:
+        return None
+    items = [part.strip() for part in value.split(",")]
+    items = [item for item in items if item]
+    return items or None
 
 
 def run_all_benchmarks(
@@ -101,6 +130,8 @@ def run_all_benchmarks(
     beta: float = 0.9,
     checkpoint_epochs: list = None,
     output_dir: str = "./benchmark_results",
+    datasets: list = None,
+    algorithms: list = None,
 ):
     """Run benchmarks for all algorithms on all datasets."""
     
@@ -111,24 +142,61 @@ def run_all_benchmarks(
     output_path.mkdir(parents=True, exist_ok=True)
     
     all_results = {}
+
+    selected_datasets = DATASETS
+    if datasets:
+        dataset_key_map = {name.lower(): name for name in DATASETS.keys()}
+        resolved = []
+        unknown = []
+        for name in datasets:
+            key = dataset_key_map.get(name.lower())
+            if key is None:
+                unknown.append(name)
+            else:
+                resolved.append(key)
+        if unknown:
+            raise ValueError(
+                f"Unknown dataset(s): {', '.join(unknown)}. Available: {', '.join(DATASETS.keys())}"
+            )
+        selected_datasets = {name: DATASETS[name] for name in resolved}
+
+    selected_algorithms = ALGORITHMS
+    if algorithms:
+        resolved = []
+        unknown = []
+        for name in algorithms:
+            key = name.lower().strip()
+            if key not in ALGORITHMS:
+                unknown.append(name)
+            else:
+                resolved.append(key)
+        if unknown:
+            raise ValueError(
+                f"Unknown algorithm(s): {', '.join(unknown)}. Available: {', '.join(ALGORITHMS.keys())}"
+            )
+        selected_algorithms = {name: ALGORITHMS[name] for name in resolved}
     
     print("\n" + "=" * 80)
-    print("FULL BENCHMARK SUITE: " + " vs ".join(name.upper() for name in ALGORITHMS.keys()))
+    print("FULL BENCHMARK SUITE: " + " vs ".join(name.upper() for name in selected_algorithms.keys()))
     print("=" * 80)
-    print(f"Algorithms: {list(ALGORITHMS.keys())}")
-    print(f"Datasets: {list(DATASETS.keys())}")
+    print(f"Algorithms: {list(selected_algorithms.keys())}")
+    if datasets:
+        print(f"Datasets: {list(selected_datasets.keys())}")
+    else:
+        print(f"Rate-coded datasets: {list(RATE_CODED_DATASETS.keys())}")
+        print(f"Event-based datasets: {list(EVENT_BASED_DATASETS.keys())} (ideal for DECOLLE)")
     print(f"Epochs: {epochs}")
     print(f"Device: {device}")
     print("=" * 80)
     
-    for dataset_name, dataset_config in DATASETS.items():
+    for dataset_name, dataset_config in selected_datasets.items():
         print(f"\n{'#' * 80}")
         print(f"# DATASET: {dataset_name}")
         print(f"{'#' * 80}")
         
         dataset_results = {}
         
-        for algo_name, trainer_class in ALGORITHMS.items():
+        for algo_name, trainer_class in selected_algorithms.items():
             try:
                 result = benchmark_algorithm(
                     algorithm_name=algo_name,
@@ -191,7 +259,7 @@ def run_all_benchmarks(
     print(f"FINAL SUMMARY ({epochs} epochs)")
     print("=" * 160)
 
-    algo_names = list(ALGORITHMS.keys())
+    algo_names = list(selected_algorithms.keys())
     header_parts = [f"{'Dataset':<14}"]
     for name in algo_names:
         header_parts.extend(
@@ -236,7 +304,7 @@ def run_all_benchmarks(
     print("-" * 180)
     
     for dataset, algos in all_results.items():
-        for algo_name in ALGORITHMS.keys():
+        for algo_name in algo_names:
             res = algos.get(algo_name, {})
             if not hasattr(res, 'neurobench'):
                 continue
@@ -333,18 +401,34 @@ def main():
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda", help="Device (cuda/cpu)")
     parser.add_argument("--output-dir", type=str, default="./benchmark_results", help="Output directory")
+    parser.add_argument(
+        "--datasets",
+        type=str,
+        default=None,
+        help="Comma-separated dataset names to run (default: all)",
+    )
+    parser.add_argument(
+        "--algorithms",
+        type=str,
+        default=None,
+        help="Comma-separated algorithm names to run (default: all)",
+    )
     
     args = parser.parse_args()
     
-    run_all_benchmarks(
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        device=args.device,
-        output_dir=args.output_dir,
-    )
+    try:
+        run_all_benchmarks(
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            device=args.device,
+            output_dir=args.output_dir,
+            datasets=_parse_csv_list(args.datasets),
+            algorithms=_parse_csv_list(args.algorithms),
+        )
+    except ValueError as e:
+        parser.error(str(e))
 
 
 if __name__ == "__main__":
     main()
-

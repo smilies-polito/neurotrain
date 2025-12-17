@@ -40,6 +40,7 @@ from datasets.get_loader import get_loader
 from networks.fc_network import FCNetwork
 from trainers.stsf_trainer import STSFTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.decolle_trainer import DECOLLETrainer
 from trainers.ottt_trainer import OTTTTrainer
 from LearningAlgorithms import LearningAlgorithms
 
@@ -86,7 +87,7 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         config.data.timesteps,
     )
 
-    # Create the network
+    # Create the network (all algorithms use FCNetwork)
     network = FCNetwork(
         layer_sizes=config.model.layer_sizes,
         beta=config.model.beta,
@@ -104,7 +105,7 @@ def trainable(config: Config, trainer_class, logger: ExperimentLogger, checkpoin
         optimizer = None
 
     # Create the trainer
-    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF)
+    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF/DECOLLE)
     requires_grad = config.trainer.name == "bptt"
     torch.set_grad_enabled(requires_grad)
     trainer_kwargs = {
@@ -212,6 +213,7 @@ def get_trainer(trainer_name: str):
     trainers = {
         "stsf": STSFTrainer,
         "bptt": BPTTTrainer,
+        "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
         # Future trainers will be added here:
         # "eprop": EpropTrainer,
