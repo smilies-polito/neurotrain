@@ -168,9 +168,13 @@ class DRTPTrainer(BaseTrainer):
             spks, _ = self.network(data[t])
             spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]
 
-            if self.update_last and t < num_timesteps - 1:
-                continue
-            if self.update_every > 1 and (t + 1) % self.update_every != 0:
+            should_update = True
+            if self.update_last:
+                should_update = t == num_timesteps - 1
+            elif self.update_every > 1:
+                should_update = (t + 1) % self.update_every == 0
+
+            if not should_update:
                 continue
 
             # Hidden layer updates with target projection
