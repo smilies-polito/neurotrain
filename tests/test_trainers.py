@@ -13,6 +13,7 @@ from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+from trainers.drtp_trainer import DRTPTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.stsf_trainer import STSFTrainer
 
@@ -421,3 +422,66 @@ class TestDECOLLETrainer:
         before = network.layers[0].weight.clone()
         trainer.train_sample(data, target)
         assert not torch.allclose(before, network.layers[0].weight)
+
+
+class TestDRTPTrainer:
+    """Test DRTPTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return FCNetwork(layer_sizes=[2, 6, 2], beta=0.9)
+
+    @pytest.fixture
+    def trainer(self, network):
+        return DRTPTrainer(
+            network=network,
+            lr=0.05,
+            batch_size=4,
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            use_optimizer=False,
+        )
+
+    def test_trainer_has_feedback(self, trainer):
+        assert len(trainer.feedback) == 1
+        fb = trainer.feedback[0]
+        assert fb.shape == (2, 6)
+        assert fb.requires_grad is False
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(3, 4, 2)
+        target = torch.randint(0, 2, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert pred.shape == (4, 1)
+
+    def test_loss_decreases(self, trainer, network):
+        timesteps = 2
+        batch_size = 4
+        features = 2
+
+        data = torch.zeros(timesteps, batch_size, features)
+        data[:, 0, 0] = 5.0
+        data[:, 1, 0] = 5.0
+        data[:, 2, 1] = 5.0
+        data[:, 3, 1] = 5.0
+        target = torch.tensor([0, 0, 1, 1])
+
+        def forward_loss():
+            network.reset()
+            spk_sum = None
+            for t in range(timesteps):
+                spks, _ = network(data[t])
+                spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]
+            tgt = torch.zeros(batch_size, 2)
+            tgt.scatter_(1, target.unsqueeze(1), 1.0)
+            return torch.nn.functional.mse_loss(spk_sum, tgt).item()
+
+        loss_before = forward_loss()
+
+        for _ in range(20):
+            trainer.train_sample(data, target)
+
+        loss_after = forward_loss()
+        assert loss_after < loss_before

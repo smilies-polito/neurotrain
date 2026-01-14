@@ -84,6 +84,7 @@ This platform supports systematic comparison of SNN learning algorithms across m
 |-----------|------|-------------|
 | **STSF** | Local Learning | Spiking Time Sparse Feedback - bio-plausible, no backprop |
 | **DECOLLE** | Local Learning | Deep Continuous Local Learning with per-layer random readouts |
+| **DRTP** | Local Learning | Direct Random Target Projection with fixed random target feedback |
 | **BPTT** | Gradient-based | Backpropagation Through Time with surrogate gradients |
 | **E-prop** | Local / eligibility | Eligibility propagation with feedforward adapter and reference-style recurrent SRNN |
 | **OTTT** | Local Learning | Online Training Through Time with eligibility traces |

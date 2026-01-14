@@ -65,6 +65,13 @@ class TestConfig:
         assert "training.epochs" in flat
         assert flat["experiment.seed"] == 42
 
+    def test_default_drtp_config(self):
+        """Test DRTP config defaults."""
+        config = Config()
+        assert config.drtp.feedback_distribution == "kaiming_uniform"
+        assert config.drtp.feedback_scale == 1.0
+        assert config.drtp.fixed_feedback is True
+
 
 class TestConfigIO:
     """Test config file I/O."""
@@ -140,4 +147,3 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("dataset" in issue for issue in issues)
-

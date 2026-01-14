@@ -2,6 +2,7 @@
 
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.drtp_trainer import DRTPTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.ottt_trainer import OTTTTrainer
@@ -12,6 +13,7 @@ __all__ = [
     "BPTTTrainer",
     "STSFTrainer",
     "BPTTTrainer",
+    "DRTPTrainer",
     "EpropTrainer",
     "OTTTTrainer",
     "DECOLLETrainer",

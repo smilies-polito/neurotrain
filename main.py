@@ -26,6 +26,7 @@ from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.fc_network import FCNetwork
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.drtp_trainer import DRTPTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.ottt_trainer import OTTTTrainer
@@ -157,6 +158,14 @@ def trainable(
             update_every=config.trainer.update_every,
             seq_batch_size=config.trainer.seq_batch,
         )
+    if issubclass(trainer_class, DRTPTrainer):
+        trainer_kwargs.update(
+            feedback_distribution=config.drtp.feedback_distribution,
+            feedback_scale=config.drtp.feedback_scale,
+            fixed_feedback=config.drtp.fixed_feedback,
+            update_last=config.trainer.update_last,
+            update_every=config.trainer.update_every,
+        )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
 
@@ -249,6 +258,7 @@ def get_trainer(trainer_name: str):
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
+        "drtp": DRTPTrainer,
         # Future trainers will be added here:
         # "stdp": STDPTrainer,
     }

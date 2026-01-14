@@ -50,10 +50,19 @@ class TrainingConfig:
 class TrainerConfig:
     """Trainer-specific configuration."""
 
-    name: str = "stsf"  # "stsf", "bptt", "eprop", "stdp"
+    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "stdp"
     update_last: bool = False
     update_every: int = 1
     seq_batch: int = 1
+
+
+@dataclass
+class DRTPConfig:
+    """Direct Random Target Projection configuration."""
+
+    feedback_distribution: str = "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    feedback_scale: float = 1.0
+    fixed_feedback: bool = True
 
 
 @dataclass
@@ -96,6 +105,7 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     trainer: TrainerConfig = field(default_factory=TrainerConfig)
+    drtp: DRTPConfig = field(default_factory=DRTPConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -150,6 +160,7 @@ class Config:
             model=ModelConfig(**config_dict.get("model", {})),
             training=TrainingConfig(**config_dict.get("training", {})),
             trainer=TrainerConfig(**config_dict.get("trainer", {})),
+            drtp=DRTPConfig(**config_dict.get("drtp", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -329,9 +340,18 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "stdp"]
+    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "stdp"]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
+
+    # DRTP validation
+    valid_drtp_distributions = ["kaiming_uniform", "uniform", "normal"]
+    if config.drtp.feedback_distribution not in valid_drtp_distributions:
+        issues.append(
+            f"drtp.feedback_distribution must be one of {valid_drtp_distributions}"
+        )
+    if config.drtp.feedback_scale <= 0:
+        issues.append("drtp.feedback_scale must be positive")
 
     return issues
 
@@ -348,4 +368,3 @@ def print_config(config: Config) -> None:
             print(f"  {key}: {value}")
 
     print("=" * 60 + "\n")
-
