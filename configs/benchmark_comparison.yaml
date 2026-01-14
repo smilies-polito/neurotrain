@@ -7,6 +7,7 @@ algorithms:
     - stsf # Spiking Time Sparse Feedback (local)
     - ottt # Online Training Through Time (local, eligibility traces)
     - decolle # Deep Continuous Local Learning (local)
+    - drtp # Deep RPT (local)
 
 # Dataset configuration
 dataset: "MNIST"

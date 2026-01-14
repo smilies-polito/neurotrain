@@ -14,6 +14,16 @@ trainer:
   name: "drtp"
 ```
 
+DRTP configs live alongside the other experiment configs in `configs/`:
+- `configs/mnist_drtp.yaml`
+- `configs/cifar10_drtp.yaml`
+
+Run them the same way as other algorithms:
+
+```bash
+python3 main.py --config configs/mnist_drtp.yaml
+```
+
 ## Configuration
 
 DRTP-specific options live under the `drtp` section:
@@ -30,6 +40,32 @@ Notes:
   (`kaiming_uniform`).
 - `feedback_scale` multiplies the initialized feedback matrices.
 - `fixed_feedback` keeps matrices constant for the whole run (default).
+
+## Per-Timestep Updates (Online)
+
+To update weights every timestep, keep the trainer update settings at the
+per-timestep defaults used by the DRTP configs:
+
+```yaml
+trainer:
+  update_last: false
+  update_every: 1
+```
+
+## Run in Singularity
+
+From the repository root, use the container in `./src/`:
+
+```bash
+# a) minimal sanity check (short run)
+singularity exec ./src/snn-training-benchmarking.sif python3 main.py --config configs/mnist_drtp.yaml --epochs 1 --batch-size 8 --T 2
+
+# b) MNIST DRTP with the config
+singularity exec ./src/snn-training-benchmarking.sif python3 main.py --config configs/mnist_drtp.yaml
+
+# c) CIFAR10 DRTP with the config
+singularity exec ./src/snn-training-benchmarking.sif python3 main.py --config configs/cifar10_drtp.yaml
+```
 
 ## Limitations / Assumptions
 

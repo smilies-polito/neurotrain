@@ -2,47 +2,47 @@
 # Direct Random Target Projection (DRTP) training on CIFAR10
 
 experiment:
-  name: "DRTP_CIFAR10"
-  seed: 42
-  deterministic: true
-  log_dir: "./experiments"
+    name: "DRTP_CIFAR10"
+    seed: 42
+    deterministic: true
+    log_dir: "./experiments"
 
 model:
-  architecture: "fc"
-  layer_sizes: [3072, 500, 10]
-  beta: 0.9375
-  threshold: 1.0
-  quantization: false
+    architecture: "fc"
+    layer_sizes: [3072, 500, 10] # [input, hidden..., output]
+    beta: 0.9375
+    threshold: 1.0
+    quantization: false
 
 training:
-  epochs: 150
-  batch_size: 256
-  learning_rate: 0.01
-  optimizer: null
+    epochs: 150
+    batch_size: 256
+    learning_rate: 0.01
+    optimizer: null
 
 trainer:
-  name: "drtp"
-  update_last: false
-  update_every: 1
-  seq_batch: 1
+    name: "drtp"
+    update_last: false # false = per-timestep updates
+    update_every: 1 # update every timestep
+    seq_batch: 1
 
 drtp:
-  feedback_distribution: "kaiming_uniform"
-  feedback_scale: 1.0
-  fixed_feedback: true
+    feedback_distribution: "kaiming_uniform"
+    feedback_scale: 1.0
+    fixed_feedback: true
 
 data:
-  dataset: "CIFAR10"
-  timesteps: 10
-  data_dir: "./src/Data"
-  num_workers: 4
+    dataset: "CIFAR10"
+    timesteps: 10
+    data_dir: "./src/Data"
+    num_workers: 4
 
 hardware:
-  device: "auto"
-  mixed_precision: false
+    device: "auto"
+    mixed_precision: false
 
 checkpoint:
-  save_every: 0
-  save_best: true
-  save_latest: true
-  max_keep: 2
+    save_every: 0
+    save_best: true
+    save_latest: true
+    max_keep: 2
