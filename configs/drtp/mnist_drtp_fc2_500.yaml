@@ -1,15 +1,15 @@
-# MNIST DRTP Configuration
+# MNIST DRTP FC2-500 Configuration
 # Direct Random Target Projection (DRTP) training on MNIST
 
 experiment:
-    name: "DRTP_MNIST"
+    name: "DRTP_MNIST_FC2_500"
     seed: 42
     deterministic: true
     log_dir: "./experiments"
 
 model:
     architecture: "fc"
-    layer_sizes: [784, 500, 10] # [input, hidden..., output]
+    layer_sizes: [784, 500, 500, 10] # [input, hidden..., output]
     beta: 0.9375
     threshold: 1.0
     quantization: false
@@ -27,6 +27,7 @@ trainer:
     seq_batch: 1
 
 drtp:
+    loss: "mse"
     feedback_distribution: "kaiming_uniform"
     feedback_scale: 1.0
     fixed_feedback: true

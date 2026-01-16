@@ -16,7 +16,7 @@ from collections import deque
 from pathlib import Path
 
 import torch
-from torch.optim import Adam
+import torch.optim as optim
 
 # Add the src folder to the Python module search path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
@@ -25,13 +25,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.fc_network import FCNetwork
+from networks.conv_network import ConvFCNetwork
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.drtp_trainer import DRTPTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
-from utils.checkpoint import CheckpointManager, resume_training
+from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
     load_config,
@@ -72,6 +73,7 @@ def trainable(
     logger: ExperimentLogger,
     checkpoint_manager: CheckpointManager,
     start_epoch: int = 0,
+    resume_checkpoint=None,
 ):
     """
     Main training function.
@@ -88,10 +90,12 @@ def trainable(
     print(f"Using device: {device}")
 
     # Get data loaders
+    flatten_inputs = config.model.architecture != "conv"
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
         config.data.timesteps,
+        flatten=flatten_inputs,
     )
 
     # Create the network (supports fc and recurrent architectures)
@@ -122,22 +126,76 @@ def trainable(
         # Attach for compatibility
         network.n_classes = n_out
         network.hidden_size = [n_rec]
+    elif config.model.architecture == "conv":
+        if config.data.dataset == "MNIST":
+            input_shape = (1, 28, 28)
+        elif config.data.dataset == "CIFAR10":
+            input_shape = (3, 32, 32)
+        else:
+            raise ValueError(
+                "Conv architecture currently supports MNIST and CIFAR10 only."
+            )
+
+        network = ConvFCNetwork(
+            input_shape=input_shape,
+            conv_layers=config.model.conv_layers,
+            layer_sizes=config.model.layer_sizes,
+            beta=config.model.beta,
+            threshold=config.model.threshold,
+            quant=config.model.quantization,
+        )
     else:
         network = FCNetwork(
             layer_sizes=config.model.layer_sizes,
             beta=config.model.beta,
             quant=config.model.quantization,
+            threshold=config.model.threshold,
         )
 
+    if config.training.freeze_conv:
+        for module in network.modules():
+            if isinstance(module, torch.nn.Conv2d):
+                module.weight.requires_grad = False
+                if module.bias is not None:
+                    module.bias.requires_grad = False
+
     # Optimizer
-    if config.training.optimizer == "adam":
-        optimizer = Adam(
-            network.parameters(),
-            lr=config.training.learning_rate,
-            weight_decay=config.training.weight_decay,
-        )
-    else:
-        optimizer = None
+    optimizer = None
+    if config.training.optimizer is not None:
+        optimizer_name = str(config.training.optimizer).lower()
+        if optimizer_name == "adam":
+            optimizer = optim.Adam(
+                network.parameters(),
+                lr=config.training.learning_rate,
+                weight_decay=config.training.weight_decay,
+            )
+        elif optimizer_name == "sgd":
+            optimizer = optim.SGD(
+                network.parameters(),
+                lr=config.training.learning_rate,
+                momentum=0.9,
+                weight_decay=config.training.weight_decay,
+                nesterov=False,
+            )
+        elif optimizer_name == "nag":
+            optimizer = optim.SGD(
+                network.parameters(),
+                lr=config.training.learning_rate,
+                momentum=0.9,
+                weight_decay=config.training.weight_decay,
+                nesterov=True,
+            )
+        elif optimizer_name == "rmsprop":
+            optimizer = optim.RMSprop(
+                network.parameters(),
+                lr=config.training.learning_rate,
+                weight_decay=config.training.weight_decay,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported optimizer '{config.training.optimizer}'. "
+                "Use one of: adam, sgd, nag, rmsprop, or null."
+            )
 
     # Create the trainer
     # Enable gradients for BPTT (gradient-based), disable for local learners (STSF/DECOLLE)
@@ -163,11 +221,21 @@ def trainable(
             feedback_distribution=config.drtp.feedback_distribution,
             feedback_scale=config.drtp.feedback_scale,
             fixed_feedback=config.drtp.fixed_feedback,
+            loss_type=config.drtp.loss,
+            freeze_conv=config.training.freeze_conv,
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
+
+    if resume_checkpoint is not None:
+        trainer.network.load_state_dict(resume_checkpoint.model_state_dict)
+        if optimizer is not None and resume_checkpoint.optimizer_state_dict is not None:
+            optimizer.load_state_dict(resume_checkpoint.optimizer_state_dict)
+        if hasattr(trainer, "load_checkpoint_state") and resume_checkpoint.trainer_state_dict:
+            trainer.load_checkpoint_state(resume_checkpoint.trainer_state_dict)
+        start_epoch = max(start_epoch, resume_checkpoint.epoch + 1)
 
     trainer.network.train()
 
@@ -228,12 +296,16 @@ def trainable(
             }
         )
         # Save checkpoint if needed
+        trainer_state = None
+        if hasattr(trainer, "checkpoint_state"):
+            trainer_state = trainer.checkpoint_state()
         checkpoint_manager.save_if_needed(
             model=trainer.network,
             optimizer=optimizer,
             epoch=epoch,
             metrics=metrics,
             config=config.to_dict(),
+            trainer_state_dict=trainer_state,
         )
 
     # Log final hyperparameters with results
@@ -335,20 +407,22 @@ def main(args=None):
 
     # Handle resume
     start_epoch = 0
+    resume_checkpoint = None
     if args.resume_from:
         print(f"Resuming from: {args.resume_from}")
-        checkpoint = resume_training(
-            args.resume_from,
-            model=None,  # We'll create model in trainable()
-            restore_rng=True,
-        )
-        start_epoch = checkpoint.epoch + 1
+        resume_checkpoint = checkpoint_manager.load(args.resume_from)
+        if resume_checkpoint.rng_state:
+            set_rng_state(resume_checkpoint.rng_state)
+            print("RNG state restored for exact reproducibility")
+        start_epoch = resume_checkpoint.epoch + 1
         print(f"Resuming from epoch {start_epoch}")
-        # Note: Full resume with model loading happens in trainable()
     elif args.resume and checkpoint_manager.has_checkpoint():
-        checkpoint = checkpoint_manager.load_latest()
-        if checkpoint:
-            start_epoch = checkpoint.epoch + 1
+        resume_checkpoint = checkpoint_manager.load_latest()
+        if resume_checkpoint:
+            if resume_checkpoint.rng_state:
+                set_rng_state(resume_checkpoint.rng_state)
+                print("RNG state restored for exact reproducibility")
+            start_epoch = resume_checkpoint.epoch + 1
             print(f"Auto-resuming from epoch {start_epoch}")
 
     # Get trainer class
@@ -361,6 +435,7 @@ def main(args=None):
         logger=logger,
         checkpoint_manager=checkpoint_manager,
         start_epoch=start_epoch,
+        resume_checkpoint=resume_checkpoint,
     )
 
 

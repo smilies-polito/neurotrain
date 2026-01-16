@@ -1,0 +1,63 @@
+# CIFAR10 DRTP CONV (train.) Configuration
+# Direct Random Target Projection (DRTP) training on CIFAR10 with trainable conv front-end
+
+experiment:
+    name: "DRTP_CIFAR10_CONV_TRAIN"
+    seed: 42
+    deterministic: true
+    log_dir: "./experiments"
+
+model:
+    architecture: "conv"
+    conv_layers:
+        - out_channels: 64
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+        - out_channels: 256
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+    layer_sizes: [1000, 1000, 10] # [hidden..., output]
+    beta: 0.9375
+    threshold: 1.0
+    quantization: false
+
+training:
+    epochs: 150
+    batch_size: 256
+    learning_rate: 0.01
+    optimizer: null
+    freeze_conv: false
+
+trainer:
+    name: "drtp"
+    update_last: false # false = per-timestep updates
+    update_every: 1 # update every timestep
+    seq_batch: 1
+
+drtp:
+    loss: "mse"
+    feedback_distribution: "kaiming_uniform"
+    feedback_scale: 1.0
+    fixed_feedback: true
+
+data:
+    dataset: "CIFAR10"
+    timesteps: 10
+    data_dir: "./src/Data"
+    num_workers: 4
+
+hardware:
+    device: "auto"
+    mixed_precision: false
+
+checkpoint:
+    save_every: 0
+    save_best: true
+    save_latest: true
+    max_keep: 2

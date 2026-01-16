@@ -30,6 +30,7 @@ class ModelConfig:
 
     architecture: str = "fc"  # "fc", "conv", "recurrent"
     layer_sizes: List[int] = field(default_factory=lambda: [784, 200, 10])
+    conv_layers: List[Dict[str, int]] = field(default_factory=list)
     beta: float = 0.9375
     threshold: float = 1.0
     quantization: bool = False
@@ -42,8 +43,9 @@ class TrainingConfig:
     epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.01
-    optimizer: Optional[str] = None  # None for manual updates, "adam", "sgd"
+    optimizer: Optional[str] = None  # None for manual updates, "adam", "sgd", "nag", "rmsprop"
     weight_decay: float = 0.0
+    freeze_conv: bool = False
 
 
 @dataclass
@@ -60,6 +62,7 @@ class TrainerConfig:
 class DRTPConfig:
     """Direct Random Target Projection configuration."""
 
+    loss: str = "mse"  # "mse", "bce", "ce"
     feedback_distribution: str = "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
     feedback_scale: float = 1.0
     fixed_feedback: bool = True
@@ -313,6 +316,18 @@ def validate_config(config: Config) -> List[str]:
     if config.model.beta <= 0 or config.model.beta >= 1:
         issues.append("model.beta should be in (0, 1)")
 
+    if config.model.architecture == "conv":
+        if not config.model.conv_layers:
+            issues.append("model.conv_layers must be provided for conv architecture")
+        else:
+            required_keys = {"out_channels", "kernel_size"}
+            for idx, layer in enumerate(config.model.conv_layers):
+                missing = required_keys - set(layer.keys())
+                if missing:
+                    issues.append(
+                        f"model.conv_layers[{idx}] missing keys: {sorted(missing)}"
+                    )
+
     # Training validation
     if config.training.epochs <= 0:
         issues.append("training.epochs must be positive")
@@ -322,6 +337,11 @@ def validate_config(config: Config) -> List[str]:
 
     if config.training.learning_rate <= 0:
         issues.append("training.learning_rate must be positive")
+
+    if config.training.optimizer is not None:
+        valid_optimizers = ["adam", "sgd", "nag", "rmsprop"]
+        if str(config.training.optimizer).lower() not in valid_optimizers:
+            issues.append(f"training.optimizer must be one of {valid_optimizers} or null")
 
     # Data validation
     if config.data.timesteps <= 0:
@@ -345,6 +365,11 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 
     # DRTP validation
+    valid_drtp_losses = ["mse", "bce", "ce"]
+    loss_name = str(config.drtp.loss).lower()
+    if loss_name not in valid_drtp_losses:
+        issues.append(f"drtp.loss must be one of {valid_drtp_losses}")
+
     valid_drtp_distributions = ["kaiming_uniform", "uniform", "normal"]
     if config.drtp.feedback_distribution not in valid_drtp_distributions:
         issues.append(

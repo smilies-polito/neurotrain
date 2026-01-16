@@ -10,18 +10,19 @@ class FCNetwork(nn.Module):
     layer_sizes: [in, hidden1, …, hiddenK, out]
     beta: leakiness parameter
     """
-    def __init__(self, layer_sizes, beta, quant=False):
+    def __init__(self, layer_sizes, beta, quant=False, threshold: float = 1.0):
         super().__init__()
         self.input_size     = layer_sizes[0]
         self.hidden_size    = layer_sizes[1:-1]
         self.n_classes      = layer_sizes[-1]
         # I am including the quantization parameters but I don't plan to use them for now
         self.quant          = quant
+        self.threshold      = float(threshold)
 
         layers = []
         for i in range(len(layer_sizes) - 1):
             #threshold_val = fixed_point(1.0, fp_dec=FP_DEC, bitwidth=BW) if self.quant else 1.0
-            threshold_val = 1.0
+            threshold_val = self.threshold
             layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
             layers.append(snn.Leaky(beta=beta, threshold=threshold_val))
         # The network structure is now [Linear, LIF, Linear, LIF, ..., Linear, LIF] and saved in a PyTorch ModuleList
@@ -37,7 +38,7 @@ class FCNetwork(nn.Module):
         print(f"Hidden size: {self.hidden_size}")
         print(f"Output size: {self.n_classes}")
         print(f"Beta: {beta}")
-        print(f"Threshold (quantized): {1.0} ({threshold_val})")
+        print(f"Threshold: {self.threshold}")
 
     def reset_parameters(self):
         """

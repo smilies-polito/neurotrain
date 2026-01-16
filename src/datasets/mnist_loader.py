@@ -7,16 +7,18 @@ from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
-def MNISTLoader(batch_size, T):
+def MNISTLoader(batch_size, T, flatten: bool = True):
     """
     Returns DataLoaders for MNIST, with rate-coded spikes over T timesteps.
     """
-    transform = Compose([
+    transforms = [
         ToTensor(),
         Normalize((0.1307,), (0.3081,)),
-        Rate(T),
-        Lambda(lambda x: torch.flatten(x, start_dim=1))
-    ])
+        Rate(T, flatten=flatten),
+    ]
+    if flatten:
+        transforms.append(Lambda(lambda x: torch.flatten(x, start_dim=1)))
+    transform = Compose(transforms)
     trainloader = DataLoader(
         MNIST(DATA_ROOT.as_posix(), train=True, download=True, transform=transform),
         batch_size=batch_size, num_workers=4, shuffle=True
