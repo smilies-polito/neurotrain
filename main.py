@@ -24,10 +24,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 # Core imports
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
-from networks.fc_network import FCNetwork
+from networks.get_network import get_network
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from utils.checkpoint import CheckpointManager, resume_training
@@ -86,50 +89,26 @@ def trainable(
     device = get_device(config)
     print(f"Using device: {device}")
 
-    # Get data loaders
+    # Get data loaders (pass device for pin_memory when CUDA)
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
         config.data.timesteps,
+        device=device,
     )
 
-    # Create the network (supports fc and recurrent architectures)
-    if config.model.architecture == "recurrent":
-        from networks.recurrent_srnn import RecurrentSRNN
+    # Create the network via get_network (fc, recurrent, local_classifier)
+    network = get_network(
+        algorithm_name=config.trainer.name,
+        model_architecture=config.model.architecture,
+        layer_sizes=config.model.layer_sizes,
+        beta=config.model.beta,
+        quant=config.model.quantization,
+        threshold=config.model.threshold,
+    )
 
-        # Match original e-prop defaults for comparison
-        n_in = config.model.layer_sizes[0]
-        n_rec = (
-            config.model.layer_sizes[1]
-            if len(config.model.layer_sizes) > 2
-            else config.model.layer_sizes[1]
-            if len(config.model.layer_sizes) > 1
-            else 100
-        )
-        n_out = config.model.layer_sizes[-1]
-        network = RecurrentSRNN(
-            n_in=n_in,
-            n_rec=n_rec,
-            n_out=n_out,
-            threshold=config.model.threshold,
-            tau_mem=2.0,
-            tau_out=0.02,
-            bias_out=0.0,
-            gamma=0.3,
-            dt=1e-3,
-        )
-        # Attach for compatibility
-        network.n_classes = n_out
-        network.hidden_size = [n_rec]
-    else:
-        network = FCNetwork(
-            layer_sizes=config.model.layer_sizes,
-            beta=config.model.beta,
-            quant=config.model.quantization,
-        )
-
-    # Optimizer
-    if config.training.optimizer == "adam":
+    # Optimizer (BPTT only; ELL/FELL/BELL use per-layer optimizers in trainer)
+    if config.training.optimizer == "adam" and config.trainer.name == "bptt":
         optimizer = Adam(
             network.parameters(),
             lr=config.training.learning_rate,
@@ -139,8 +118,8 @@ def trainable(
         optimizer = None
 
     # Create the trainer
-    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF/DECOLLE)
-    requires_grad = config.trainer.name == "bptt"
+    # Enable gradients for BPTT and ELL/FELL/BELL; disable for STSF/DECOLLE/OTTT/E-prop
+    requires_grad = config.trainer.name in ("bptt", "ell", "fell", "bell")
     torch.set_grad_enabled(requires_grad)
     trainer_kwargs = {
         "network": network,
@@ -249,8 +228,9 @@ def get_trainer(trainer_name: str):
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
-        # Future trainers will be added here:
-        # "stdp": STDPTrainer,
+        "ell": ELLTrainer,
+        "fell": FELLTrainer,
+        "bell": BELLTrainer,
     }
     if trainer_name not in trainers:
         raise ValueError(

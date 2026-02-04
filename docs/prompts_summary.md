@@ -10,7 +10,8 @@
 |---|-------|------------------|--------|
 | 1 | Reproducibility & Logging | State 0 → State 1 | ✅ Complete |
 | 2 | BPTT Benchmarking Baseline | State 1 → State 2 | ✅ Complete |
-| 3 | Full Benchmark Suite | State 2 → State 3 | 🔲 Next |
+| 3 | Full Benchmark Suite | State 2 → State 3 | 🔲 Pending |
+| 4 | ELL / FELL / BELL Integration | State 2/3 → State 4 | 🔲 Next |
 
 ---
 
@@ -357,9 +358,139 @@ DO NOT:
 
 ---
 
+## Prompt 4: Integrate ELL, FELL, and BELL (Local Classifier Algorithms)
+
+**Purpose:** Integrate the three local-learning algorithms from "Deep Spike Learning with Local Classifiers" (Ma et al., IEEE T-Cyb 2022) into the benchmarking framework, enabling fair comparison with BPTT, STSF, DECOLLE, and OTTT.
+
+**State Transition:** State 2/3 → State 4 (ELL/FELL/BELL Integration)
+
+**Reference Implementation:** `existing_implementations/deep_spike_learning_with_local_classifiers-main/`
+
+### Exact Prompt
+
+```
+Integrate ELL, FELL, and BELL learning algorithms into the SNN training benchmarking framework.
+
+## Context
+
+- **Current project state:** docs/states_summary.md (State 2: BPTT + NeuroBench working)
+- **Reference implementation:** existing_implementations/deep_spike_learning_with_local_classifiers-main/
+- **Pattern to follow:** src/trainers/decolle_trainer.py (local learning, BaseTrainer interface)
+- **Key reference files:**
+  - local_linear_ELL.py, local_linear_FELL.py, local_linear_BELL.py — core learning rules
+  - linearFA.py — Feedback Alignment layer (optional, for --fa mode)
+  - surrogate_gradient.py — ExponentialSurroGrad (Heaviside with surrogate)
+  - main_train.py — training loop, model interface
+  - models/MNISTDNN.py — single-layer DNN with local classifier
+
+**Algorithm summary:**
+- **ELL (Event-based Local Learning):** Per-layer local classifiers, MSE to one-hot; membrane/spike detached between timesteps (no temporal gradients). Most bio-plausible, fully local.
+- **FELL (Full Event-based Local Learning):** Same structure; retain_graph=True, gradients flow through time; per-step backward.
+- **BELL (Backprop Event-based Local Learning):** Same structure; no detach; single backward at end of time window (full BPTT through local losses).
+
+**Data format:** Framework provides data as [T, B, F] (rate-coded spikes). Reference uses [B, F] with same input each timestep for "real" encoding. Adapt first layer to accept data[t] at each step (spike input) to match framework conventions.
+
+## Objective
+
+Add ELL, FELL, and BELL as plug-and-play trainers that conform to BaseTrainer, work with the existing data pipeline, and participate in run_all_benchmarks.py and NeuroBench evaluation.
+
+## Requirements
+
+1. **Shared building blocks**
+   - Port ExponentialSurroGrad from surrogate_gradient.py to src/utils/surrogate_gradient.py (or equivalent).
+   - Port LinearFA from linearFA.py to src/utils/linear_fa.py (device-agnostic, no .cuda() calls).
+   - Create LocalLossBlockLinear (or equivalent) that supports ELL/FELL/BELL variants via a mode flag or subclass.
+
+2. **Network architecture**
+   - Create src/networks/local_classifier_network.py: feedforward SNN with per-layer encoder + decoder_y (local classifier).
+   - Support configurable layer_sizes matching existing FC architecture (e.g. [784, 256, 10]).
+   - First layer receives data[t] at each timestep; hidden layers receive previous layer spikes. Output: spike_sum over time, argmax for prediction.
+   - Implement reset() for membrane/state; implement forward(data, target, target_onehot, time_window) returning (error_percent, loss) or equivalent for training.
+   - For evaluation: forward in eval mode returns spike_sum (no target needed); predict via argmax.
+
+3. **Trainers**
+   - Create src/trainers/ell_trainer.py, fell_trainer.py, bell_trainer.py (or one ell_fell_bell_trainer.py with algorithm="ell"|"fell"|"bell").
+   - Each trainer:
+     - Wraps LocalClassifierNetwork (or builds it from config).
+     - Implements BaseTrainer: train_sample(data, target) -> (loss, pred), reset(), and parameters needed for .to(device).
+   - Input: data [T, B, F], target [B]. Build target_onehot internally.
+   - Call network forward in training mode; extract loss and pred (argmax of spike_sum).
+   - Handle learning rate scheduling if needed (reference uses set_learning_rate on model).
+
+4. **Registration and config**
+   - Register ell, fell, bell in main.py get_trainer().
+   - Add to benchmark_runner.py ALGORITHM_INFO and get_trainer logic.
+   - Add configs: configs/mnist_ell.yaml, configs/mnist_fell.yaml, configs/mnist_bell.yaml (or extend benchmark_comparison.yaml).
+   - Add ell, fell, bell to configs/benchmark_comparison.yaml algorithms list (optional, for full comparison).
+
+5. **Compatibility**
+   - Use framework’s Config for layer_sizes, timesteps, lr, beta/threshold, etc.
+   - Support existing datasets (MNIST, FashionMNIST, CIFAR10) via get_loader; data remains [T, B, F].
+   - Ensure NeuroBench evaluation works: LocalClassifierNetwork must support the temporal forward pass expected by NeuroBenchWrapper (reset, then for t in T: out = network(x[t])).
+
+## Deliverables
+
+- [ ] src/utils/surrogate_gradient.py (~20 lines) — ExponentialSurroGrad
+- [ ] src/utils/linear_fa.py (~70 lines) — LinearFA, device-agnostic
+- [ ] src/networks/local_classifier_network.py (~200–250 lines) — LocalClassifierNetwork with ELL/FELL/BELL modes
+- [ ] src/trainers/ell_trainer.py (~80 lines) — ELLTrainer (or unified trainer with algorithm param)
+- [ ] src/trainers/fell_trainer.py (~80 lines) — FELLTrainer
+- [ ] src/trainers/bell_trainer.py (~80 lines) — BELLTrainer
+- [ ] configs/mnist_ell.yaml, configs/mnist_fell.yaml, configs/mnist_bell.yaml
+- [ ] Modify: main.py — register trainers
+- [ ] Modify: src/benchmark_runner.py — ALGORITHM_INFO, get_trainer
+- [ ] Modify: src/utils/config.py — add ell, fell, bell to valid trainer names if needed
+- [ ] tests/test_trainers.py — add tests for ELL/FELL/BELL (smoke: train a few batches, check loss/pred shape)
+
+## Constraints
+
+- Reuse framework patterns: BaseTrainer, get_loader, Config. Do NOT replicate main_train.py’s custom loop.
+- Use type hints and docstrings (Google style). Follow Black (88), flake8.
+- Do NOT add new heavy dependencies; use PyTorch only for LinearFA and surrogate gradient.
+- Keep learning logic in trainers/networks; do not pollute LearningAlgorithms.py.
+- For NeuroBench: ensure network has reset() and forward(x) returning spikes (or adapt NeuroBenchWrapper if needed).
+
+## Validation
+
+- ELL trainer achieves >90% on MNIST after 50 epochs (same config as other algorithms).
+- FELL and BELL achieve comparable or better accuracy.
+- `python run_all_benchmarks.py --epochs 10` runs without errors when ell/fell/bell are in algorithms.
+- NeuroBench metrics compute for ell/fell/bell (no device/shape errors).
+- All new tests pass: pytest tests/test_trainers.py -k ell.
+
+## Out of Scope
+
+- Convolutional local classifier networks (local_conv_*); FC/DNN only for this prompt.
+- Feedback alignment (--fa) can be optional; prioritize default (no FA) first.
+- Changes to DECOLLE, STSF, BPTT, OTTT, or e-prop implementations.
+```
+
+### Expected Generated Files
+
+| File | Purpose |
+|------|---------|
+| `src/utils/surrogate_gradient.py` | Exponential surrogate gradient for Heaviside |
+| `src/utils/linear_fa.py` | Feedback Alignment linear layer |
+| `src/networks/local_classifier_network.py` | SNN with per-layer local classifiers |
+| `src/trainers/ell_trainer.py` | ELL trainer |
+| `src/trainers/fell_trainer.py` | FELL trainer |
+| `src/trainers/bell_trainer.py` | BELL trainer |
+| `configs/mnist_ell.yaml` | ELL config |
+| `configs/mnist_fell.yaml` | FELL config |
+| `configs/mnist_bell.yaml` | BELL config |
+
+### Key Integration Notes
+
+1. **Data format:** Reference first layer uses same x each timestep; framework uses `data[t]`. Use `data[t]` for first layer input at step t to stay consistent with rate coding.
+2. **Loss:** Local MSE to one-hot targets; sum over timesteps. Return scalar loss from `train_sample`.
+3. **Prediction:** Spike sum over time, argmax. Same as BPTT/STSF for fairness.
+4. **NeuroBench:** LocalClassifierNetwork must expose `reset()` and a forward that can be called per-timestep for wrapper compatibility.
+
+---
+
 ## Prompt Template for Future Phases
 
-### Prompt 4: Additional Learning Algorithms (Future)
+### Prompt 5: Additional Learning Algorithms (Future)
 
 ```
 Add [ALGORITHM_NAME] learning algorithm trainer.
@@ -386,7 +517,7 @@ ALGORITHM DESCRIPTION:
 [Insert algorithm description and reference paper]
 ```
 
-### Prompt 5: Convolutional Networks (Future)
+### Prompt 6: Convolutional Networks (Future)
 
 ```
 Add convolutional SNN architecture for image benchmarks.
@@ -429,4 +560,11 @@ git checkout v0.2.0-benchmarking
 # Apply Prompt 3 with AI assistant
 # Verify deliverables
 git tag -a v0.3.0-complete -m "Full benchmark suite with regression support"
+
+# Example: Reproduce ELL/FELL/BELL Integration (Prompt 4)
+git checkout v0.2.0-benchmarking  # or v0.3.0-complete
+# Apply Prompt 4 with AI assistant (full context: docs/, existing_implementations/)
+# Verify: pytest tests/test_trainers.py -k ell
+# Verify: python run_all_benchmarks.py --epochs 10
+git tag -a v0.4.0-ell-fell-bell -m "ELL, FELL, BELL local classifier algorithms"
 ```

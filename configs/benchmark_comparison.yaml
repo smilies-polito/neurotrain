@@ -7,6 +7,9 @@ algorithms:
     - stsf # Spiking Time Sparse Feedback (local)
     - ottt # Online Training Through Time (local, eligibility traces)
     - decolle # Deep Continuous Local Learning (local)
+    - ell # Event-based Local Learning (local)
+    - fell # Full Event-based Local Learning (local)
+    - bell # Backprop Event-based Local Learning (local)
 
 # Dataset configuration
 dataset: "MNIST"

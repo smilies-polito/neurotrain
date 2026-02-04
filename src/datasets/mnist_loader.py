@@ -7,9 +7,14 @@ from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
-def MNISTLoader(batch_size, T):
+def MNISTLoader(batch_size, T, pin_memory: bool = False):
     """
     Returns DataLoaders for MNIST, with rate-coded spikes over T timesteps.
+
+    Args:
+        batch_size: Batch size.
+        T: Number of timesteps for rate coding.
+        pin_memory: If True, use pinned memory for faster CPU->GPU transfer (CUDA).
     """
     transform = Compose([
         ToTensor(),
@@ -19,10 +24,16 @@ def MNISTLoader(batch_size, T):
     ])
     trainloader = DataLoader(
         MNIST(DATA_ROOT.as_posix(), train=True, download=True, transform=transform),
-        batch_size=batch_size, num_workers=4, shuffle=True
+        batch_size=batch_size,
+        num_workers=4,
+        shuffle=True,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         MNIST(DATA_ROOT.as_posix(), train=False, download=True, transform=transform),
-        batch_size=batch_size, num_workers=4, shuffle=False
+        batch_size=batch_size,
+        num_workers=4,
+        shuffle=False,
+        pin_memory=pin_memory,
     )
     return trainloader, testloader

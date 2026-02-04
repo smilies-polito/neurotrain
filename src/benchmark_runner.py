@@ -34,7 +34,10 @@ from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.decolle_trainer import DECOLLETrainer
-from networks.fc_network import FCNetwork
+from trainers.ell_trainer import ELLTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
+from networks.get_network import get_network
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
 
@@ -70,6 +73,24 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (eprop_trainer.py) - Bellec et al. 2020",
+    },
+    "ell": {
+        "name": "Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (ell_trainer.py) - Ma et al. 2022",
+    },
+    "fell": {
+        "name": "Full Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": True,
+        "source": "custom (fell_trainer.py) - Ma et al. 2022",
+    },
+    "bell": {
+        "name": "Backprop Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": True,
+        "source": "custom (bell_trainer.py) - Ma et al. 2022",
     },
 }
 
@@ -134,10 +155,11 @@ def train_one_epoch(
     total_correct = 0
     total_samples = 0
 
+    non_blocking = device.type == "cuda"
     for data, target in train_loader:
         # Data shape: [batch, features] -> transpose to [timesteps, batch, features]
-        data = data.transpose(0, 1).to(device)
-        target = target.to(device)
+        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+        target = target.to(device, non_blocking=non_blocking)
         batch_size = data.size(1)
 
         trainer.reset()
@@ -174,9 +196,10 @@ def evaluate(
     correct = 0
     total = 0
 
+    non_blocking = device.type == "cuda"
     for data, target in test_loader:
-        data = data.transpose(0, 1).to(device)
-        target = target.to(device)
+        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+        target = target.to(device, non_blocking=non_blocking)
 
         network.reset()
         spk_sum = None
@@ -242,29 +265,19 @@ def benchmark_algorithm(
     )
     use_cuda = device.type == "cuda"
 
-    # Get data loaders
-    train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
+    # Get data loaders (pass device for pin_memory when CUDA)
+    train_loader, test_loader = get_loader(dataset, batch_size, timesteps, device=device)
 
-    # Create network
-    if algorithm_name == "eprop":
-        from networks.recurrent_srnn import RecurrentSRNN
-
-        if len(layer_sizes) < 3:
-            raise ValueError(
-                "E-prop requires a recurrent architecture encoded as "
-                "`layer_sizes=[n_in, n_rec, n_out]`."
-            )
-        network = RecurrentSRNN(
-            n_in=layer_sizes[0],
-            n_rec=layer_sizes[1],
-            n_out=layer_sizes[-1],
-            threshold=1.0,
-            tau_mem=2.0,
-            tau_out=0.02,
-            dt=1e-3,
-        )
-    else:
-        network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
+    # Create network via get_network (fc, recurrent, local_classifier)
+    model_arch = "recurrent" if algorithm_name == "eprop" else (
+        "local_classifier" if algorithm_name in ("ell", "fell", "bell") else "fc"
+    )
+    network = get_network(
+        algorithm_name=algorithm_name,
+        model_architecture=model_arch,
+        layer_sizes=layer_sizes,
+        beta=beta,
+    )
 
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
@@ -313,6 +326,14 @@ def benchmark_algorithm(
             # Sigmoid surrogate - always has gradient even for sub-threshold membrane
             surrogate="sigmoid",
             surrogate_scale=2.0,
+        )
+    elif algorithm_name in ("ell", "fell", "bell"):
+        # ELL/FELL/BELL: gradient-based local learning
+        torch.set_grad_enabled(True)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
         )
     else:
         # Local learning algorithms (STSF)
@@ -442,6 +463,9 @@ def run_comparison(
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
+        "ell": ELLTrainer,
+        "fell": FELLTrainer,
+        "bell": BELLTrainer,
     }
 
     results = {}

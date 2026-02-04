@@ -2,9 +2,12 @@ import snntorch as snn
 import torch
 import torch.nn as nn
 
+from networks.base_snn import BaseSNN
+
+
 #from ..utils.quantizer import fixed_point
 
-class FCNetwork(nn.Module):
+class FCNetwork(BaseSNN):
     """
     Feedforward network with Leaky Integrate-and-Fire (LIF) neurons.
     layer_sizes: [in, hidden1, …, hiddenK, out]

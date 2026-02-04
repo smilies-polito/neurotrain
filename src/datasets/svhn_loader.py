@@ -6,7 +6,7 @@ from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
-def SVHNLoader(batch_size, T):
+def SVHNLoader(batch_size, T, pin_memory: bool = False):
     """
     Returns DataLoaders for SVHN (10 classes, 32×32 RGB).
     A digit-classification task harder than MNIST but simpler than CIFAR-10.
@@ -19,10 +19,16 @@ def SVHNLoader(batch_size, T):
     ])
     trainloader = DataLoader(
         SVHN(DATA_ROOT.as_posix(), split="train", download=True, transform=transform),
-        batch_size=batch_size, shuffle=True, num_workers=4
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         SVHN(DATA_ROOT.as_posix(), split="test", download=True, transform=transform),
-        batch_size=batch_size, shuffle=False, num_workers=4
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=pin_memory,
     )
     return trainloader, testloader

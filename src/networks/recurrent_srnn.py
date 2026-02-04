@@ -4,8 +4,10 @@ import snntorch as snn
 import torch
 import torch.nn as nn
 
+from networks.base_snn import BaseSNN
 
-class RecurrentSRNN(nn.Module):
+
+class RecurrentSRNN(BaseSNN):
     """
     Single-layer recurrent spiking network for e-prop training.
 

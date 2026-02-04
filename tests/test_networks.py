@@ -8,7 +8,9 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
+from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 
 
@@ -198,3 +200,59 @@ class TestRecurrentSRNN:
         x = torch.randn(1, 8)
         network(x)
         network.reset()
+
+
+class TestLocalClassifierNetwork:
+    """Test LocalClassifierNetwork class."""
+
+    def test_network_creation(self):
+        network = LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+        assert network.n_classes == 10
+        assert len(network.blocks) == 2
+
+    def test_network_forward_shape(self):
+        network = LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+        x = torch.randn(32, 784)
+        spk_rec, mem_rec = network(x)
+        assert len(spk_rec) == 2
+        assert spk_rec[-1].shape == (32, 10)
+        assert mem_rec[-1].shape == (32, 10)
+
+    def test_network_reset(self):
+        network = LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+        x = torch.randn(1, 784)
+        network(x)
+        network.reset()
+
+    def test_network_forward_step_all(self):
+        network = LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+        x = torch.randn(32, 784)
+        outputs = network.forward_step_all(x)
+        assert len(outputs) == 2
+        spike_out, y_hat_spike = outputs[0]
+        assert spike_out.shape == (32, 100)
+        assert y_hat_spike.shape == (32, 10)
+
+    def test_network_inherits_base_snn(self):
+        network = LocalClassifierNetwork(
+            layer_sizes=[784, 50, 10],
+            beta=0.9,
+            mode="ell",
+        )
+        assert isinstance(network, BaseSNN)
