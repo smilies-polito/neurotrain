@@ -38,7 +38,7 @@ class RecurrentSRNN(BaseSNN):
         self.n_in = n_in
         self.n_rec = n_rec
         self.n_out = n_out
-        self.n_classes = n_out
+        self._n_classes = n_out
         self.hidden_size = [n_rec]
 
         self.threshold = float(threshold)
@@ -73,6 +73,10 @@ class RecurrentSRNN(BaseSNN):
 
         self.reset_parameters(w_init_gain)
         self.reset(device=device if device is not None else torch.device("cpu"))
+
+    @property
+    def n_classes(self) -> int:
+        return self._n_classes
 
     @property
     def w_in(self) -> torch.nn.Parameter:

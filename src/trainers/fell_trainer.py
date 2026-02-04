@@ -65,7 +65,7 @@ class FELLTrainer(BaseTrainer):
                 loss_sup.backward(retain_graph=True)
                 self.optimizers[layer_idx].step()
 
-            spk_sum = spk_sum + layer_outputs[-1][1]
+            spk_sum = spk_sum + layer_outputs[-1][1].detach()
 
         loss = torch.tensor(
             total_loss / (num_timesteps * len(self.network.blocks)), device=device

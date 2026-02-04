@@ -64,7 +64,7 @@ class BELLTrainer(BaseTrainer):
                 else:
                     accumulated_loss = accumulated_loss + loss_sup
 
-            spk_sum = spk_sum + layer_outputs[-1][1]
+            spk_sum = spk_sum + layer_outputs[-1][1].detach()
 
         for layer_idx in range(len(self.network.blocks)):
             self.optimizers[layer_idx].zero_grad()

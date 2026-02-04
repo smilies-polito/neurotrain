@@ -57,15 +57,20 @@ class ELLTrainer(BaseTrainer):
         for t in range(num_timesteps):
             layer_outputs = self.network.forward_step_all(data[t])
 
-            for layer_idx, (spike_out, y_hat_spike) in enumerate(layer_outputs):
-                loss_sup = F.mse_loss(y_hat_spike, target_onehot.detach())
+            # Backward in reverse order (last layer first) so graph is not freed
+            losses = [
+                F.mse_loss(y_hat_spike, target_onehot.detach())
+                for _, y_hat_spike in layer_outputs
+            ]
+            for loss_sup in losses:
                 total_loss = total_loss + loss_sup.item()
 
+            for layer_idx in reversed(range(len(layer_outputs))):
                 self.optimizers[layer_idx].zero_grad()
-                loss_sup.backward(retain_graph=False)
+                losses[layer_idx].backward(retain_graph=(layer_idx > 0))
                 self.optimizers[layer_idx].step()
 
-            spk_sum = spk_sum + layer_outputs[-1][1]
+            spk_sum = spk_sum + layer_outputs[-1][1].detach()
 
         loss = torch.tensor(
             total_loss / (num_timesteps * len(self.network.blocks)), device=device

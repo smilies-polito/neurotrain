@@ -87,14 +87,19 @@ class LocalClassifierBlock(nn.Module):
                 + h
                 - self._spike.detach() * self.thresh * self.decay
             )
+            self._spike = ExponentialSurroGrad.apply(self._mem, self.thresh)
+            spike_for_decoder = self._spike
         else:
-            self._mem = (
-                self._mem * self.decay + h - self._spike * self.thresh * self.decay
-            )
-        self._spike = ExponentialSurroGrad.apply(self._mem, self.thresh)
+            # FELL/BELL: use detached recurrence state to avoid in-place error
+            prev_mem = self._mem.detach()
+            prev_spike = self._spike.detach()
+            mem_new = prev_mem * self.decay + h - prev_spike * self.thresh * self.decay
+            self._mem = mem_new.detach()
+            self._spike = ExponentialSurroGrad.apply(mem_new, self.thresh).detach()
+            spike_for_decoder = ExponentialSurroGrad.apply(mem_new, self.thresh)
 
         # Decoder (local classifier) with LIF-like readout
-        y_dec = self.decoder_y(self._spike)
+        y_dec = self.decoder_y(spike_for_decoder)
         if self.mode == "ell":
             self._y_hat_mem = (
                 self._y_hat_mem.detach() * self.decay
@@ -102,11 +107,21 @@ class LocalClassifierBlock(nn.Module):
                 - self._y_hat_spike.detach() * self.thresh * self.decay
             )
         else:
-            self._y_hat_mem = (
-                self._y_hat_mem * self.decay
+            # FELL/BELL: use detached recurrence state to avoid in-place modification
+            # error. Output (y_hat_spike) keeps full graph for loss.
+            prev_mem = self._y_hat_mem.detach()
+            prev_spike = self._y_hat_spike.detach()
+            y_hat_mem_new = (
+                prev_mem * self.decay
                 + y_dec
-                - self._y_hat_spike * self.thresh * self.decay
+                - prev_spike * self.thresh * self.decay
             )
-        self._y_hat_spike = ExponentialSurroGrad.apply(self._y_hat_mem, self.thresh)
+            self._y_hat_mem = y_hat_mem_new.detach()
+            self._y_hat_spike = ExponentialSurroGrad.apply(
+                y_hat_mem_new, self.thresh
+            ).detach()
+            y_hat_spike_out = ExponentialSurroGrad.apply(y_hat_mem_new, self.thresh)
+            return spike_for_decoder, y_hat_spike_out
 
-        return self._spike, self._y_hat_spike
+        self._y_hat_spike = ExponentialSurroGrad.apply(self._y_hat_mem, self.thresh)
+        return spike_for_decoder, self._y_hat_spike
