@@ -19,6 +19,7 @@ from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.stllr_trainer import STLLRTrainer
 
 
 class TestBaseTrainer:
@@ -516,3 +517,47 @@ class TestBELLTrainer:
         loss, pred = trainer.train_sample(data, target)
         assert loss.dim() == 0
         assert pred.shape == (32,)
+
+
+class TestSTLLRTrainer:
+    """Test STLLRTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        from networks.stllr_network import STLLRNetwork
+
+        return STLLRNetwork(
+            layer_sizes=[784, 100, 10],
+            threshold=0.6,
+            leak=2.0,
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return STLLRTrainer(
+            network=network,
+            lr=0.001,
+            batch_size=32,
+            delay_ls=5,
+        )
+
+    def test_stllr_trainer_smoke(self, trainer):
+        """Smoke test: instantiate and run train_sample."""
+        data = torch.randn(10, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+        assert not torch.isnan(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 9
+
+    def test_stllr_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_stllr_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 8, 784)
+        target = torch.randint(0, 10, (8,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
