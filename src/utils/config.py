@@ -28,7 +28,7 @@ class ExperimentConfig:
 class ModelConfig:
     """Neural network architecture configuration."""
 
-    architecture: str = "fc"  # "fc", "conv", "recurrent"
+    architecture: str = "fc"  # "fc", "local_classifier", "recurrent"
     layer_sizes: List[int] = field(default_factory=lambda: [784, 200, 10])
     beta: float = 0.9375
     threshold: float = 1.0
@@ -328,8 +328,15 @@ def validate_config(config: Config) -> List[str]:
     if config.data.dataset not in valid_datasets:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
+    # Model architecture validation
+    valid_architectures = ["fc", "local_classifier", "recurrent"]
+    if config.model.architecture not in valid_architectures:
+        issues.append(
+            f"model.architecture must be one of {valid_architectures}"
+        )
+
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "stdp"]
+    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell", "stdp"]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 

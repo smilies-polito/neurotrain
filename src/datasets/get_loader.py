@@ -44,32 +44,50 @@ NEUROBENCH_REGRESSION = ["PrimateReaching", "MackeyGlass"]
 ALL_DATASETS = STANDARD_DATASETS + NEUROBENCH_CLASSIFICATION + NEUROBENCH_REGRESSION
 
 
-def get_loader(name, batch_size, T):
+def get_loader(name, batch_size, T, device=None):
+    """
+    Get train and test loaders for a dataset.
+
+    Args:
+        name: Dataset name.
+        batch_size: Batch size.
+        T: Number of timesteps for rate coding.
+        device: Torch device (e.g. "cuda", "cpu"). If CUDA, uses pin_memory=True
+            for faster CPU->GPU transfer. Default None (pin_memory=False).
+    """
+    pin_memory = (
+        device is not None
+        and hasattr(device, "type")
+        and device.type == "cuda"
+    )
+    if isinstance(device, str):
+        pin_memory = device == "cuda"
+
     print(name)
     # Standard image datasets
     if name == "MNIST":
-        return MNISTLoader(batch_size, T)
+        return MNISTLoader(batch_size, T, pin_memory=pin_memory)
     elif name == "CIFAR10":
-        return CIFAR10Loader(batch_size, T)
+        return CIFAR10Loader(batch_size, T, pin_memory=pin_memory)
     elif name == "FashionMNIST":
-        return FashionMNISTLoader(batch_size, T)
+        return FashionMNISTLoader(batch_size, T, pin_memory=pin_memory)
     elif name == "SVHN":
-        return SVHNLoader(batch_size, T)
+        return SVHNLoader(batch_size, T, pin_memory=pin_memory)
     elif name == "DVSGesture":
-        return DVSGestureLoader(batch_size, T)
+        return DVSGestureLoader(batch_size, T, pin_memory=pin_memory)
     # Event-based neuromorphic datasets
     elif name == "NMNIST":
-        return NMNISTLoader(batch_size, T)
+        return NMNISTLoader(batch_size, T, pin_memory=pin_memory)
     # NeuroBench official benchmarks (classification)
     elif name == "SpeechCommands":
-        return SpeechCommandsLoader(batch_size, T)
+        return SpeechCommandsLoader(batch_size, T, pin_memory=pin_memory)
     elif name == "WISDM":
-        return WISDMLoader(batch_size, T)
+        return WISDMLoader(batch_size, T, pin_memory=pin_memory)
     # NeuroBench official benchmarks (regression)
     elif name == "PrimateReaching":
-        return PrimateReachingLoader(batch_size, T)
+        return PrimateReachingLoader(batch_size, T, pin_memory=pin_memory)
     elif name == "MackeyGlass":
-        return MackeyGlassLoader(batch_size, T)
+        return MackeyGlassLoader(batch_size, T, pin_memory=pin_memory)
     else:
         raise ValueError(
             f"Unknown dataset '{name}'. "

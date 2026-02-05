@@ -45,8 +45,14 @@ class LearningAlgorithms:
         total_correct = 0
 
         for batch_idx, (data, target) in enumerate(train_loader):
-            # Move data to the device
-            data, target = data.transpose(0, 1).to(device), target.to(device)
+            # Move data to the device (non_blocking for faster CUDA transfer)
+            non_blocking = (
+                device == "cuda"
+                if isinstance(device, str)
+                else getattr(device, "type", None) == "cuda"
+            )
+            data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+            target = target.to(device, non_blocking=non_blocking)
             batch_size = data.size(1)
 
             # Reset trainer state and perform a training step
@@ -98,8 +104,14 @@ class LearningAlgorithms:
         total_correct = 0
 
         for batch_idx, (data, target) in enumerate(test_loader):
-            # Move data to the device
-            data, target = data.transpose(0, 1).to(device), target.to(device)
+            # Move data to the device (non_blocking for faster CUDA transfer)
+            non_blocking = (
+                device == "cuda"
+                if isinstance(device, str)
+                else getattr(device, "type", None) == "cuda"
+            )
+            data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+            target = target.to(device, non_blocking=non_blocking)
             batch_size = data.size(1)
 
             # Reset network state and perform a forward pass

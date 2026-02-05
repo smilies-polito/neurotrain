@@ -9,11 +9,15 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
+from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
+from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.fell_trainer import FELLTrainer
 from trainers.stsf_trainer import STSFTrainer
 
 
@@ -421,3 +425,94 @@ class TestDECOLLETrainer:
         before = network.layers[0].weight.clone()
         trainer.train_sample(data, target)
         assert not torch.allclose(before, network.layers[0].weight)
+
+
+class TestELLTrainer:
+    """Test ELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return ELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_creation(self, trainer):
+        assert trainer.lr == 0.001
+        assert len(trainer.optimizers) == 2  # 2 blocks
+
+    def test_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+        assert not torch.isnan(loss)
+
+    def test_trainer_predictions_valid(self, trainer):
+        data = torch.randn(5, 16, 784)
+        target = torch.randint(0, 10, (16,))
+        loss, pred = trainer.train_sample(data, target)
+        assert pred.min() >= 0
+        assert pred.max() <= 9
+
+    def test_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 4, 784)
+        target = torch.randint(0, 10, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+
+
+class TestFELLTrainer:
+    """Test FELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="fell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return FELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+
+
+class TestBELLTrainer:
+    """Test BELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="bell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return BELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)

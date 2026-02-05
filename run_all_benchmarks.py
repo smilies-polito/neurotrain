@@ -21,6 +21,9 @@ from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.ell_trainer import ELLTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -114,6 +117,9 @@ ALGORITHMS = {
     "eprop": EpropTrainer,
     "decolle": DECOLLETrainer,
     "ottt": OTTTTrainer,
+    "ell": ELLTrainer,
+    "fell": FELLTrainer,
+    "bell": BELLTrainer,
 }
 
 def _parse_csv_list(value: str):

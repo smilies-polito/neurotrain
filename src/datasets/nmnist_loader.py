@@ -24,7 +24,7 @@ except ImportError:
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def NMNISTLoader(batch_size, T):
+def NMNISTLoader(batch_size, T, pin_memory: bool = False):
     """
     Returns DataLoaders for N-MNIST (Neuromorphic MNIST) dataset.
     
@@ -107,6 +107,7 @@ def NMNISTLoader(batch_size, T):
         shuffle=True,
         num_workers=4,
         collate_fn=collate_fn,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         test_ds,
@@ -114,6 +115,7 @@ def NMNISTLoader(batch_size, T):
         shuffle=False,
         num_workers=4,
         collate_fn=collate_fn,
+        pin_memory=pin_memory,
     )
     
     return trainloader, testloader
