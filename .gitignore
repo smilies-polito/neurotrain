@@ -104,5 +104,7 @@ Thumbs.db
 local_config.yaml
 .env.local
 
-# Eprop implementation Frankler
+# Repo for algorithm
 eprop/
+ETLP/
+DirectRandomTargetProjection/
