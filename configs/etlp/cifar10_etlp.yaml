@@ -1,0 +1,62 @@
+# CIFAR10 ETLP Configuration
+# Event-based Three-factor Local Plasticity (ETLP) training on CIFAR10
+
+experiment:
+    name: "ETLP_CIFAR10"
+    seed: 42
+    deterministic: true
+    log_dir: "./experiments"
+
+model:
+    architecture: "etlp"
+    layer_sizes: [3072, 500, 10] # 32x32x3 = 3072 input features
+    beta: 0.9375
+    threshold: 1.0
+    quantization: false
+
+training:
+    epochs: 150
+    batch_size: 256
+    learning_rate: 0.0005
+    optimizer: "adam"
+    weight_decay: 0.0
+    freeze_conv: false
+
+trainer:
+    name: "etlp"
+    update_last: false
+    update_every: 1
+    seq_batch: 1
+
+etlp:
+    n_rec: 500
+    dt: 1.0
+    tau_v: 80.0
+    tau_a: 10.0
+    tau_o: 80.0
+    theta: 5.0
+    thr: 1.0
+    n_ref: 5
+    recurrent: true
+    train_rec: true
+    spike_scale: 0.3
+    voltage_reg: 0.0
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 100.0
+
+data:
+    dataset: "CIFAR10"
+    timesteps: 10
+    data_dir: "./src/Data"
+    num_workers: 4
+
+hardware:
+    device: "auto"
+    mixed_precision: false
+
+checkpoint:
+    save_every: 0
+    save_best: true
+    save_latest: true
+    max_keep: 2
