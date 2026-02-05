@@ -626,7 +626,7 @@ Add S-TLLR as a plug-and-play trainer with an FC network built from LinearSTLLR 
 ## Prompt Template for Future Phases
 
 ### Prompt 6: Additional Learning Algorithms (Future)
-
+TLLR impelem
 ```
 Add [ALGORITHM_NAME] learning algorithm trainer.
 
