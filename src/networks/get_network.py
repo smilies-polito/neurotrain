@@ -20,6 +20,7 @@ _ALGORITHM_MODEL_OVERRIDE = {
     "ell": "local_classifier",
     "fell": "local_classifier",
     "bell": "local_classifier",
+    "stllr": "stllr",
 }
 
 
@@ -70,6 +71,21 @@ def get_network(
             dt=1e-3,
         )
 
+    if effective_arch == "stllr":
+        if algorithm_name != "stllr":
+            raise ValueError(
+                f"STLLRNetwork is only compatible with stllr, got {algorithm_name}"
+            )
+        from networks.stllr_network import STLLRNetwork
+
+        return STLLRNetwork(
+            layer_sizes=layer_sizes,
+            threshold=kwargs.get("threshold", 0.6),
+            leak=kwargs.get("leak", 2.0),
+            factors=kwargs.get("factors_stdp"),
+            **kwargs,
+        )
+
     if effective_arch == "local_classifier":
         if algorithm_name not in ("ell", "fell", "bell", "bptt", "stsf", "decolle", "ottt"):
             raise ValueError(
@@ -97,7 +113,7 @@ def get_network(
     if effective_arch != "fc":
         raise ValueError(
             f"Unknown model architecture '{effective_arch}'. "
-            "Use 'fc', 'local_classifier', or 'recurrent'."
+            "Use 'fc', 'local_classifier', 'recurrent', or 'stllr'."
         )
     return FCNetwork(
         layer_sizes=layer_sizes,

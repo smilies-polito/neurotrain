@@ -12,6 +12,7 @@ from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
+from networks.stllr_network import STLLRNetwork
 
 
 class TestFCNetwork:
@@ -256,3 +257,29 @@ class TestLocalClassifierNetwork:
             mode="ell",
         )
         assert isinstance(network, BaseSNN)
+
+
+class TestSTLLRNetwork:
+    """Test STLLRNetwork class."""
+
+    def test_stllr_network_forward(self):
+        """Test forward returns (spk_rec, mem_rec) with correct shapes."""
+        network = STLLRNetwork(
+            layer_sizes=[32, 16, 4],
+            threshold=0.6,
+            leak=2.0,
+        )
+        x = torch.randn(8, 32)
+        spk_rec, mem_rec = network(x)
+        assert len(spk_rec) == 2
+        assert len(mem_rec) == 2
+        assert spk_rec[-1].shape == (8, 4)
+        assert mem_rec[-1].shape == (8, 4)
+        assert spk_rec[0].shape == (8, 16)
+
+    def test_stllr_network_reset(self):
+        """Test reset clears state."""
+        network = STLLRNetwork(layer_sizes=[32, 16, 4])
+        x = torch.randn(1, 32)
+        network(x)
+        network.reset()

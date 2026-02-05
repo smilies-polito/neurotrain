@@ -11,7 +11,8 @@
 | 1 | Reproducibility & Logging | State 0 → State 1 | ✅ Complete |
 | 2 | BPTT Benchmarking Baseline | State 1 → State 2 | ✅ Complete |
 | 3 | Full Benchmark Suite | State 2 → State 3 | 🔲 Pending |
-| 4 | ELL / FELL / BELL Integration | State 2/3 → State 4 | 🔲 Next |
+| 4 | ELL / FELL / BELL Integration | State 2/3 → State 4 | 🔲 Pending |
+| 5 | S-TLLR Integration | State 2/4 → State 5 | 🔲 Next |
 
 ---
 
@@ -488,9 +489,143 @@ Add ELL, FELL, and BELL as plug-and-play trainers that conform to BaseTrainer, w
 
 ---
 
+## Prompt 5: Integrate S-TLLR (STDP-inspired Temporal Local Learning Rule)
+
+**Purpose:** Integrate S-TLLR (Apolinario & Roy, TMLR 2025) into the benchmarking framework, enabling uniform comparison with BPTT, STSF, DECOLLE, OTTT, and ELL/FELL/BELL.
+
+**State Transition:** State 2/4 → State 5 (S-TLLR Integration)
+
+**Reference Implementation:** `existing_implementations/S-TLLR-main/`
+
+### Exact Prompt
+
+```
+Integrate S-TLLR (STDP-inspired Temporal Local Learning Rule) into the SNN training benchmarking framework.
+
+## Context
+
+- **Current project state:** docs/states_summary.md (State 2/4: BPTT, STSF, DECOLLE, OTTT, ELL/FELL/BELL working)
+- **Reference implementation:** existing_implementations/S-TLLR-main/
+- **Pattern to follow:** src/trainers/decolle_trainer.py (local learning, BaseTrainer interface), src/networks/fc_network.py (forward/reset, BaseSNN)
+- **Key reference files:**
+  - models/layers/STLLR_layers.py — LinearSTLLR, STLLRLinearGrad (LIF + eligibility traces)
+  - utils/train.py — stllr training mode: accumulate pred, backward only on last delay_ls timesteps
+  - main.py — factors_stdp, delay_ls, feedback_mode, activation
+
+**Algorithm summary (S-TLLR):**
+- Three-factor temporal local learning rule inspired by STDP
+- LIF neurons with eligibility traces: trace_in (pre-synaptic), trace_out (post-synaptic via Psi)
+- Weight updates: grad_weight = α_post * (grad * psi) @ trace_in + α_pre * (grad * trace_out) @ input
+- Learning signal propagates via backward; memory O(n) independent of timesteps
+- delay_ls: learning signal available only for last T_l timesteps (reduces compute)
+- factors_stdp: [λ_post, λ_pre, α_post, α_pre] — trace decay and update scaling
+
+**Data format:** Framework provides data as [T, B, F] (rate-coded). S-TLLR reference uses event-based [T, B, C, H, W]. For FC: use flattened data[t] per timestep, matching framework conventions.
+
+## Objective
+
+Add S-TLLR as a plug-and-play trainer with an FC network built from LinearSTLLR layers, conforming to BaseTrainer, working with the existing data pipeline, and participating in run_all_benchmarks.py and NeuroBench evaluation.
+
+## Requirements
+
+1. **Port STLLR layers**
+   - Port LinearSTLLR and STLLRLinearGrad from STLLR_layers.py to src/networks/stllr_layers.py (or src/utils/stllr_layers.py)
+   - Keep get_weight() (layer normalization), trace_in/trace_out, reset_state(), LIF + Psi (secondary activation: 1/(100*|u_thr|+1)^2)
+   - Make device-agnostic (no .cuda() calls)
+   - Support factors [λ_post, λ_pre, α_post, α_pre] as configurable parameter
+   - Support threshold, leak (sigmoid for membrane decay)
+
+2. **Network architecture**
+   - Create src/networks/stllr_network.py: feedforward SNN built from LinearSTLLR layers
+   - Configurable layer_sizes (e.g. [784, 256, 10])
+   - Inherit BaseSNN: forward(x) -> (spk_rec, mem_rec), reset(), n_classes
+   - Single timestep forward: x [B, F] -> output spikes [B, n_classes] at last layer
+   - reset() calls reset_state() on all LinearSTLLR layers
+
+3. **Trainer**
+   - Create src/trainers/stllr_trainer.py
+   - Implements BaseTrainer: train_sample(data, target) -> (loss, pred), reset(), to(device)
+   - Input: data [T, B, F], target [B]
+   - Training loop (faithful to reference stllr mode):
+     - For t in 0..T-1: out = network(data[t]); pred += out.detach()
+     - For last delay_ls timesteps: loss = CE(out, target); loss.backward()
+     - optimizer.step() once per batch
+   - Use Adam optimizer (reference default)
+   - Config: delay_ls (default 5), factors_stdp (default [0.2, 0.75, -1, 1]), threshold, leak
+
+4. **Registration and config**
+   - Add stllr to get_trainer() in main.py
+   - Add stllr to benchmark_runner.py (trainers dict, ALGORITHM_INFO, get_network/model selection)
+   - Add stllr to get_network() / model factory: stllr -> STLLRNetwork
+   - Add configs/mnist_stllr.yaml
+   - Add stllr to configs/benchmark_comparison.yaml algorithms list
+   - Add stllr to valid_trainers in config.py
+
+5. **Compatibility**
+   - STLLRNetwork.forward(x) returns (spk_rec, mem_rec) with spk_rec[-1] shape [B, n_classes]
+   - Evaluation: reset, then for t in T: out = network(x[t]); accumulate; argmax for pred
+   - NeuroBench: same temporal forward as other networks; no changes to NeuroBenchWrapper
+
+## Deliverables
+
+- [ ] src/networks/stllr_layers.py (~120 lines) — LinearSTLLR, STLLRLinearGrad (port from reference)
+- [ ] src/networks/stllr_network.py (~80 lines) — STLLRNetwork (FC from LinearSTLLR), inherits BaseSNN
+- [ ] src/trainers/stllr_trainer.py (~100 lines) — STLLRTrainer
+- [ ] configs/mnist_stllr.yaml
+- [ ] Modify: main.py — register stllr
+- [ ] Modify: src/benchmark_runner.py — stllr in trainers, ALGORITHM_INFO, get_network
+- [ ] Modify: src/networks/get_network.py — stllr -> STLLRNetwork
+- [ ] Modify: src/utils/config.py — stllr in valid_trainers
+- [ ] Modify: run_all_benchmarks.py — STLLRTrainer, stllr in ALGORITHMS
+- [ ] Modify: configs/benchmark_comparison.yaml — add stllr to algorithms
+- [ ] tests/test_trainers.py — add test_stllr_trainer_smoke
+- [ ] tests/test_networks.py — add test_stllr_network_forward
+
+## Constraints
+
+- Stay faithful to the reference: STLLRLinearGrad forward/backward equations, Psi formula, eligibility traces, delay_ls semantics
+- Reuse framework patterns: BaseTrainer, BaseSNN, get_loader, Config
+- Use type hints and docstrings (Google style). Follow Black (88), flake8
+- Do NOT add new dependencies beyond PyTorch
+- Feedback mode: support BP only for initial integration (DFA/sDFA out of scope)
+- FC architecture only (Conv2dSTLLR, LinearRecSTLLR out of scope)
+
+## Validation
+
+- STLLR trainer achieves >90% on MNIST after 50 epochs (comparable to BPTT)
+- python run_all_benchmarks.py --epochs 10 --algorithms stllr,bptt --datasets MNIST runs without errors
+- NeuroBench metrics compute for stllr
+- pytest tests/test_trainers.py -k stllr passes
+
+## Out of Scope
+
+- Conv2dSTLLR, LinearRecSTLLR (conv/recurrent)
+- Feedback modes DFA, sDFA, LocalLoss
+- Event-based datasets (DVS Gesture, SHD) — use rate-coded MNIST/FashionMNIST/CIFAR10
+- S-TLLR online mode (stllr_online) — implement standard stllr (batch backward on last delay_ls steps)
+```
+
+### Expected Generated Files
+
+| File | Purpose |
+|------|---------|
+| `src/networks/stllr_layers.py` | LinearSTLLR, STLLRLinearGrad (LIF + eligibility traces) |
+| `src/networks/stllr_network.py` | FC SNN from LinearSTLLR, BaseSNN interface |
+| `src/trainers/stllr_trainer.py` | STLLRTrainer with delay_ls training loop |
+| `configs/mnist_stllr.yaml` | S-TLLR config |
+
+### Key Integration Notes
+
+1. **delay_ls:** Learning signal only for last T_l timesteps. Loop: for t in range(T): out=net(data[t]); pred+=out.detach(); if (T-1-t)<delay_ls: loss=CE(out,target); loss.backward(). Then optimizer.step().
+2. **Prediction:** Spike sum over time, argmax — same as BPTT/STSF for fair comparison.
+3. **Psi:** Secondary activation 1/(100*|u_thr|+1)^2 (reference). Keep identical for faithfulness.
+4. **get_network:** Add stllr -> STLLRNetwork in compatibility matrix.
+
+---
+
 ## Prompt Template for Future Phases
 
-### Prompt 5: Additional Learning Algorithms (Future)
+### Prompt 6: Additional Learning Algorithms (Future)
 
 ```
 Add [ALGORITHM_NAME] learning algorithm trainer.
@@ -517,7 +652,7 @@ ALGORITHM DESCRIPTION:
 [Insert algorithm description and reference paper]
 ```
 
-### Prompt 6: Convolutional Networks (Future)
+### Prompt 7: Convolutional Networks (Future)
 
 ```
 Add convolutional SNN architecture for image benchmarks.
@@ -567,4 +702,11 @@ git checkout v0.2.0-benchmarking  # or v0.3.0-complete
 # Verify: pytest tests/test_trainers.py -k ell
 # Verify: python run_all_benchmarks.py --epochs 10
 git tag -a v0.4.0-ell-fell-bell -m "ELL, FELL, BELL local classifier algorithms"
+
+# Example: Reproduce S-TLLR Integration (Prompt 5)
+git checkout v0.4.0-ell-fell-bell  # or v0.2.0-benchmarking
+# Apply Prompt 5 with AI assistant (full context: docs/, existing_implementations/S-TLLR-main/)
+# Verify: pytest tests/test_trainers.py -k stllr
+# Verify: python run_all_benchmarks.py --epochs 10 --algorithms stllr,bptt --datasets MNIST
+git tag -a v0.5.0-stllr -m "S-TLLR STDP-inspired temporal local learning"
 ```

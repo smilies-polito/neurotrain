@@ -24,6 +24,7 @@ from trainers.eprop_trainer import EpropTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
+from trainers.stllr_trainer import STLLRTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -120,6 +121,7 @@ ALGORITHMS = {
     "ell": ELLTrainer,
     "fell": FELLTrainer,
     "bell": BELLTrainer,
+    "stllr": STLLRTrainer,
 }
 
 def _parse_csv_list(value: str):

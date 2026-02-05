@@ -10,6 +10,7 @@ algorithms:
     - ell # Event-based Local Learning (local)
     - fell # Full Event-based Local Learning (local)
     - bell # Backprop Event-based Local Learning (local)
+    - stllr # STDP-inspired Temporal Local Learning Rule
 
 # Dataset configuration
 dataset: "MNIST"

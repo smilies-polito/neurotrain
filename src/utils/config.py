@@ -329,14 +329,17 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
     # Model architecture validation
-    valid_architectures = ["fc", "local_classifier", "recurrent"]
+    valid_architectures = ["fc", "local_classifier", "recurrent", "stllr"]
     if config.model.architecture not in valid_architectures:
         issues.append(
             f"model.architecture must be one of {valid_architectures}"
         )
 
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell", "stdp"]
+    valid_trainers = [
+        "stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell",
+        "stllr", "stdp",
+    ]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 

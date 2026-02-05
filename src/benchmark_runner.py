@@ -37,6 +37,7 @@ from trainers.decolle_trainer import DECOLLETrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
+from trainers.stllr_trainer import STLLRTrainer
 from networks.get_network import get_network
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
@@ -91,6 +92,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": True,
         "source": "custom (bell_trainer.py) - Ma et al. 2022",
+    },
+    "stllr": {
+        "name": "STDP-inspired Temporal Local Learning Rule",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (stllr_trainer.py) - Apolinario & Roy, TMLR 2025",
     },
 }
 
@@ -268,9 +275,15 @@ def benchmark_algorithm(
     # Get data loaders (pass device for pin_memory when CUDA)
     train_loader, test_loader = get_loader(dataset, batch_size, timesteps, device=device)
 
-    # Create network via get_network (fc, recurrent, local_classifier)
-    model_arch = "recurrent" if algorithm_name == "eprop" else (
-        "local_classifier" if algorithm_name in ("ell", "fell", "bell") else "fc"
+    # Create network via get_network (fc, recurrent, local_classifier, stllr)
+    model_arch = (
+        "recurrent"
+        if algorithm_name == "eprop"
+        else "local_classifier"
+        if algorithm_name in ("ell", "fell", "bell")
+        else "stllr"
+        if algorithm_name == "stllr"
+        else "fc"
     )
     network = get_network(
         algorithm_name=algorithm_name,
@@ -334,6 +347,15 @@ def benchmark_algorithm(
             network=network,
             lr=lr,
             batch_size=batch_size,
+        )
+    elif algorithm_name == "stllr":
+        # S-TLLR: manual three-factor weight update
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            delay_ls=5,
         )
     else:
         # Local learning algorithms (STSF)
@@ -466,6 +488,7 @@ def run_comparison(
         "ell": ELLTrainer,
         "fell": FELLTrainer,
         "bell": BELLTrainer,
+        "stllr": STLLRTrainer,
     }
 
     results = {}
