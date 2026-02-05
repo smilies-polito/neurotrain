@@ -24,12 +24,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 # Core imports
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
-from networks.fc_network import FCNetwork
 from networks.conv_network import ConvFCNetwork
+from networks.etlp_network import ETLPNetwork
+from networks.fc_network import FCNetwork
 from trainers.bptt_trainer import BPTTTrainer
-from trainers.drtp_trainer import DRTPTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+from trainers.drtp_trainer import DRTPTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.etlp_trainer import ETLPTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
@@ -91,6 +93,8 @@ def trainable(
 
     # Get data loaders
     flatten_inputs = config.model.architecture != "conv"
+    if config.trainer.name == "etlp":
+        flatten_inputs = True
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
@@ -99,7 +103,26 @@ def trainable(
     )
 
     # Create the network (supports fc and recurrent architectures)
-    if config.model.architecture == "recurrent":
+    if config.trainer.name == "etlp":
+        n_in = config.model.layer_sizes[0]
+        n_out = config.model.layer_sizes[-1]
+        network = ETLPNetwork(
+            n_in=n_in,
+            n_rec=config.etlp.n_rec,
+            n_out=n_out,
+            dt=config.etlp.dt,
+            tau_v=config.etlp.tau_v,
+            tau_a=config.etlp.tau_a,
+            tau_o=config.etlp.tau_o,
+            theta=config.etlp.theta,
+            thr=config.etlp.thr,
+            n_ref=config.etlp.n_ref,
+            recurrent=config.etlp.recurrent,
+            train_rec=config.etlp.train_rec,
+            spike_scale=config.etlp.spike_scale,
+            keep_trace=False,
+        )
+    elif config.model.architecture == "recurrent":
         from networks.recurrent_srnn import RecurrentSRNN
 
         # Match original e-prop defaults for comparison
@@ -226,6 +249,15 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
+    if issubclass(trainer_class, ETLPTrainer):
+        trainer_kwargs.update(
+            voltage_reg=config.etlp.voltage_reg,
+            weight_l1=config.etlp.weight_l1,
+            weight_l2=config.etlp.weight_l2,
+            update_rate_hz=config.etlp.update_rate_hz,
+            update_last=config.trainer.update_last,
+            update_every=config.trainer.update_every,
+        )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
 
@@ -233,7 +265,10 @@ def trainable(
         trainer.network.load_state_dict(resume_checkpoint.model_state_dict)
         if optimizer is not None and resume_checkpoint.optimizer_state_dict is not None:
             optimizer.load_state_dict(resume_checkpoint.optimizer_state_dict)
-        if hasattr(trainer, "load_checkpoint_state") and resume_checkpoint.trainer_state_dict:
+        if (
+            hasattr(trainer, "load_checkpoint_state")
+            and resume_checkpoint.trainer_state_dict
+        ):
             trainer.load_checkpoint_state(resume_checkpoint.trainer_state_dict)
         start_epoch = max(start_epoch, resume_checkpoint.epoch + 1)
 
@@ -331,6 +366,7 @@ def get_trainer(trainer_name: str):
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
+        "etlp": ETLPTrainer,
         # Future trainers will be added here:
         # "stdp": STDPTrainer,
     }

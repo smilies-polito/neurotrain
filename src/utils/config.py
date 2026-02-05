@@ -7,7 +7,7 @@ Uses dataclasses for typed, validated configuration.
 
 import json
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -43,7 +43,9 @@ class TrainingConfig:
     epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.01
-    optimizer: Optional[str] = None  # None for manual updates, "adam", "sgd", "nag", "rmsprop"
+    optimizer: Optional[str] = (
+        None  # None for manual updates, "adam", "sgd", "nag", "rmsprop"
+    )
     weight_decay: float = 0.0
     freeze_conv: bool = False
 
@@ -52,7 +54,7 @@ class TrainingConfig:
 class TrainerConfig:
     """Trainer-specific configuration."""
 
-    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "stdp"
+    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"
     update_last: bool = False
     update_every: int = 1
     seq_batch: int = 1
@@ -63,9 +65,32 @@ class DRTPConfig:
     """Direct Random Target Projection configuration."""
 
     loss: str = "mse"  # "mse", "bce", "ce"
-    feedback_distribution: str = "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    feedback_distribution: str = (
+        "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    )
     feedback_scale: float = 1.0
     fixed_feedback: bool = True
+
+
+@dataclass
+class ETLPConfig:
+    """Event-based Three-factor Local Plasticity (ETLP) configuration."""
+
+    n_rec: int = 200
+    dt: float = 1.0
+    tau_v: float = 80.0
+    tau_a: float = 10.0
+    tau_o: float = 80.0
+    theta: float = 5.0
+    thr: float = 1.0
+    n_ref: int = 5
+    recurrent: bool = False
+    train_rec: bool = False
+    spike_scale: float = 0.3
+    voltage_reg: float = 0.0
+    weight_l1: float = 0.0
+    weight_l2: float = 0.0
+    update_rate_hz: float = 100.0
 
 
 @dataclass
@@ -109,6 +134,7 @@ class Config:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     trainer: TrainerConfig = field(default_factory=TrainerConfig)
     drtp: DRTPConfig = field(default_factory=DRTPConfig)
+    etlp: ETLPConfig = field(default_factory=ETLPConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -164,6 +190,7 @@ class Config:
             training=TrainingConfig(**config_dict.get("training", {})),
             trainer=TrainerConfig(**config_dict.get("trainer", {})),
             drtp=DRTPConfig(**config_dict.get("drtp", {})),
+            etlp=ETLPConfig(**config_dict.get("etlp", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -341,7 +368,9 @@ def validate_config(config: Config) -> List[str]:
     if config.training.optimizer is not None:
         valid_optimizers = ["adam", "sgd", "nag", "rmsprop"]
         if str(config.training.optimizer).lower() not in valid_optimizers:
-            issues.append(f"training.optimizer must be one of {valid_optimizers} or null")
+            issues.append(
+                f"training.optimizer must be one of {valid_optimizers} or null"
+            )
 
     # Data validation
     if config.data.timesteps <= 0:
@@ -349,18 +378,24 @@ def validate_config(config: Config) -> List[str]:
 
     valid_datasets = [
         # Rate-coded image classification
-        "MNIST", "CIFAR10", "FashionMNIST", "SVHN",
+        "MNIST",
+        "CIFAR10",
+        "FashionMNIST",
+        "SVHN",
         # Event-based neuromorphic (ideal for DECOLLE)
-        "NMNIST", "DVSGesture",
+        "NMNIST",
+        "DVSGesture",
         # NeuroBench official benchmarks
-        "SpeechCommands", "WISDM",  # Classification
-        "PrimateReaching", "MackeyGlass",  # Regression
+        "SpeechCommands",
+        "WISDM",  # Classification
+        "PrimateReaching",
+        "MackeyGlass",  # Regression
     ]
     if config.data.dataset not in valid_datasets:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "stdp"]
+    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 
@@ -377,6 +412,18 @@ def validate_config(config: Config) -> List[str]:
         )
     if config.drtp.feedback_scale <= 0:
         issues.append("drtp.feedback_scale must be positive")
+
+    # ETLP validation
+    if config.etlp.n_rec <= 0:
+        issues.append("etlp.n_rec must be positive")
+    if config.etlp.dt <= 0:
+        issues.append("etlp.dt must be positive")
+    if config.etlp.tau_v <= 0 or config.etlp.tau_a <= 0 or config.etlp.tau_o <= 0:
+        issues.append("etlp.tau_v, etlp.tau_a, and etlp.tau_o must be positive")
+    if config.etlp.thr <= 0:
+        issues.append("etlp.thr must be positive")
+    if config.etlp.update_rate_hz < 0:
+        issues.append("etlp.update_rate_hz must be non-negative")
 
     return issues
 

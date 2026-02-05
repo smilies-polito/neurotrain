@@ -8,6 +8,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from networks.etlp_network import ETLPNetwork
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
@@ -15,6 +16,7 @@ from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.drtp_trainer import DRTPTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.etlp_trainer import ETLPTrainer
 from trainers.stsf_trainer import STSFTrainer
 
 
@@ -485,3 +487,36 @@ class TestDRTPTrainer:
 
         loss_after = forward_loss()
         assert loss_after < loss_before
+
+
+class TestETLPTrainer:
+    """Test ETLPTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return ETLPNetwork(n_in=16, n_rec=8, n_out=4, dt=1.0)
+
+    @pytest.fixture
+    def trainer(self, network):
+        return ETLPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            update_rate_hz=100.0,
+        )
+
+    def test_trainer_creation(self, trainer):
+        assert trainer.lr == 0.01
+        assert trainer.batch_size == 4
+
+    def test_trainer_train_sample(self, trainer):
+        timesteps = 5
+        batch_size = 4
+        data = torch.rand(timesteps, batch_size, 16)
+        target = torch.randint(0, 4, (batch_size,))
+
+        loss, pred = trainer.train_sample(data, target)
+
+        assert loss.shape == ()
+        assert pred.shape == (batch_size, 1)
+        assert not torch.isnan(loss)
