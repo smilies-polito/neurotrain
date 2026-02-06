@@ -33,6 +33,7 @@ from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from utils.checkpoint import CheckpointManager, resume_training
 from utils.config import (
     Config,
@@ -231,6 +232,7 @@ def get_trainer(trainer_name: str):
         "ell": ELLTrainer,
         "fell": FELLTrainer,
         "bell": BELLTrainer,
+        "esd_rtrl": ESDRTRLTrainer,
     }
     if trainer_name not in trainers:
         raise ValueError(

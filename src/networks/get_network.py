@@ -17,6 +17,7 @@ from networks.recurrent_srnn import RecurrentSRNN
 # Algorithms that require specific models will override model_architecture
 _ALGORITHM_MODEL_OVERRIDE = {
     "eprop": "recurrent",
+    "esd_rtrl": "recurrent",
     "ell": "local_classifier",
     "fell": "local_classifier",
     "bell": "local_classifier",
@@ -53,13 +54,13 @@ def get_network(
     )
 
     if effective_arch == "recurrent":
-        if algorithm_name != "eprop":
+        if algorithm_name not in ("eprop", "esd_rtrl"):
             raise ValueError(
-                f"RecurrentSRNN is only compatible with e-prop, got {algorithm_name}"
+                f"RecurrentSRNN is only compatible with eprop or esd_rtrl, got {algorithm_name}"
             )
         if len(layer_sizes) < 3:
             raise ValueError(
-                "E-prop requires layer_sizes=[n_in, n_rec, n_out]"
+                "Recurrent (eprop/esd_rtrl) requires layer_sizes=[n_in, n_rec, n_out]"
             )
         return RecurrentSRNN(
             n_in=layer_sizes[0],
