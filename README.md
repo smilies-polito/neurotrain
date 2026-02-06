@@ -7,7 +7,7 @@ A modular, scalable benchmarking platform for spiking neural network (SNN) learn
 - **Reproducible Experiments**: Comprehensive seed management, environment logging, and git commit tracking
 - **Configuration System**: YAML/JSON config files with CLI override support
 - **Checkpointing**: Automatic checkpoint saving with resume capability
-- **Plug-and-Play Trainers**: Easily add new learning algorithms (BPTT, STSF, E-prop)
+- **Plug-and-Play Trainers**: BPTT, STSF, DECOLLE, OTTT, E-prop, ELL/FELL/BELL, S-TLLR, ES-D-RTRL
 - **TensorBoard Integration**: Real-time training visualization
 - **NeuroBench Integration**: Official neuromorphic benchmark datasets and metrics
 - **Automated Benchmarking**: Compare algorithms across multiple datasets
@@ -53,6 +53,12 @@ python main.py --config configs/mnist_eprop.yaml
 # Run recurrent (reference-like) e-prop on MNIST
 python main.py --config configs/mnist_eprop_recurrent.yaml
 
+# Run ES-D-RTRL (BrainTrace linear-memory online) on MNIST
+python main.py --config configs/mnist_esd_rtrl.yaml
+
+# Run S-TLLR on MNIST
+python main.py --config configs/mnist_stllr.yaml
+
 # Override specific parameters via CLI
 python main.py --config configs/mnist_default.yaml --lr 0.001 --epochs 50
 ```
@@ -82,11 +88,16 @@ This platform supports systematic comparison of SNN learning algorithms across m
 
 | Algorithm | Type | Description |
 |-----------|------|-------------|
-| **STSF** | Local Learning | Spiking Time Sparse Feedback - bio-plausible, no backprop |
-| **DECOLLE** | Local Learning | Deep Continuous Local Learning with per-layer random readouts |
 | **BPTT** | Gradient-based | Backpropagation Through Time with surrogate gradients |
-| **E-prop** | Local / eligibility | Eligibility propagation with feedforward adapter and reference-style recurrent SRNN |
+| **STSF** | Local Learning | Spiking Time Sparse Feedback – bio-plausible, no backprop |
+| **DECOLLE** | Local Learning | Deep Continuous Local Learning with per-layer random readouts |
 | **OTTT** | Local Learning | Online Training Through Time with eligibility traces |
+| **E-prop** | Local / eligibility | Eligibility propagation; recurrent SRNN, per-timestep updates |
+| **ELL** | Local Learning | Event-based Local Learning (Ma et al. 2022) |
+| **FELL** | Local + backprop | Full Event-based Local Learning |
+| **BELL** | Local + backprop | Backprop Event-based Local Learning |
+| **S-TLLR** | Local Learning | STDP-inspired Temporal Local Learning Rule (Apolinario & Roy, TMLR 2025) |
+| **ES-D-RTRL** | Local / eligibility | Eligibility-based Structured Diagonal RTRL; linear-memory online (BrainTrace, Wang et al. 2026) |
 
 ### Available Datasets
 
@@ -114,11 +125,14 @@ This platform supports systematic comparison of SNN learning algorithms across m
 
 ### Run Full Benchmark Suite
 
-Compare BPTT vs STSF vs OTTT across all classification datasets:
+Compare algorithms across classification datasets:
 
 ```bash
-# Run comprehensive benchmark (all datasets, both algorithms)
+# Run comprehensive benchmark (all algorithms, all datasets)
 python run_all_benchmarks.py --epochs 50 --device cuda
+
+# Compare specific algorithms on MNIST
+python run_all_benchmarks.py --epochs 10 --algorithms bptt,stsf,eprop,esd_rtrl,stllr --datasets MNIST
 
 # With custom settings
 python run_all_benchmarks.py \
@@ -130,7 +144,7 @@ python run_all_benchmarks.py \
 ```
 
 This will:
-1. Train both **BPTT** and **STSF** on each dataset
+1. Train selected algorithms (BPTT, STSF, E-prop, ELL/FELL/BELL, S-TLLR, ES-D-RTRL, etc.) on each dataset
 2. Profile CPU/GPU timing with PyTorch profiler
 3. Run **NeuroBench evaluation** for SNN-specific metrics
 4. Save comprehensive results to JSON
@@ -277,8 +291,13 @@ checkpoint:
 | `fashionmnist_default.yaml` | FashionMNIST training with STSF |
 | `cifar10_default.yaml` | CIFAR10 training with STSF |
 | `mnist_eprop.yaml` | Feedforward e-prop on MNIST (FC network) |
-| `mnist_eprop_recurrent.yaml` | Reference-style recurrent e-prop SRNN on MNIST |
-| `benchmark_comparison.yaml` | Algorithm comparison config (BPTT vs STSF; extendable to e-prop) |
+| `mnist_eprop_recurrent.yaml` | Recurrent e-prop SRNN on MNIST |
+| `mnist_ell.yaml` | Event-based Local Learning (ELL) on MNIST |
+| `mnist_fell.yaml` | Full Event-based Local Learning (FELL) on MNIST |
+| `mnist_bell.yaml` | Backprop Event-based Local Learning (BELL) on MNIST |
+| `mnist_stllr.yaml` | S-TLLR (STDP-inspired temporal local learning) on MNIST |
+| `mnist_esd_rtrl.yaml` | ES-D-RTRL (BrainTrace linear-memory online) on MNIST |
+| `benchmark_comparison.yaml` | Multi-algorithm comparison (BPTT, STSF, OTTT, DECOLLE, ELL/FELL/BELL, S-TLLR, ES-D-RTRL) |
 
 ## CLI Arguments
 
@@ -386,12 +405,17 @@ class MyTrainer(BaseTrainer):
         self.network.reset()
 ```
 
-2. Register in `main.py`:
+2. Register in `main.py` and `run_all_benchmarks.py` (and `benchmark_runner.py` for comparison runs):
 
 ```python
 def get_trainer(trainer_name):
     trainers = {
         "stsf": STSFTrainer,
+        "bptt": BPTTTrainer,
+        "eprop": EpropTrainer,
+        "esd_rtrl": ESDRTRLTrainer,
+        "stllr": STLLRTrainer,
+        # ...
         "my_trainer": MyTrainer,  # Add here
     }
     return trainers[trainer_name]
@@ -409,7 +433,10 @@ trainer:
 - [x] BPTT (Backpropagation Through Time) trainer
 - [x] NeuroBench integration (datasets + metrics)
 - [x] Automated benchmarking campaigns
-- [ ] Additional learning algorithms (e-prop, STDP)
+- [x] E-prop (feedforward and recurrent SRNN)
+- [x] ELL / FELL / BELL (event-based local learning)
+- [x] S-TLLR (STDP-inspired temporal local learning)
+- [x] ES-D-RTRL (BrainTrace linear-memory online learning)
 - [ ] Convolutional SNN architectures
 - [ ] Regression task support for NeuroBench
 - [ ] Interactive visualization dashboard
