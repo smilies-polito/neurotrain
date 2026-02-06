@@ -20,6 +20,7 @@ from trainers.eprop_trainer import EpropTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.stllr_trainer import STLLRTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 
 
 class TestBaseTrainer:
@@ -559,5 +560,54 @@ class TestSTLLRTrainer:
         trainer = trainer.to("cpu")
         data = torch.randn(5, 8, 784)
         target = torch.randint(0, 10, (8,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+
+
+class TestESDRTRLTrainer:
+    """Test ESDRTRLTrainer class (ES-D-RTRL, BrainTrace)."""
+
+    @pytest.fixture
+    def network(self):
+        """Create a small recurrent network for ES-D-RTRL."""
+        return RecurrentSRNN(
+            n_in=8,
+            n_rec=16,
+            n_out=4,
+            threshold=1.0,
+            tau_mem=2.0,
+            tau_out=0.02,
+            dt=1e-3,
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return ESDRTRLTrainer(
+            network=network,
+            lr=0.001,
+            batch_size=8,
+            etrace_decay=0.9,
+            use_optimizer=True,
+        )
+
+    def test_esd_rtrl_trainer_smoke(self, trainer):
+        """Smoke test: run train_sample, check loss and pred shape."""
+        T, B, F = 5, 8, 8
+        data = torch.randn(T, B, F)
+        target = torch.randint(0, 4, (B,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (B, 1)
+        assert not torch.isnan(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 3
+
+    def test_esd_rtrl_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_esd_rtrl_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 4, 8)
+        target = torch.randint(0, 4, (4,))
         loss, pred = trainer.train_sample(data, target)
         assert loss.device.type == "cpu"

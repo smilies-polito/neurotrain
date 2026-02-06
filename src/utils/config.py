@@ -338,7 +338,7 @@ def validate_config(config: Config) -> List[str]:
     # Trainer validation
     valid_trainers = [
         "stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell",
-        "stllr", "stdp",
+        "stllr", "esd_rtrl", "stdp",
     ]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
