@@ -7,7 +7,7 @@ from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
-def MNISTLoader(batch_size, T, pin_memory: bool = False):
+def MNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for MNIST, with rate-coded spikes over T timesteps.
 
@@ -15,6 +15,7 @@ def MNISTLoader(batch_size, T, pin_memory: bool = False):
         batch_size: Batch size.
         T: Number of timesteps for rate coding.
         pin_memory: If True, use pinned memory for faster CPU->GPU transfer (CUDA).
+        seed: Optional int. If set, train DataLoader uses this seed for shuffle (deterministic order).
     """
     transform = Compose([
         ToTensor(),
@@ -22,12 +23,17 @@ def MNISTLoader(batch_size, T, pin_memory: bool = False):
         Rate(T),
         Lambda(lambda x: torch.flatten(x, start_dim=1))
     ])
-    trainloader = DataLoader(
-        MNIST(DATA_ROOT.as_posix(), train=True, download=True, transform=transform),
+    train_kw = dict(
         batch_size=batch_size,
         num_workers=4,
         shuffle=True,
         pin_memory=pin_memory,
+    )
+    if seed is not None:
+        train_kw["generator"] = torch.Generator().manual_seed(seed)
+    trainloader = DataLoader(
+        MNIST(DATA_ROOT.as_posix(), train=True, download=True, transform=transform),
+        **train_kw,
     )
     testloader = DataLoader(
         MNIST(DATA_ROOT.as_posix(), train=False, download=True, transform=transform),

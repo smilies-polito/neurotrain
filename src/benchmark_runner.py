@@ -237,6 +237,7 @@ def benchmark_algorithm(
     checkpoint_epochs: List[int],
     device: str,
     beta: float = 0.9,
+    seed: Optional[int] = None,
 ) -> BenchmarkResult:
     """
     Run benchmark for a single algorithm.
@@ -272,8 +273,10 @@ def benchmark_algorithm(
     )
     use_cuda = device.type == "cuda"
 
-    # Get data loaders (pass device for pin_memory when CUDA)
-    train_loader, test_loader = get_loader(dataset, batch_size, timesteps, device=device)
+    # Get data loaders (pass device for pin_memory when CUDA; seed for deterministic shuffle)
+    train_loader, test_loader = get_loader(
+        dataset, batch_size, timesteps, device=device, seed=seed
+    )
 
     # Create network via get_network (fc, recurrent, local_classifier, stllr)
     model_arch = (

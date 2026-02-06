@@ -317,6 +317,7 @@ def run_all_benchmarks(
                     checkpoint_epochs=checkpoint_epochs,
                     device=device,
                     beta=beta,
+                    seed=seed,
                 )
                 dataset_results[algo_name] = result
             except Exception as e:
