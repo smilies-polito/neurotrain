@@ -38,6 +38,7 @@ from trainers.ell_trainer import ELLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
 from trainers.stllr_trainer import STLLRTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from networks.get_network import get_network
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
@@ -98,6 +99,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (stllr_trainer.py) - Apolinario & Roy, TMLR 2025",
+    },
+    "esd_rtrl": {
+        "name": "ES-D-RTRL (Eligibility-based Structured Diagonal RTRL)",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (esd_rtrl_trainer.py) - Wang et al. Nature Commun. 2026",
     },
 }
 
@@ -281,7 +288,7 @@ def benchmark_algorithm(
     # Create network via get_network (fc, recurrent, local_classifier, stllr)
     model_arch = (
         "recurrent"
-        if algorithm_name == "eprop"
+        if algorithm_name in ("eprop", "esd_rtrl")
         else "local_classifier"
         if algorithm_name in ("ell", "fell", "bell")
         else "stllr"
@@ -359,6 +366,17 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
             delay_ls=5,
+        )
+    elif algorithm_name == "esd_rtrl":
+        # ES-D-RTRL: BrainTrace linear-memory online learning
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            etrace_decay=0.9,
+            use_optimizer=True,
+            optimizer=None,
         )
     else:
         # Local learning algorithms (STSF)
@@ -492,6 +510,7 @@ def run_comparison(
         "fell": FELLTrainer,
         "bell": BELLTrainer,
         "stllr": STLLRTrainer,
+        "esd_rtrl": ESDRTRLTrainer,
     }
 
     results = {}

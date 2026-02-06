@@ -12,7 +12,10 @@
 | 2 | BPTT Benchmarking Baseline | State 1 → State 2 | ✅ Complete |
 | 3 | Full Benchmark Suite | State 2 → State 3 | 🔲 Pending |
 | 4 | ELL / FELL / BELL Integration | State 2/3 → State 4 | 🔲 Pending |
-| 5 | S-TLLR Integration | State 2/4 → State 5 | 🔲 Next |
+| 5 | S-TLLR Integration | State 2/4 → State 5 | ✅ Complete |
+| 6 | ES-D-RTRL Integration (BrainTrace) | State 5 → State 6 | 🔲 Next |
+
+**Note:** ES-D-RTRL (Eligibility-based Structured Diagonal RTRL) is the BrainTrace linear-memory online learning algorithm; in some literature the same family is referred to as ES-D-TLLR (Temporal Local Learning Rule variant).
 
 ---
 
@@ -623,10 +626,140 @@ Add S-TLLR as a plug-and-play trainer with an FC network built from LinearSTLLR 
 
 ---
 
+## Prompt 6: Integrate ES-D-RTRL (BrainTrace Linear-Memory Online Learning)
+
+**Purpose:** Integrate ES-D-RTRL (Eligibility-based Structured Diagonal RTRL) from the BrainTrace reference into the benchmarking framework, enabling uniform comparison with BPTT, STSF, DECOLLE, OTTT, ELL/FELL/BELL, and S-TLLR. Implementation must be in snnTorch and PyTorch, with all training logic in the trainer (not in the model), and must integrate NeuroBench.
+
+**State Transition:** State 5 → State 6 (ES-D-RTRL Integration)
+
+**Reference Implementation:** `existing_implementations/braintrace-snn-experiments-main/`
+
+**Note:** The reference implements **ES-D-RTRL** (BrainTrace paper: Wang et al., Nature Communications 2026). In some literature this family is also referred to as ES-D-TLLR (Temporal Local Learning Rule variant).
+
+### Exact Prompt
+
+```
+Integrate ES-D-RTRL (Eligibility-based Structured Diagonal RTRL) from the BrainTrace reference into the SNN training benchmarking framework.
+
+## Context
+
+- **Current project state:** docs/states_summary.md (State 5: BPTT, STSF, DECOLLE, OTTT, ELL/FELL/BELL, S-TLLR working)
+- **Reference implementation:** existing_implementations/braintrace-snn-experiments-main/
+- **Pattern to follow:** src/trainers/eprop_trainer.py (recurrent, BaseTrainer, no training logic in model), src/trainers/stllr_trainer.py (local learning, delay_ls), src/networks/recurrent_srnn.py (recurrent SNN interface)
+- **Key reference files:**
+  - event_gru_dvs_gesture/main.py — ES-D-RTRL: IODimVjpAlgorithm(model, etrace_decay), scan over time, accumulate grads, single optimizer update
+  - event_gru_dvs_gesture/args.py — method='es-d-rtrl', etrace_decay (default 0.9), vjp_method
+  - ei_coba_net_decision_making/training.py — esd-rtrl method, etrace_decay
+  - README.md — ES-D-RTRL (IO Dim): linear-memory online learning
+
+**Algorithm summary (ES-D-RTRL, from reference and paper):**
+- Linear-memory online learning for spiking/recurrent networks (BrainTrace, Wang et al. 2026).
+- Eligibility traces (e-trace) with decay (etrace_decay); gradient approximated in IO dimension (input-output) so memory is O(n) independent of timesteps.
+- Training: forward over time; at each step compute local loss and gradient contribution; accumulate gradients; single optimizer.step() per sequence.
+- Reference uses JAX/BrainTrace (IODimVjpAlgorithm); port the algorithm logic to PyTorch/snnTorch so that (1) forward is per-timestep, (2) eligibility traces and gradient accumulation are in the trainer, (3) no BPTT (no storing full history).
+
+**Data format:** Framework provides data as [T, B, F] (rate-coded). Use same convention: data[t] per timestep, target [B]. Prediction: spike/activity sum over time, argmax.
+
+## Objective
+
+Add ES-D-RTRL as a plug-and-play trainer with a recurrent SNN compatible with the framework (or reuse/adapt existing recurrent architecture), conforming to BaseTrainer, with **all training logic in the trainer** (model is passive: forward only). Integrate with existing data pipeline, run_all_benchmarks.py, and NeuroBench evaluation.
+
+## Requirements
+
+1. **Port ES-D-RTRL algorithm to PyTorch/snnTorch**
+   - Implement eligibility-trace updates and IO-dimension gradient approximation in the trainer (no training logic in the network).
+   - Parameters: etrace_decay (default 0.9 from reference), learning rate, batch size.
+   - Forward: for t in 0..T-1 call network(data[t]); accumulate eligibility traces and gradient contributions; after sequence, optimizer.step() once.
+   - Loss: cross-entropy on readout (e.g. membrane or spike sum) for compatibility with benchmark reporting.
+   - Stay faithful to the reference behavior: scan over time, accumulate grads, single update per batch.
+
+2. **Network**
+   - Use or extend existing recurrent SNN (e.g. RecurrentSRNN from E-prop) so it has: reset(), step(x) or forward(x) per timestep, readout for classification. Network must NOT perform weight updates or eligibility logic—only forward dynamics.
+   - If a new recurrent module is needed, implement it in src/networks/ using snnTorch and PyTorch; keep it minimal and compatible with BaseSNN-style interface for evaluation (reset, forward returning spikes/readout).
+
+3. **Trainer**
+   - Create src/trainers/esd_rtrl_trainer.py (or es_d_rtrl_trainer.py).
+   - Implements BaseTrainer: train_sample(data, target) -> (loss, pred), reset(), to(device).
+   - Input: data [T, B, F], target [B].
+   - All training logic (eligibility traces, gradient accumulation, optimizer step) must be in the trainer, not in the model.
+   - Config: etrace_decay (default 0.9), lr, batch_size. Use Adam optimizer (reference uses Adam).
+
+4. **Registration and config**
+   - Add esd_rtrl to get_trainer() in main.py (if applicable).
+   - Add esd_rtrl to benchmark_runner.py (trainers dict, ALGORITHM_INFO, get_network/model selection).
+   - Add esd_rtrl to get_network(): map to the recurrent network used for ES-D-RTRL.
+   - Add configs/mnist_esd_rtrl.yaml (or reuse a recurrent config with trainer name esd_rtrl).
+   - Add esd_rtrl to configs/benchmark_comparison.yaml algorithms list.
+   - Add esd_rtrl to valid_trainers in config.py.
+   - Add ES-D-RTRL to run_all_benchmarks.py (ALGORITHMS dict, dataset configs as needed).
+
+5. **NeuroBench integration**
+   - Recurrent network must support the same evaluation pattern as other algorithms: reset(), then for each timestep forward(data[t]); accumulate readout; spike_to_prediction for NeuroBench.
+   - No changes to NeuroBenchWrapper beyond ensuring the ES-D-RTRL model is wrapped like E-prop (temporal forward, correct spike/readout shape).
+
+6. **Faithfulness to reference**
+   - Match reference hyperparameters where applicable: etrace_decay (e.g. 0.2 for DVS Gesture in README, 0.9 in args default).
+   - Same high-level flow: no BPTT; online-style gradient accumulation over time; single optimizer step per sequence.
+
+## Deliverables
+
+- [ ] src/trainers/esd_rtrl_trainer.py — ES-D-RTRL trainer (eligibility traces + gradient accumulation in trainer; ~120–180 lines)
+- [ ] Reuse or extend src/networks/recurrent_srnn.py (or equivalent) so ES-D-RTRL has a recurrent SNN; no training logic in the network.
+- [ ] configs/mnist_esd_rtrl.yaml (or equivalent)
+- [ ] Modify: main.py — register esd_rtrl
+- [ ] Modify: src/benchmark_runner.py — esd_rtrl in trainers, ALGORITHM_INFO, get_network
+- [ ] Modify: src/networks/get_network.py — esd_rtrl -> recurrent network
+- [ ] Modify: src/utils/config.py — esd_rtrl in valid_trainers
+- [ ] Modify: run_all_benchmarks.py — ES-D-RTRL trainer, esd_rtrl in ALGORITHMS
+- [ ] Modify: configs/benchmark_comparison.yaml — add esd_rtrl to algorithms
+- [ ] tests/test_trainers.py — add test_esd_rtrl_trainer_smoke
+- [ ] tests/test_networks.py — add or extend test for recurrent network forward (if new module)
+
+## Constraints
+
+- Implement in **snnTorch and PyTorch only** (no JAX/BrainTrace in the framework code).
+- **All training logic in the trainer:** model must only implement forward dynamics (reset, step/forward); no weight updates or eligibility trace updates in the network class.
+- Stay faithful to the reference: ES-D-RTRL flow (e-trace, IO-dimension approximation, scan then single update).
+- Reuse framework patterns: BaseTrainer, get_loader, Config, NeuroBench wrapper.
+- Use type hints and docstrings (Google style). Follow Black (88), flake8.
+- Do NOT add new dependencies beyond PyTorch and snnTorch (and existing project deps).
+- Integrate NeuroBench: ES-D-RTRL model must work with existing NeuroBench evaluation pipeline.
+
+## Validation
+
+- ES-D-RTRL trainer runs without errors on MNIST (or a supported dataset) with run_all_benchmarks.py.
+- python run_all_benchmarks.py --epochs 5 --algorithms esd_rtrl,bptt --datasets MNIST runs without errors.
+- NeuroBench metrics compute for esd_rtrl (same interface as other algorithms).
+- pytest tests/test_trainers.py -k esd_rtrl passes.
+
+## Out of Scope
+
+- Exact reproduction of JAX/BrainTrace numerical results (different backend); aim for faithful algorithm structure and hyperparameters.
+- Other BrainTrace methods (D-RTRL, BPTT in BrainTrace) beyond ES-D-RTRL.
+- Event-GRU or custom RNN cell from the reference (port only the ES-D-RTRL training algorithm; use framework’s recurrent SNN or a minimal PyTorch/snnTorch recurrent SNN).
+```
+
+### Expected Generated Files
+
+| File | Purpose |
+|------|---------|
+| `src/trainers/esd_rtrl_trainer.py` | ES-D-RTRL trainer (e-trace + gradient accumulation, single update per sequence) |
+| `configs/mnist_esd_rtrl.yaml` | ES-D-RTRL config (etrace_decay, lr, etc.) |
+| Modifications to `benchmark_runner.py`, `get_network.py`, `run_all_benchmarks.py`, `config.py`, `benchmark_comparison.yaml` | Registration and benchmark integration |
+| Tests in `tests/test_trainers.py`, `tests/test_networks.py` | Smoke tests for trainer and network |
+
+### Key Integration Notes
+
+1. **Training logic in trainer only:** The reference wraps the model with `braintrace.IODimVjpAlgorithm`; in our framework the equivalent logic (eligibility traces, gradient accumulation, IO-dimension approximation) must live in `esd_rtrl_trainer.py`, not in the network.
+2. **Recurrent network:** Reuse or adapt the same recurrent SNN used for E-prop (RecurrentSRNN) so that ES-D-RTRL only changes the training rule (trainer), not the architecture.
+3. **etrace_decay:** Reference uses 0.9 (args default) and 0.2 (README DVS Gesture); make it a configurable parameter in the trainer and config.
+4. **NeuroBench:** Ensure the recurrent model exposes the same temporal forward interface (reset, per-timestep forward, readout shape) so the existing NeuroBench wrapper works.
+
+---
+
 ## Prompt Template for Future Phases
 
-### Prompt 6: Additional Learning Algorithms (Future)
-TLLR impelem
+### Prompt 7: Additional Learning Algorithms (Future)
 ```
 Add [ALGORITHM_NAME] learning algorithm trainer.
 
@@ -652,7 +785,7 @@ ALGORITHM DESCRIPTION:
 [Insert algorithm description and reference paper]
 ```
 
-### Prompt 7: Convolutional Networks (Future)
+### Prompt 8: Convolutional Networks (Future)
 
 ```
 Add convolutional SNN architecture for image benchmarks.
@@ -709,4 +842,11 @@ git checkout v0.4.0-ell-fell-bell  # or v0.2.0-benchmarking
 # Verify: pytest tests/test_trainers.py -k stllr
 # Verify: python run_all_benchmarks.py --epochs 10 --algorithms stllr,bptt --datasets MNIST
 git tag -a v0.5.0-stllr -m "S-TLLR STDP-inspired temporal local learning"
+
+# Example: Reproduce ES-D-RTRL Integration (Prompt 6)
+git checkout v0.5.0-stllr  # or development
+# Apply Prompt 6 with AI assistant (full context: docs/, existing_implementations/braintrace-snn-experiments-main/)
+# Verify: pytest tests/test_trainers.py -k esd_rtrl
+# Verify: python run_all_benchmarks.py --epochs 5 --algorithms esd_rtrl,bptt --datasets MNIST
+git tag -a v0.6.0-esd-rtrl -m "ES-D-RTRL BrainTrace linear-memory online learning"
 ```
