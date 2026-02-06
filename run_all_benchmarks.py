@@ -15,7 +15,9 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
+import torch
 from benchmark_runner import benchmark_algorithm, print_comparison_summary, BenchmarkResult
+from utils.experiment_logger import set_all_seeds
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
@@ -232,6 +234,7 @@ def run_all_benchmarks(
     output_dir: str = "./benchmark_results",
     datasets: list = None,
     algorithms: list = None,
+    seed: int = 42,
 ):
     """Run benchmarks for all algorithms on all datasets."""
     
@@ -326,8 +329,14 @@ def run_all_benchmarks(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_file = output_path / f"full_benchmark_{timestamp}.json"
     
-    # Convert to serializable format
-    serializable_results = {}
+    # Convert to serializable format (include env for baseline comparison)
+    serializable_results = {
+        "_env": {
+            "seed": seed,
+            "pytorch_version": torch.__version__,
+            "cuda_available": torch.cuda.is_available(),
+        }
+    }
     for dataset, algos in all_results.items():
         serializable_results[dataset] = {}
         for algo, result in algos.items():
@@ -475,9 +484,26 @@ def main():
         default=None,
         help="Comma-separated algorithm names to run (default: all)",
     )
-    
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+
     args = parser.parse_args()
-    
+
+    # Reproducibility: set seed and print environment for baseline comparison
+    set_all_seeds(args.seed, deterministic=True)
+    cuda_available = torch.cuda.is_available()
+    env_line = (
+        f"Environment: PyTorch {torch.__version__}, "
+        f"CUDA available: {cuda_available}"
+        + (f", CUDA {torch.version.cuda}" if cuda_available else "")
+        + f", seed={args.seed}"
+    )
+    print(env_line)
+
     try:
         run_all_benchmarks(
             epochs=args.epochs,
@@ -487,6 +513,7 @@ def main():
             output_dir=args.output_dir,
             datasets=_parse_csv_list(args.datasets),
             algorithms=_parse_csv_list(args.algorithms),
+            seed=args.seed,
         )
     except ValueError as e:
         parser.error(str(e))
