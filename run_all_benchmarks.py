@@ -300,6 +300,10 @@ def run_all_benchmarks(
         dataset_results = {}
         
         for algo_name, trainer_class in selected_algorithms.items():
+            # Reset seed before each algorithm so they all start from the same RNG state
+            # (ensures fair comparison: same weight init, same data order)
+            set_all_seeds(seed, deterministic=True)
+            
             try:
                 result = benchmark_algorithm(
                     algorithm_name=algo_name,
