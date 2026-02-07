@@ -38,6 +38,8 @@ RATE_CODED_DATASETS = {
     "MNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
+        "local_classifier_timesteps": 10,  # paper-identical for ELL/FELL/BELL
+        "local_classifier_layer_sizes": [784, 800, 10],  # paper-identical MNISTDNN
         "task": "classification",
         "type": "rate-coded",
     },
@@ -305,20 +307,45 @@ def run_all_benchmarks(
             # Reset seed before each algorithm so they all start from the same RNG state
             # (ensures fair comparison: same weight init, same data order)
             set_all_seeds(seed, deterministic=True)
-            
+
+            # Paper-identical ELL/FELL/BELL: tau=1, T=10, lr=5e-4, MNIST 784->800->10
+            is_local_classifier = algo_name in ("ell", "fell", "bell")
+            timesteps = (
+                dataset_config.get("local_classifier_timesteps", dataset_config["timesteps"])
+                if is_local_classifier
+                else dataset_config["timesteps"]
+            )
+            layer_sizes = (
+                dataset_config.get("local_classifier_layer_sizes", dataset_config["layer_sizes"])
+                if is_local_classifier and dataset_name == "MNIST"
+                else dataset_config["layer_sizes"]
+            )
+            tau = 1.0 if is_local_classifier else None
+            algo_lr = (
+                dataset_config.get("local_classifier_lr", 5e-4)
+                if is_local_classifier
+                else lr
+            )
+            algo_batch_size = (
+                dataset_config.get("local_classifier_batch_size", 100)
+                if is_local_classifier
+                else batch_size
+            )
+
             try:
                 result = benchmark_algorithm(
                     algorithm_name=algo_name,
                     trainer_class=trainer_class,
                     dataset=dataset_name,
-                    layer_sizes=dataset_config["layer_sizes"],
+                    layer_sizes=layer_sizes,
                     epochs=epochs,
-                    batch_size=batch_size,
-                    lr=lr,
-                    timesteps=dataset_config["timesteps"],
+                    batch_size=algo_batch_size,
+                    lr=algo_lr,
+                    timesteps=timesteps,
                     checkpoint_epochs=checkpoint_epochs,
                     device=device,
                     beta=beta,
+                    tau=tau,
                     seed=seed,
                 )
                 dataset_results[algo_name] = result

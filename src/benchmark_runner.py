@@ -211,19 +211,31 @@ def evaluate(
     total = 0
 
     non_blocking = device.type == "cuda"
+    use_constant_input = getattr(network, "constant_input_per_timestep", False)
     for data, target in test_loader:
         data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
 
+        if use_constant_input:
+            x_const = data.mean(dim=0)
+            if not getattr(network, "uses_raw_input", False) and x_const.shape[1] == 784:
+                x_const = (x_const * 0.3081 + 0.1307).clamp(0.0, 1.0)
+
         network.reset()
         spk_sum = None
         for t in range(data.size(0)):
-            out = network(data[t])
+            x_t = x_const if use_constant_input else data[t]
+            out = network(x_t)
             if isinstance(out, (tuple, list)):
-                spk = out[0]
+                # LocalClassifierNetwork returns (spk_rec, mem_rec); use decoder output mem_rec[-1] for readout.
+                if len(out) >= 2 and isinstance(out[1], (list, tuple)) and len(out[1]) > 0:
+                    to_accum = out[1][-1]
+                else:
+                    spk = out[0]
+                    to_accum = spk[-1]
             else:
-                spk = out
-            spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
+                to_accum = out
+            spk_sum = to_accum if spk_sum is None else spk_sum + to_accum
 
         preds = spk_sum.argmax(dim=1)
         correct += preds.eq(target).sum().item()
@@ -244,6 +256,7 @@ def benchmark_algorithm(
     checkpoint_epochs: List[int],
     device: str,
     beta: float = 0.9,
+    tau: Optional[float] = None,
     seed: Optional[int] = None,
 ) -> BenchmarkResult:
     """
@@ -266,6 +279,7 @@ def benchmark_algorithm(
         checkpoint_epochs: Epochs at which to record accuracy
         device: Device string ("cpu", "cuda")
         beta: LIF neuron beta parameter
+        tau: If set, local classifier uses decay=exp(-1/tau) (paper-identical)
 
     Returns:
         BenchmarkResult with all metrics
@@ -281,8 +295,17 @@ def benchmark_algorithm(
     use_cuda = device.type == "cuda"
 
     # Get data loaders (pass device for pin_memory when CUDA; seed for deterministic shuffle)
+    # ELL/FELL/BELL on MNIST: use raw [0,1] pixels (no Normalize, no rate coding) to match reference
+    use_raw_loader = (
+        algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
+    )
     train_loader, test_loader = get_loader(
-        dataset, batch_size, timesteps, device=device, seed=seed
+        dataset,
+        batch_size,
+        timesteps,
+        device=device,
+        seed=seed,
+        raw_for_local_classifier=use_raw_loader,
     )
 
     # Create network via get_network (fc, recurrent, local_classifier, stllr)
@@ -295,12 +318,23 @@ def benchmark_algorithm(
         if algorithm_name == "stllr"
         else "fc"
     )
+    # ELL/FELL/BELL on MNIST: use lower threshold (0.2) so encoder can spike with seed 42;
+    # reference uses --thresh 1 and seed 1234 (see docs/ell_fell_bell_accuracy_analysis.md).
+    lc_threshold = (
+        0.2
+        if algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
+        else None
+    )
     network = get_network(
         algorithm_name=algorithm_name,
         model_architecture=model_arch,
         layer_sizes=layer_sizes,
         beta=beta,
+        tau=tau,
+        **({"threshold": lc_threshold} if lc_threshold is not None else {}),
     )
+    if use_raw_loader:
+        network.uses_raw_input = True
 
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
@@ -357,6 +391,7 @@ def benchmark_algorithm(
             network=network,
             lr=lr,
             batch_size=batch_size,
+            use_raw_input=use_raw_loader,
         )
     elif algorithm_name == "stllr":
         # S-TLLR: manual three-factor weight update
@@ -532,6 +567,7 @@ def run_comparison(
             checkpoint_epochs=config["checkpoint_epochs"],
             device=config["device"],
             beta=config.get("beta", 0.9),
+            tau=config.get("tau"),
         )
         results[algo_name] = result
 

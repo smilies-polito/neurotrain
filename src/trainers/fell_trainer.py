@@ -26,12 +26,14 @@ class FELLTrainer(BaseTrainer):
         network: LocalClassifierNetwork,
         lr: float,
         batch_size: int,
+        use_raw_input: bool = False,
         **kwargs,
     ):
         super().__init__()
         self.network = network
         self.lr = lr
         self.batch_size = batch_size
+        self.use_raw_input = use_raw_input
 
         self.optimizers = [
             torch.optim.Adam(block.parameters(), lr=lr, weight_decay=0.0)
@@ -51,11 +53,16 @@ class FELLTrainer(BaseTrainer):
 
         self.network.reset()
 
+        # Paper-identical: same input every timestep (constant current into first layer)
+        x_const = data.mean(dim=0)
+        if not self.use_raw_input and x_const.shape[1] == 784:
+            x_const = (x_const * 0.3081 + 0.1307).clamp(0.0, 1.0)
+
         spk_sum = torch.zeros(batch_size, n_classes, device=device)
         total_loss = 0.0
 
         for t in range(num_timesteps):
-            layer_outputs = self.network.forward_step_all(data[t])
+            layer_outputs = self.network.forward_step_all(x_const)
 
             for layer_idx, (spike_out, y_hat_spike) in enumerate(layer_outputs):
                 loss_sup = F.mse_loss(y_hat_spike, target_onehot.detach())

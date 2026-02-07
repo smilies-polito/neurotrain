@@ -1,6 +1,0 @@
-pyyaml
-tqdm
-tonic
-matplotlib
-tensorboardX
-h5py

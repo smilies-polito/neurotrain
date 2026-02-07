@@ -1,5 +1,5 @@
 # MNIST ELL Configuration
-# Event-based Local Learning (ELL) on MNIST
+# Event-based Local Learning (ELL) on MNIST (paper-identical: tau=1, timesteps=10)
 
 experiment:
   name: "ELL_MNIST"
@@ -9,8 +9,9 @@ experiment:
 
 model:
   architecture: "local_classifier"
-  layer_sizes: [784, 256, 10]  # [input, hidden..., output]
+  layer_sizes: [784, 800, 10]  # paper-identical MNISTDNN (784->800->10)
   beta: 0.9
+  tau: 1  # decay = exp(-1/tau) for paper-identical LIF
   threshold: 1.0
   quantization: false
 
@@ -28,7 +29,7 @@ trainer:
 
 data:
   dataset: "MNIST"
-  timesteps: 25
+  timesteps: 10  # paper-identical time window
   data_dir: "./src/Data"
   num_workers: 4
 

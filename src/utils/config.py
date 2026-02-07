@@ -31,6 +31,7 @@ class ModelConfig:
     architecture: str = "fc"  # "fc", "local_classifier", "recurrent"
     layer_sizes: List[int] = field(default_factory=lambda: [784, 200, 10])
     beta: float = 0.9375
+    tau: Optional[float] = None  # for ELL/FELL/BELL: decay = exp(-1/tau) when set
     threshold: float = 1.0
     quantization: bool = False
 
