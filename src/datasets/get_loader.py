@@ -9,7 +9,7 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Lambda # type: 
 from torchvision.datasets import SVHN                                   # type: ignore 
 from tonic.datasets import DVSGesture                                   # type: ignore
 # import custom dataset loaders
-from datasets.mnist_loader import MNISTLoader
+from datasets.mnist_loader import MNISTLoader, MNISTLoaderRaw
 from datasets.cifar10_loader import CIFAR10Loader
 from datasets.fashionmnist_loader import FashionMNISTLoader
 from datasets.svhn_loader import SVHNLoader
@@ -44,18 +44,21 @@ NEUROBENCH_REGRESSION = ["PrimateReaching", "MackeyGlass"]
 ALL_DATASETS = STANDARD_DATASETS + NEUROBENCH_CLASSIFICATION + NEUROBENCH_REGRESSION
 
 
-def get_loader(name, batch_size, T, device=None, seed=None):
+def get_loader(name, batch_size, T, device=None, seed=None, raw_for_local_classifier=False):
     """
     Get train and test loaders for a dataset.
 
     Args:
         name: Dataset name.
         batch_size: Batch size.
-        T: Number of timesteps for rate coding.
+        T: Number of timesteps for rate coding (or repeat count for raw loader).
         device: Torch device (e.g. "cuda", "cpu"). If CUDA, uses pin_memory=True
             for faster CPU->GPU transfer. Default None (pin_memory=False).
         seed: Optional int. If set, train DataLoader uses a generator with this seed
             so shuffle order is deterministic (same as running that dataset alone with this seed).
+        raw_for_local_classifier: If True and dataset supports it (e.g. MNIST), return
+            raw [0, 1] pixels with no Normalize and no rate coding (same image repeated T times).
+            Used for ELL/FELL/BELL to match the reference implementation.
     """
     pin_memory = (
         device is not None
@@ -68,6 +71,8 @@ def get_loader(name, batch_size, T, device=None, seed=None):
     print(name)
     # Standard image datasets
     if name == "MNIST":
+        if raw_for_local_classifier:
+            return MNISTLoaderRaw(batch_size, T, pin_memory=pin_memory, seed=seed)
         return MNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
     elif name == "CIFAR10":
         return CIFAR10Loader(batch_size, T, pin_memory=pin_memory, seed=seed)

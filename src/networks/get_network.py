@@ -103,11 +103,13 @@ def get_network(
             if algorithm_name == "fell"
             else "bell"
         )
+        lc_kwargs = {k: v for k, v in kwargs.items() if k in ("threshold", "bias", "fa")}
         return LocalClassifierNetwork(
             layer_sizes=layer_sizes,
             beta=beta,
+            tau=kwargs.get("tau"),
             mode=mode,
-            **kwargs,
+            **lc_kwargs,
         )
 
     # Default: FCNetwork

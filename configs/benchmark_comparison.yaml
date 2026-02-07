@@ -23,6 +23,7 @@ layer_sizes: [784, 256, 10]
 
 # Network parameters
 beta: 0.9 # LIF neuron leak factor
+tau: 1   # for ELL/FELL/BELL: decay = exp(-1/tau) (paper-identical)
 
 # Training hyperparameters
 epochs: 50

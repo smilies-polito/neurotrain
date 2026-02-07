@@ -104,6 +104,7 @@ def trainable(
         model_architecture=config.model.architecture,
         layer_sizes=config.model.layer_sizes,
         beta=config.model.beta,
+        tau=config.model.tau,
         quant=config.model.quantization,
         threshold=config.model.threshold,
     )

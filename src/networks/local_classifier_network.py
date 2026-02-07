@@ -5,7 +5,8 @@ Feedforward SNN with per-layer encoder + decoder_y (local classifier).
 Inherits from BaseSNN. Used by ELL, FELL, BELL trainers.
 """
 
-from typing import List, Literal, Tuple
+import math
+from typing import List, Literal, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -20,12 +21,16 @@ class LocalClassifierNetwork(BaseSNN):
 
     Stack of LocalClassifierBlock. forward(x) returns (spk_rec, mem_rec) per BaseSNN.
     forward_step_all(x_t) for trainers returns List[(spike_out, y_hat_spike)] per block.
+
+    When tau is set, decay = exp(-1/tau) (paper-identical); else decay = beta.
+    constant_input_per_timestep = True so evaluation uses same input every step (paper logic).
     """
 
     def __init__(
         self,
         layer_sizes: List[int],
         beta: float = 0.9,
+        tau: Optional[float] = None,
         mode: Literal["ell", "fell", "bell"] = "ell",
         threshold: float = 1.0,
         bias: bool = False,
@@ -35,9 +40,13 @@ class LocalClassifierNetwork(BaseSNN):
         self._layer_sizes = layer_sizes
         self._n_classes = layer_sizes[-1]
         self._mode = mode
+        self.constant_input_per_timestep = True
 
-        # decay from beta: decay = beta (LIF membrane decay)
-        decay = float(beta)
+        # decay: paper-identical uses tau -> decay = exp(-1/tau); else decay = beta
+        if tau is not None:
+            decay = math.exp(-1.0 / tau)
+        else:
+            decay = float(beta)
 
         self.blocks = nn.ModuleList()
         for i in range(len(layer_sizes) - 1):
@@ -66,7 +75,8 @@ class LocalClassifierNetwork(BaseSNN):
         """
         Single timestep forward. Returns (spk_rec, mem_rec) per BaseSNN.
 
-        spk_rec[-1] has shape [B, n_classes].
+        spk_rec[i] = encoder spike of block i [B, hidden]; mem_rec[i] = decoder y_hat_spike [B, n_classes].
+        For readout use mem_rec[-1], not spk_rec[-1].
         """
         spk_rec: List[torch.Tensor] = []
         mem_rec: List[torch.Tensor] = []
