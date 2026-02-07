@@ -103,7 +103,7 @@ Thumbs.db
 # Local config
 local_config.yaml
 .env.local
-
+.cursor
 
 # Eprop implementation Frankler
 eprop/
