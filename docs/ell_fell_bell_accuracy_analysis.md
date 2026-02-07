@@ -189,17 +189,15 @@ This prints once on the first batch:
 
 ---
 
-## 12. Implementation discrepancies (FELL, BELL) — aligned
+## 12. Implementation discrepancies (FELL, BELL)
 
-**Update:** FELL and BELL are now aligned with the reference.
-
-| Item | Reference | Ours (after fix) | Status |
-|------|-----------|------------------|--------|
-| **FELL/BELL encoder recurrence** | No detach: `mem = mem * decay + h - spike * thresh * decay` (full graph through time). | No detach: `mem_new = self._mem * decay + h - self._spike * thresh * decay`, `self._mem = mem_new`, `self._spike = surrog(mem_new)`. | **Aligned** |
-| **FELL/BELL decoder recurrence** | No detach; `y_hat_mem`/`y_hat_spike` kept in graph. | No detach: same recurrence in graph. | **Aligned** |
+| Item | Reference | Ours | Status |
+|------|-----------|------|--------|
+| **FELL encoder/decoder** | No detach (full graph). | We **detach** recurrence for FELL: per-step backward + step would otherwise modify parameters in-place, then the next step’s backward (through the previous graph) hits “variable modified by inplace operation”. So we detach for FELL so the run does not crash. | **Divergence** (implementation constraint). |
+| **BELL encoder/decoder** | No detach; one backward at end. | No detach: we keep recurrence in the graph; one backward and step at end of the batch. | **Aligned** |
 | **FELL readout branch** | Builds `spike_sum` from `decoder_y(spike.detach())` for accuracy. | We use the same `y_hat_spike` as for the loss. | **Minor** (predictions identical; structural only). |
 
-**Summary:** In `local_classifier_block.py`, for mode `"fell"` and `"bell"` the recurrence state (`_mem`, `_spike`, `_y_hat_mem`, `_y_hat_spike`) is no longer detached between steps, so gradients flow through time (BPTT). FELL trainer still does per-step backward with `retain_graph=True` and step; BELL trainer still accumulates loss over T and does one backward and step. ELL is unchanged (detach in recurrence).
+**Summary:** ELL: detach (unchanged). FELL: we detach recurrence so that per-step `optimizer.step()` does not conflict with backprop through time. BELL: we do not detach; we accumulate loss over T and run one backward and one step, so BPTT is preserved and there is no in-place conflict.
 
 ---
 
