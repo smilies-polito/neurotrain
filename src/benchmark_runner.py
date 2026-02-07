@@ -318,20 +318,14 @@ def benchmark_algorithm(
         if algorithm_name == "stllr"
         else "fc"
     )
-    # ELL/FELL/BELL on MNIST: use lower threshold (0.2) so encoder can spike with seed 42;
-    # reference uses --thresh 1 and seed 1234 (see docs/ell_fell_bell_accuracy_analysis.md).
-    lc_threshold = (
-        0.2
-        if algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
-        else None
-    )
+    # Use default threshold (1.0) for local classifiers; see docs/ell_fell_bell_accuracy_analysis.md
+    # for the 0.2 workaround if encoder does not spike with seed 42.
     network = get_network(
         algorithm_name=algorithm_name,
         model_architecture=model_arch,
         layer_sizes=layer_sizes,
         beta=beta,
         tau=tau,
-        **({"threshold": lc_threshold} if lc_threshold is not None else {}),
     )
     if use_raw_loader:
         network.uses_raw_input = True
