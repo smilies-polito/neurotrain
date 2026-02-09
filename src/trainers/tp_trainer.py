@@ -25,7 +25,7 @@ class TPTrainer(BaseTrainer):
     - Separate Input (Green) and Target (Purple) paths.
     - Local Contrastive Loss (Eq 13-15).
     - Eligibility Traces (Eq 11-12).
-    - Forward-only weight updates (Eq 18).
+    - Forward-only weight updates (Eq 18) applied PER TIME STEP.
     """
 
     def __init__(
@@ -33,10 +33,10 @@ class TPTrainer(BaseTrainer):
         network: nn.Module,
         lr: float,
         batch_size: int,
-        alpha: float = 0.77,  # Trace decay (beta_l in paper Eq 11, 12)
-        beta: float = 0.98,   # Membrane decay (alpha_l in paper Eq 1)
+        alpha: float = 0.77,  # Membrane decay (alpha in paper Eq 1)
+        beta: float = 0.98,   # Trace decay (beta in paper Eq 11, 12)
         vth: float = 0.66,    # Threshold
-        surrogate_scale: float = 10.0,
+        surrogate_scale: float = 1.0, # Paper uses scale 1.0
         train_target_propagator: bool = True,
         use_optimizer: bool = True,
         optimizer: Optional[torch.optim.Optimizer] = None,
@@ -51,8 +51,13 @@ class TPTrainer(BaseTrainer):
         self.lr = lr
         self.batch_size = batch_size
         
-        self.trace_decay = alpha       # \beta_l in Eq 11, 12
-        self.membrane_decay = beta     # \alpha_l in Eq 1
+        # Paper Notation mappings:
+        # Paper Eq 1: v_l^t = alpha_l * v_l^{t-1} + ... (Membrane uses alpha)
+        # Paper Eq 11: eps_l^t = beta_l * eps_l^{t-1} + ... (Trace uses beta)
+        
+        self.membrane_decay = alpha    # alpha from args -> membrane decay
+        self.trace_decay = beta        # beta from args -> trace decay
+        
         self.vth = vth
         self.surrogate_scale = surrogate_scale
         self.train_target_propagator = train_target_propagator
@@ -161,18 +166,24 @@ class TPTrainer(BaseTrainer):
         # Output accumulation
         output_sum = torch.zeros(B, self.n_classes, device=device)
         
-        if self.optimizer:
-            self.optimizer.zero_grad()
-
         # Keep previous spikes for reset mechanism (v_th * s^{t-1})
         s_student_prev = [torch.zeros(B, lay.out_features, device=device) for lay in self.linear_layers]
         s_target_prev = [torch.zeros(B, lay.out_features, device=device) for lay in self.linear_layers[:-1]]
+
+        # Optimization: Zero grad initially
+        if self.optimizer:
+            self.optimizer.zero_grad()
 
         # =========================================================================
         # Time Loop (Algorithm 1 Line 2)
         # =========================================================================
         for t in range(T):
             x_t = data[t] # [B, F]
+            
+            # Reset gradients for per-step update (Algorithm 1 explicitly updates per step)
+            # W^{t+1} = W^t - eta * Delta W
+            if self.optimizer:
+                self.optimizer.zero_grad() # Ensure clean slate for this time step's gradients
             
             # --- Line 4-6: Input and Target Trace Update (Layer 0) ---
             eps_in = self.trace_decay * eps_in.detach() + x_t
@@ -215,8 +226,6 @@ class TPTrainer(BaseTrainer):
                     # Output Layer (Linear Integrator)
                     output_sum += v_student[l_idx] 
                     # No spike, no trace update for output layer in standard TP logic
-                    # But we need trace for final update?
-                    # The paper implies output layer is trained via error signal.
 
                 # --- Target Path (Purple) ---
                 if not is_output_layer:
@@ -266,17 +275,13 @@ class TPTrainer(BaseTrainer):
                 # y^t_l (Eq 15)
                 # Compute pairwise distance on e_prev_tilde
                 e_prev_flat = e_prev_tilde.flatten(1)
-                # dist_sq[b, b'] = ||e[b] - e[b']||^2
-                # Expand dimensions to broadcast: [B, 1, D] - [1, B, D]
                 diff = e_prev_flat.unsqueeze(1) - e_prev_flat.unsqueeze(0)
                 dist_sq = diff.pow(2).sum(-1)
                 
-                y_l = F.softmax(-dist_sq, dim=1).detach() # Target should be detached?
-                # "y_l is target of CE loss". Yes, targets are usually fixed.
+                # y_l is target of CE loss
+                y_l = F.softmax(-dist_sq, dim=1).detach()
                 
                 # Soft-target Cross Entropy Loss
-                # L = - sum(y * log_softmax(z))
-                # Autograd handles dL/dW through z -> e -> s -> v -> W
                 loss_l = torch.sum(-y_l * F.log_softmax(z_l, dim=1), dim=1).mean()
                 
                 # Gradients
@@ -300,27 +305,23 @@ class TPTrainer(BaseTrainer):
             # =====================================================================
             # Output Layer Update (Delta Rule)
             # =====================================================================
-            # Last layer update using standard delta: (y_pred - target) * input
+            # Section 3.1: "final layer update... standard error"
             output_layer = self.linear_layers[-1]
-            y_pred = F.softmax(output_sum, dim=1) # Use accumulated output for prediction? 
-            # Or instantaneous?
-            # Standard: Error based on accumulated spikes/potentials at end of time window?
-            # Or per-step error?
             
-            # Algorithm 1 is per-step loop.
-            # But line 27 says "eta * (Delta W_in + Delta W_trg)".
-            # Output layer usually updated once? Or per step?
-            
-            # Since TP updates hidden layers EVERY TIME STEP, output layer should probably be updated too?
-            # Or maybe just once at end?
-            
-            # Let's assume per-step update for consistency with hidden layers.
-            # Using v_student[-1] (potentials at step t).
-            y_t = F.softmax(v_student[-1], dim=1)
+            # Using instantaneous prediction at step t
+            # Ideally this should probably use accumulated potential at end or running average?
+            # But consistent with per-step update:
+            y_t = F.softmax(v_student[-1], dim=1) # [B, C] using v_student[-1] which includes current input
             err = (y_t - c_star)
             
             # Input to output layer
             input_trace_to_out = eps_student[-2] if len(eps_student) > 1 else eps_in
+            
+            # Gradient dW = err * input^T  (Note: standard CE grad is y-t, but on linear output it's (y-t) if MSE? Or CE if CrossEntropyLossWithLogits?
+            # Paper mentions "simple integrator... predicted class corresponds to the neuron with highest integration value".
+            # Equation 13 uses softmax on similarities for hidden.
+            # Output often uses CE on potential.
+            # dL/dW_out = (y - t) * x^T.
             
             grad_out = torch.matmul(err.t(), input_trace_to_out) / B
             
@@ -329,9 +330,21 @@ class TPTrainer(BaseTrainer):
             else:
                 output_layer.weight.grad += grad_out
 
-        # Step Optimizer
-        if self.optimizer:
-            self.optimizer.step()
+            # ===================================================================
+            # UPDATE WEIGHTS (Per Time Step)
+            # ===================================================================
+            # Algorithm 1: Line 28: W^{t+1} = W^t - eta * Delta W
+            if self.optimizer:
+                self.optimizer.step()
+                self.optimizer.zero_grad() 
+                # Zeroing here prevents accumulation to next step. 
+                # Note: This is computationally expensive with SGD optimizer.
+                # Manual update would be faster but optimizer allows momentum etc (although paper implies simple SGD).
+                # SNNTorch benchmarks use optimizers.
+                
+        # =========================================================================
+        # End of Time Loop
+        # =========================================================================
         
         # Calculate final loss/acc for logging
         with torch.no_grad():
