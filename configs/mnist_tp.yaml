@@ -1,0 +1,41 @@
+# MNIST Trace Propagation Configuration
+# Trace Propagation (TP) forward-only learning on MNIST
+# Reference: Pes et al. (2026)
+
+experiment:
+  name: "TP_MNIST"
+  seed: 42
+  deterministic: true
+  log_dir: "./experiments"
+
+model:
+  architecture: "fc"
+  layer_sizes: [784, 450, 450, 10]  # Paper uses 2 hidden layers of 450
+  beta: 0.98  # Paper Table 2: β = 0.98
+  threshold: 0.66  # Paper Table 2: v_th = 0.66
+
+training:
+  epochs: 50
+  batch_size: 64  # Must be >= 2 for contrastive loss
+  learning_rate: 0.001
+  optimizer: "sgd"  # Paper uses SGD, not Adam
+
+trainer:
+  name: "tp"
+  # TP params passed via kwargs in main.py, not in TrainerConfig
+
+data:
+  dataset: "MNIST"
+  timesteps: 25
+  data_dir: "./src/Data"
+  num_workers: 4
+
+hardware:
+  device: "auto"
+  mixed_precision: false
+
+checkpoint:
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2

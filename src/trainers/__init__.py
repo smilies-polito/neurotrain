@@ -6,6 +6,7 @@ from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.tp_trainer import TPTrainer
 
 __all__ = [
     "BaseTrainer",
@@ -15,4 +16,5 @@ __all__ = [
     "EpropTrainer",
     "OTTTTrainer",
     "DECOLLETrainer",
+    "TPTrainer",
 ]
