@@ -34,6 +34,7 @@ class ModelConfig:
     beta: float = 0.9375
     tau: Optional[float] = None  # for ELL/FELL/BELL: decay = exp(-1/tau) when set
     threshold: float = 1.0
+    recurrent_type: str = "standard"  # "standard"/"srnn", "snu"/"ssnu"
     quantization: bool = False
 
 
@@ -407,6 +408,18 @@ def validate_config(config: Config) -> List[str]:
     valid_architectures = ["fc", "local_classifier", "recurrent", "stllr"]
     if config.model.architecture not in valid_architectures:
         issues.append(f"model.architecture must be one of {valid_architectures}")
+    valid_recurrent_types = ["standard", "srnn", "snu", "ssnu"]
+    if config.model.recurrent_type not in valid_recurrent_types:
+        issues.append(f"model.recurrent_type must be one of {valid_recurrent_types}")
+
+    if (
+        config.trainer.name in ("eprop", "esd_rtrl")
+        and config.model.architecture == "recurrent"
+        and config.model.recurrent_type not in ("standard", "srnn")
+    ):
+        issues.append(
+            "eprop/esd_rtrl require model.recurrent_type in ['standard', 'srnn']"
+        )
 
     # Trainer validation
     # valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"]
@@ -468,8 +481,18 @@ def validate_config(config: Config) -> List[str]:
         issues.append("ostl.surrogate_scale must be positive")
     if config.ostl.grad_clip < 0:
         issues.append("ostl.grad_clip must be non-negative")
-    if config.trainer.name == "ostl" and config.model.architecture != "fc":
-        issues.append("OSTL currently supports model.architecture == 'fc' only")
+    if config.trainer.name == "ostl":
+        if config.model.architecture not in ("fc", "recurrent"):
+            issues.append(
+                "OSTL supports model.architecture in ['fc', 'recurrent'] only"
+            )
+        if (
+            config.model.architecture == "recurrent"
+            and config.model.recurrent_type not in ("snu", "ssnu")
+        ):
+            issues.append(
+                "Recurrent OSTL requires model.recurrent_type in ['snu', 'ssnu']"
+            )
 
     return issues
 

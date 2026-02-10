@@ -255,6 +255,7 @@ experiment:
 
 model:
   architecture: "fc"
+  recurrent_type: "standard"  # recurrent only: "standard"/"srnn" or "snu"/"ssnu" (OSTL recurrent)
   layer_sizes: [784, 200, 10]
   beta: 0.9375
   threshold: 1.0
@@ -302,7 +303,8 @@ checkpoint:
 | `mnist_ell.yaml` | Event-based Local Learning (ELL) on MNIST |
 | `mnist_fell.yaml` | Full Event-based Local Learning (FELL) on MNIST |
 | `mnist_bell.yaml` | Backprop Event-based Local Learning (BELL) on MNIST |
-| `mnist_ostl.yaml` | OSTL (Online Spatio-Temporal Learning) on MNIST |
+| `mnist_ostl.yaml` | OSTL on MNIST with paper-style recurrent SNU architecture (2x256 hidden) |
+| `nmnist_ostl.yaml` | OSTL on event-based N-MNIST with paper-style recurrent SNU architecture (2x256 hidden) |
 | `mnist_stllr.yaml` | S-TLLR (STDP-inspired temporal local learning) on MNIST |
 | `mnist_esd_rtrl.yaml` | ES-D-RTRL (BrainTrace linear-memory online) on MNIST |
 | `benchmark_comparison.yaml` | Multi-algorithm comparison (BPTT, STSF, OTTT, DECOLLE, DRTP, OSTL, ELL/FELL/BELL, S-TLLR, ES-D-RTRL) |

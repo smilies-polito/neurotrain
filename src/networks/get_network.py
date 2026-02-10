@@ -10,6 +10,7 @@ import torch
 
 from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
+from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 
 # Compatibility: (algorithm, model_architecture) -> use this model
@@ -51,22 +52,39 @@ def get_network(
     effective_arch = _ALGORITHM_MODEL_OVERRIDE.get(algorithm_name, model_architecture)
 
     if effective_arch == "recurrent":
-        if algorithm_name not in ("eprop", "esd_rtrl"):
-            raise ValueError(
-                f"RecurrentSRNN is only compatible with eprop or esd_rtrl, got {algorithm_name}"
-            )
+        recurrent_type = str(kwargs.get("recurrent_type", "standard")).lower()
         if len(layer_sizes) < 3:
-            raise ValueError(
-                "Recurrent (eprop/esd_rtrl) requires layer_sizes=[n_in, n_rec, n_out]"
+            raise ValueError("Recurrent requires layer_sizes=[n_in, n_rec, ..., n_out]")
+        if algorithm_name in ("eprop", "esd_rtrl"):
+            if recurrent_type not in ("standard", "srnn"):
+                raise ValueError(
+                    "For eprop/esd_rtrl, recurrent_type must be one of: standard, srnn."
+                )
+            return RecurrentSRNN(
+                n_in=layer_sizes[0],
+                n_rec=layer_sizes[1],
+                n_out=layer_sizes[-1],
+                threshold=kwargs.get("threshold", 1.0),
+                tau_mem=2.0,
+                tau_out=0.02,
+                dt=1e-3,
             )
-        return RecurrentSRNN(
-            n_in=layer_sizes[0],
-            n_rec=layer_sizes[1],
-            n_out=layer_sizes[-1],
-            threshold=kwargs.get("threshold", 1.0),
-            tau_mem=2.0,
-            tau_out=0.02,
-            dt=1e-3,
+
+        if algorithm_name == "ostl":
+            if recurrent_type not in ("snu", "ssnu"):
+                raise ValueError(
+                    "For ostl recurrent model, recurrent_type must be one of: snu, ssnu."
+                )
+            return RecurrentFCNetwork(
+                layer_sizes=layer_sizes,
+                beta=beta,
+                quant=kwargs.get("quant", False),
+                threshold=kwargs.get("threshold", 1.0),
+                recurrent_type=recurrent_type,
+            )
+
+        raise ValueError(
+            f"Recurrent architecture is only compatible with eprop, esd_rtrl, or ostl, got {algorithm_name}"
         )
 
     if effective_arch == "stllr":

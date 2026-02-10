@@ -108,32 +108,56 @@ def trainable(
 
     # Create the network (conv uses dedicated class; others go through network factory)
     if config.model.architecture == "recurrent":
-        from networks.recurrent_srnn import RecurrentSRNN
+        recurrent_type = str(config.model.recurrent_type).lower()
 
-        # Match original e-prop defaults for comparison
-        n_in = config.model.layer_sizes[0]
-        n_rec = (
-            config.model.layer_sizes[1]
-            if len(config.model.layer_sizes) > 2
-            else config.model.layer_sizes[1]
-            if len(config.model.layer_sizes) > 1
-            else 100
-        )
-        n_out = config.model.layer_sizes[-1]
-        network = RecurrentSRNN(
-            n_in=n_in,
-            n_rec=n_rec,
-            n_out=n_out,
-            threshold=config.model.threshold,
-            tau_mem=2.0,
-            tau_out=0.02,
-            bias_out=0.0,
-            gamma=0.3,
-            dt=1e-3,
-        )
-        # Attach for compatibility
-        network.n_classes = n_out
-        network.hidden_size = [n_rec]
+        if config.trainer.name == "ostl":
+            from networks.recurrent_fc_network import RecurrentFCNetwork
+
+            if recurrent_type not in ("snu", "ssnu"):
+                raise ValueError(
+                    f"Unsupported model.recurrent_type '{config.model.recurrent_type}' "
+                    "for OSTL recurrent model. Use one of: snu, ssnu."
+                )
+
+            network = RecurrentFCNetwork(
+                layer_sizes=config.model.layer_sizes,
+                beta=config.model.beta,
+                quant=config.model.quantization,
+                threshold=config.model.threshold,
+                recurrent_type=recurrent_type,
+            )
+        else:
+            from networks.recurrent_srnn import RecurrentSRNN
+
+            if recurrent_type not in ("standard", "srnn"):
+                raise ValueError(
+                    f"Unsupported model.recurrent_type '{config.model.recurrent_type}'. "
+                    "Use one of: standard, srnn."
+                )
+
+            # Match original e-prop defaults for comparison
+            n_in = config.model.layer_sizes[0]
+            n_rec = (
+                config.model.layer_sizes[1]
+                if len(config.model.layer_sizes) > 2
+                else config.model.layer_sizes[1]
+                if len(config.model.layer_sizes) > 1
+                else 100
+            )
+            n_out = config.model.layer_sizes[-1]
+            network = RecurrentSRNN(
+                n_in=n_in,
+                n_rec=n_rec,
+                n_out=n_out,
+                threshold=config.model.threshold,
+                tau_mem=2.0,
+                tau_out=0.02,
+                bias_out=0.0,
+                gamma=0.3,
+                dt=1e-3,
+            )
+            # Attach for compatibility with trainer code paths that read hidden_size.
+            network.hidden_size = [n_rec]
     elif config.model.architecture == "conv":
         if config.data.dataset == "MNIST":
             input_shape = (1, 28, 28)

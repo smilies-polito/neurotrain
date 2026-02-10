@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from LearningAlgorithms import LearningAlgorithms
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
+from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
 from trainers.bell_trainer import BELLTrainer
@@ -591,6 +592,32 @@ class TestOSTLTrainer:
         assert "accuracy" in metrics
         assert torch.isfinite(torch.tensor(metrics["loss"]))
         assert 0.0 <= metrics["accuracy"] <= 1.0
+
+    def test_recurrent_snu_train_sample_and_weight_update(self):
+        network = RecurrentFCNetwork(
+            layer_sizes=[4, 8, 2],
+            beta=0.9,
+            threshold=0.5,
+            recurrent_type="snu",
+        )
+        trainer = OSTLTrainer(
+            network=network,
+            lr=0.05,
+            batch_size=32,
+            surrogate_scale=5.0,
+            grad_clip=1.0,
+            use_optimizer=False,
+        )
+        data, target = _make_ostl_temporal_batch(batch_size=32, timesteps=6)
+        temporal = data.transpose(0, 1)
+
+        rec_before = network.recurrent_layers[0].weight.detach().clone()
+        loss, pred = trainer.train_sample(temporal, target)
+        rec_after = network.recurrent_layers[0].weight.detach().clone()
+
+        assert torch.isfinite(loss)
+        assert pred.shape == (32, 1)
+        assert not torch.allclose(rec_before, rec_after)
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_cuda_train_sample_runs(self):

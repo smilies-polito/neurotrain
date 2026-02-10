@@ -67,14 +67,25 @@ class OSTLTrainer(BaseTrainer):
             for layer in getattr(self.network, "layers", [])
             if isinstance(layer, snn.Leaky)
         ]
+        self.recurrent_layers: List[nn.Linear] = list(
+            getattr(self.network, "recurrent_layers", [])
+        )
 
         if not self.linear_layers or len(self.linear_layers) != len(self.lif_layers):
             raise TypeError(
                 "OSTLTrainer expects an FCNetwork-like model with alternating "
                 "Linear and snn.Leaky layers."
             )
+        if self.recurrent_layers and len(self.recurrent_layers) != len(
+            self.linear_layers
+        ):
+            raise TypeError(
+                "If recurrent_layers are present, they must match the number of "
+                "feed-forward linear layers."
+            )
 
         self.num_layers = len(self.linear_layers)
+        self.has_recurrent_weights = bool(self.recurrent_layers)
         self.n_classes = int(getattr(self.network, "n_classes"))
 
         self.layer_decay = [self._to_float(lif.beta) for lif in self.lif_layers]
@@ -147,6 +158,16 @@ class OSTLTrainer(BaseTrainer):
             )
             for layer in self.linear_layers
         ]
+        eps_r = (
+            [
+                torch.zeros(
+                    batch_size, layer.out_features, layer.out_features, device=device
+                )
+                for layer in self.recurrent_layers
+            ]
+            if self.has_recurrent_weights
+            else None
+        )
         prev_mem = [
             torch.zeros(batch_size, layer.out_features, device=device)
             for layer in self.linear_layers
@@ -168,6 +189,7 @@ class OSTLTrainer(BaseTrainer):
             spk_sum += spk_rec[-1]
 
             e_w_per_layer = []
+            e_r_per_layer = []
             h_prime_per_layer = []
 
             for layer_idx in range(self.num_layers):
@@ -194,11 +216,23 @@ class OSTLTrainer(BaseTrainer):
                 e_w_t = h_prime_t.unsqueeze(-1) * eps_w[layer_idx]
                 e_w_per_layer.append(e_w_t)
 
+                if self.has_recurrent_weights and eps_r is not None:
+                    # Recurrent eligibility for R_l uses previous output of same layer.
+                    # This follows the same local recursion as feed-forward eligibility.
+                    eps_r[layer_idx] = ds_ds_prev.unsqueeze(-1) * eps_r[
+                        layer_idx
+                    ] + prev_spk[layer_idx].unsqueeze(1)
+                    e_r_t = h_prime_t.unsqueeze(-1) * eps_r[layer_idx]
+                    e_r_per_layer.append(e_r_t)
+
             learning_signals = [None] * self.num_layers
             # Fixed identity readout adaptation of Eq. (19)
             learning_signals[-1] = spk_rec[-1] - target_onehot
 
             # Eq. (18): recursive learning signal propagation over layers
+            # For recurrent OSTL we use the "without recurrent Jacobian" approximation
+            # described in the paper's recurrent complexity discussion, i.e. propagate
+            # signals across depth via feed-forward weights only.
             for layer_idx in range(self.num_layers - 2, -1, -1):
                 next_h_prime = h_prime_per_layer[layer_idx + 1]
                 w_next = self.linear_layers[layer_idx + 1].weight
@@ -224,6 +258,18 @@ class OSTLTrainer(BaseTrainer):
                         / batch_size
                     )
                     self._accumulate_or_apply_grad(layer, grad_w)
+
+                    if self.has_recurrent_weights:
+                        rec_layer = self.recurrent_layers[layer_idx]
+                        grad_r = (
+                            torch.einsum(
+                                "bi,bij->ij",
+                                learning_signals[layer_idx],
+                                e_r_per_layer[layer_idx],
+                            )
+                            / batch_size
+                        )
+                        self._accumulate_or_apply_grad(rec_layer, grad_r)
 
                 if self.use_optimizer and self.optimizer is not None:
                     self.optimizer.step()

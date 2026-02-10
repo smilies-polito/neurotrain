@@ -33,6 +33,7 @@ class TestConfig:
         assert config.experiment.seed == 42
         assert config.training.epochs == 100
         assert config.trainer.name == "stsf"
+        assert config.model.recurrent_type == "standard"
 
     def test_config_to_dict(self):
         """Test config serialization to dict."""
@@ -154,11 +155,40 @@ class TestConfigValidation:
         issues = validate_config(config)
         assert any("dataset" in issue for issue in issues)
 
-    def test_ostl_requires_fc_architecture(self):
-        """Test OSTL validation enforces FC architecture."""
+    def test_ostl_recurrent_requires_snu_type(self):
+        """Test recurrent OSTL validation enforces snu/ssnu types."""
         config = Config()
         config.trainer.name = "ostl"
         config.model.architecture = "recurrent"
+        config.model.recurrent_type = "standard"
 
         issues = validate_config(config)
-        assert any("OSTL currently supports" in issue for issue in issues)
+        assert any("Recurrent OSTL requires" in issue for issue in issues)
+
+    def test_ostl_recurrent_snu_is_valid(self):
+        """Test recurrent OSTL with SNU type passes validation."""
+        config = Config()
+        config.trainer.name = "ostl"
+        config.model.architecture = "recurrent"
+        config.model.recurrent_type = "snu"
+
+        issues = validate_config(config)
+        assert not any("Recurrent OSTL requires" in issue for issue in issues)
+
+    def test_invalid_recurrent_type(self):
+        """Test validation catches invalid recurrent model type."""
+        config = Config()
+        config.model.recurrent_type = "custom_rnn"
+
+        issues = validate_config(config)
+        assert any("recurrent_type" in issue for issue in issues)
+
+    def test_eprop_recurrent_type_restriction(self):
+        """Test eprop recurrent model rejects non-SRNN recurrent types."""
+        config = Config()
+        config.trainer.name = "eprop"
+        config.model.architecture = "recurrent"
+        config.model.recurrent_type = "snu"
+
+        issues = validate_config(config)
+        assert any("eprop/esd_rtrl require" in issue for issue in issues)
