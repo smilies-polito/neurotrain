@@ -28,22 +28,22 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from trainers.base_trainer import BaseTrainer
-from trainers.bptt_trainer import BPTTTrainer
-from trainers.drtp_trainer import DRTPTrainer
-from trainers.ottt_trainer import OTTTTrainer
-from trainers.stsf_trainer import STSFTrainer
-from trainers.eprop_trainer import EpropTrainer
-from trainers.decolle_trainer import DECOLLETrainer
-from trainers.ell_trainer import ELLTrainer
-from trainers.fell_trainer import FELLTrainer
-from trainers.bell_trainer import BELLTrainer
-from trainers.stllr_trainer import STLLRTrainer
-from trainers.esd_rtrl_trainer import ESDRTRLTrainer
-from networks.get_network import get_network
 from datasets.get_loader import get_loader
+from networks.get_network import get_network
+from trainers.base_trainer import BaseTrainer
+from trainers.bell_trainer import BELLTrainer
+from trainers.bptt_trainer import BPTTTrainer
+from trainers.decolle_trainer import DECOLLETrainer
+from trainers.drtp_trainer import DRTPTrainer
+from trainers.ell_trainer import ELLTrainer
+from trainers.eprop_trainer import EpropTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.ostl_trainer import OSTLTrainer
+from trainers.ottt_trainer import OTTTTrainer
+from trainers.stllr_trainer import STLLRTrainer
+from trainers.stsf_trainer import STSFTrainer
 from utils.neurobench_eval import run_neurobench
-
 
 # Algorithm metadata (not computed, just documented)
 ALGORITHM_INFO = {
@@ -82,6 +82,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (drtp_trainer.py) - DRTP reference",
+    },
+    "ostl": {
+        "name": "Online Spatio-Temporal Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (ostl_trainer.py) - Bohnstingl et al. 2020",
     },
     "ell": {
         "name": "Event-based Local Learning",
@@ -225,7 +231,10 @@ def evaluate(
 
         if use_constant_input:
             x_const = data.mean(dim=0)
-            if not getattr(network, "uses_raw_input", False) and x_const.shape[1] == 784:
+            if (
+                not getattr(network, "uses_raw_input", False)
+                and x_const.shape[1] == 784
+            ):
                 x_const = (x_const * 0.3081 + 0.1307).clamp(0.0, 1.0)
 
         network.reset()
@@ -235,7 +244,11 @@ def evaluate(
             out = network(x_t)
             if isinstance(out, (tuple, list)):
                 # LocalClassifierNetwork returns (spk_rec, mem_rec); use decoder output mem_rec[-1] for readout.
-                if len(out) >= 2 and isinstance(out[1], (list, tuple)) and len(out[1]) > 0:
+                if (
+                    len(out) >= 2
+                    and isinstance(out[1], (list, tuple))
+                    and len(out[1]) > 0
+                ):
                     to_accum = out[1][-1]
                 else:
                     spk = out[0]
@@ -303,9 +316,7 @@ def benchmark_algorithm(
 
     # Get data loaders (pass device for pin_memory when CUDA; seed for deterministic shuffle)
     # ELL/FELL/BELL on MNIST: use raw [0,1] pixels (no Normalize, no rate coding) to match reference
-    use_raw_loader = (
-        algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
-    )
+    use_raw_loader = algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
     train_loader, test_loader = get_loader(
         dataset,
         batch_size,
@@ -393,6 +404,18 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
             quant=False,
+            use_optimizer=False,
+            optimizer=None,
+        )
+    elif algorithm_name == "ostl":
+        # OSTL: online three-factor updates with eligibility traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            surrogate_scale=5.0,
+            grad_clip=0.0,
             use_optimizer=False,
             optimizer=None,
         )
@@ -552,6 +575,7 @@ def run_comparison(
         "stsf": STSFTrainer,
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
+        "ostl": OSTLTrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
         "ell": ELLTrainer,

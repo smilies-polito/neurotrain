@@ -8,19 +8,19 @@ import pytest
 import yaml
 
 from utils.config import (
-    Config,
-    ExperimentConfig,
-    ModelConfig,
-    TrainingConfig,
-    TrainerConfig,
-    DataConfig,
-    HardwareConfig,
     CheckpointConfig,
-    load_config,
+    Config,
+    DataConfig,
+    ExperimentConfig,
+    HardwareConfig,
+    ModelConfig,
+    TrainerConfig,
+    TrainingConfig,
     create_default_config,
-    validate_config,
+    load_config,
     merge_config_with_args,
     print_config,
+    validate_config,
 )
 
 
@@ -71,6 +71,12 @@ class TestConfig:
         assert config.drtp.feedback_distribution == "kaiming_uniform"
         assert config.drtp.feedback_scale == 1.0
         assert config.drtp.fixed_feedback is True
+
+    def test_default_ostl_config(self):
+        """Test OSTL config defaults."""
+        config = Config()
+        assert config.ostl.surrogate_scale == 5.0
+        assert config.ostl.grad_clip == 0.0
 
 
 class TestConfigIO:
@@ -147,3 +153,12 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("dataset" in issue for issue in issues)
+
+    def test_ostl_requires_fc_architecture(self):
+        """Test OSTL validation enforces FC architecture."""
+        config = Config()
+        config.trainer.name = "ostl"
+        config.model.architecture = "recurrent"
+
+        issues = validate_config(config)
+        assert any("OSTL currently supports" in issue for issue in issues)

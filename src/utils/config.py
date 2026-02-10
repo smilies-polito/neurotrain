@@ -55,7 +55,9 @@ class TrainingConfig:
 class TrainerConfig:
     """Trainer-specific configuration."""
 
-    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"
+    name: str = (
+        "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "ostl", "stdp"
+    )
     update_last: bool = False
     update_every: int = 1
     seq_batch: int = 1
@@ -88,6 +90,14 @@ class ETLPConfig:
         "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
     )
     feedback_scale: float = 1.0
+
+
+@dataclass
+class OSTLConfig:
+    """Online Spatio-Temporal Learning (OSTL) configuration."""
+
+    surrogate_scale: float = 5.0
+    grad_clip: float = 0.0
 
 
 @dataclass
@@ -132,6 +142,7 @@ class Config:
     trainer: TrainerConfig = field(default_factory=TrainerConfig)
     drtp: DRTPConfig = field(default_factory=DRTPConfig)
     etlp: ETLPConfig = field(default_factory=ETLPConfig)
+    ostl: OSTLConfig = field(default_factory=OSTLConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -188,6 +199,7 @@ class Config:
             trainer=TrainerConfig(**config_dict.get("trainer", {})),
             drtp=DRTPConfig(**config_dict.get("drtp", {})),
             etlp=ETLPConfig(**config_dict.get("etlp", {})),
+            ostl=OSTLConfig(**config_dict.get("ostl", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -403,6 +415,7 @@ def validate_config(config: Config) -> List[str]:
         "bptt",
         "decolle",
         "eprop",
+        "ostl",
         "ottt",
         "ell",
         "fell",
@@ -449,6 +462,14 @@ def validate_config(config: Config) -> List[str]:
         issues.append("etlp.feedback_scale must be positive")
     if config.trainer.name == "etlp" and config.model.architecture != "fc":
         issues.append("ETLP currently supports model.architecture == 'fc' only")
+
+    # OSTL validation
+    if config.ostl.surrogate_scale <= 0:
+        issues.append("ostl.surrogate_scale must be positive")
+    if config.ostl.grad_clip < 0:
+        issues.append("ostl.grad_clip must be non-negative")
+    if config.trainer.name == "ostl" and config.model.architecture != "fc":
+        issues.append("OSTL currently supports model.architecture == 'fc' only")
 
     return issues
 
