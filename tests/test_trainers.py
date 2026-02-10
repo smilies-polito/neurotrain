@@ -5,9 +5,11 @@ import sys
 
 import pytest
 import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from LearningAlgorithms import LearningAlgorithms
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
@@ -15,18 +17,35 @@ from trainers.base_trainer import BaseTrainer
 from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
-<<<<<<< HEAD
 from trainers.drtp_trainer import DRTPTrainer
-from trainers.eprop_trainer import EpropTrainer
-from trainers.etlp_trainer import ETLPTrainer
-=======
 from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
-from trainers.fell_trainer import FELLTrainer
->>>>>>> development
-from trainers.stsf_trainer import STSFTrainer
-from trainers.stllr_trainer import STLLRTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from trainers.etlp_trainer import ETLPTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.ostl_trainer import OSTLTrainer
+from trainers.stllr_trainer import STLLRTrainer
+from trainers.stsf_trainer import STSFTrainer
+
+
+def _make_ostl_temporal_batch(
+    batch_size: int = 64,
+    timesteps: int = 6,
+    in_features: int = 4,
+    n_classes: int = 2,
+    device: str = "cpu",
+):
+    """Create a tiny separable temporal task for OSTL smoke/integration tests."""
+    target = torch.randint(0, n_classes, (batch_size,), device=device)
+
+    x_static = torch.zeros(batch_size, in_features, device=device)
+    x_static[target == 0, :2] = 1.0
+    x_static[target == 1, 2:] = 1.0
+    x_static += 0.05 * torch.randn_like(x_static)
+
+    data = x_static.unsqueeze(1).repeat(1, timesteps, 1)
+    data += 0.01 * torch.randn_like(data)
+    return data, target
 
 
 class TestBaseTrainer:
@@ -435,7 +454,6 @@ class TestDECOLLETrainer:
         assert not torch.allclose(before, network.layers[0].weight)
 
 
-<<<<<<< HEAD
 class TestDRTPTrainer:
     """Test DRTPTrainer class."""
 
@@ -499,6 +517,97 @@ class TestDRTPTrainer:
         assert loss_after < loss_before
 
 
+class TestOSTLTrainer:
+    """OSTL trainer tests on synthetic temporal classification."""
+
+    def _make_trainer(self, lr: float = 0.05):
+        network = FCNetwork(
+            layer_sizes=[4, 8, 2],
+            beta=0.9,
+            threshold=0.5,
+        )
+        return OSTLTrainer(
+            network=network,
+            lr=lr,
+            batch_size=64,
+            surrogate_scale=5.0,
+            grad_clip=1.0,
+            use_optimizer=False,
+        )
+
+    def test_train_sample_shapes_and_finite(self):
+        trainer = self._make_trainer()
+        data, target = _make_ostl_temporal_batch(batch_size=32, timesteps=5)
+
+        loss, pred = trainer.train_sample(data.transpose(0, 1), target)
+
+        assert loss.shape == ()
+        assert pred.shape == (32, 1)
+        assert torch.isfinite(loss)
+        assert pred.min().item() >= 0
+        assert pred.max().item() <= 1
+
+    def test_loss_decreases_on_tiny_synthetic_task(self):
+        trainer = self._make_trainer(lr=0.1)
+        data, target = _make_ostl_temporal_batch(batch_size=96, timesteps=6)
+        temporal = data.transpose(0, 1)
+
+        losses = []
+        for _ in range(30):
+            loss, _ = trainer.train_sample(temporal, target)
+            losses.append(float(loss.item()))
+
+        first_window = sum(losses[:5]) / 5.0
+        last_window = sum(losses[-5:]) / 5.0
+
+        assert all(torch.isfinite(torch.tensor(losses)))
+        assert last_window < first_window
+
+    @pytest.mark.parametrize("timesteps", [3, 7, 11])
+    def test_timestep_handling(self, timesteps):
+        trainer = self._make_trainer()
+        data, target = _make_ostl_temporal_batch(batch_size=24, timesteps=timesteps)
+
+        loss, pred = trainer.train_sample(data.transpose(0, 1), target)
+
+        assert torch.isfinite(loss)
+        assert pred.shape == (24, 1)
+
+    def test_learning_algorithms_train_epoch_integration(self):
+        trainer = self._make_trainer(lr=0.05)
+        data, target = _make_ostl_temporal_batch(batch_size=64, timesteps=6)
+
+        dataset = TensorDataset(data.cpu(), target.cpu())
+        loader = DataLoader(dataset, batch_size=16, shuffle=False)
+
+        metrics = LearningAlgorithms.train_epoch(
+            trainer=trainer,
+            train_loader=loader,
+            device="cpu",
+            print_every=None,
+        )
+
+        assert "loss" in metrics
+        assert "accuracy" in metrics
+        assert torch.isfinite(torch.tensor(metrics["loss"]))
+        assert 0.0 <= metrics["accuracy"] <= 1.0
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_cuda_train_sample_runs(self):
+        trainer = self._make_trainer().to("cuda")
+        data, target = _make_ostl_temporal_batch(
+            batch_size=16,
+            timesteps=5,
+            device="cuda",
+        )
+
+        loss, pred = trainer.train_sample(data.transpose(0, 1), target)
+
+        assert torch.isfinite(loss)
+        assert pred.shape == (16, 1)
+        assert pred.device.type == "cuda"
+
+
 class TestETLPTrainer:
     """Test ETLPTrainer class."""
 
@@ -530,7 +639,8 @@ class TestETLPTrainer:
         assert loss.shape == ()
         assert pred.shape == (batch_size, 1)
         assert not torch.isnan(loss)
-=======
+
+
 class TestELLTrainer:
     """Test ELLTrainer class."""
 
@@ -713,7 +823,6 @@ class TestESDRTRLTrainer:
         target = torch.randint(0, 4, (4,))
         loss, pred = trainer.train_sample(data, target)
         assert loss.device.type == "cpu"
->>>>>>> development
 
 
 class TestTPTrainer:
@@ -761,7 +870,7 @@ class TestTPTrainer:
         trainer = trainer.to("cpu")
         # Check S matrix is on cpu
         assert trainer.S.weight.device.type == "cpu"
-        
+
         data = torch.randn(5, 8, 784)  # B=8 >= 2
         target = torch.randint(0, 10, (8,))
         loss, pred = trainer.train_sample(data, target)

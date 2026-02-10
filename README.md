@@ -56,6 +56,9 @@ python main.py --config configs/mnist_eprop_recurrent.yaml
 # Run ES-D-RTRL (BrainTrace linear-memory online) on MNIST
 python main.py --config configs/mnist_esd_rtrl.yaml
 
+# Run OSTL (Online Spatio-Temporal Learning) on MNIST
+python main.py --config configs/mnist_ostl.yaml
+
 # Run S-TLLR on MNIST
 python main.py --config configs/mnist_stllr.yaml
 
@@ -95,6 +98,7 @@ This platform supports systematic comparison of SNN learning algorithms across m
 | **STSF** | Local Learning | Spiking Time Sparse Feedback – bio-plausible, no backprop |
 | **DECOLLE** | Local Learning | Deep Continuous Local Learning with per-layer random readouts |
 | **OTTT** | Local Learning | Online Training Through Time with eligibility traces |
+| **OSTL** | Local / eligibility | Online Spatio-Temporal Learning with per-layer eligibility traces and recursive learning signals (Bohnstingl et al. 2020) |
 | **E-prop** | Local / eligibility | Eligibility propagation; recurrent SRNN, per-timestep updates |
 | **ELL** | Local Learning | Event-based Local Learning (Ma et al. 2022) |
 | **FELL** | Local + backprop | Full Event-based Local Learning |
@@ -298,9 +302,12 @@ checkpoint:
 | `mnist_ell.yaml` | Event-based Local Learning (ELL) on MNIST |
 | `mnist_fell.yaml` | Full Event-based Local Learning (FELL) on MNIST |
 | `mnist_bell.yaml` | Backprop Event-based Local Learning (BELL) on MNIST |
+| `mnist_ostl.yaml` | OSTL (Online Spatio-Temporal Learning) on MNIST |
 | `mnist_stllr.yaml` | S-TLLR (STDP-inspired temporal local learning) on MNIST |
 | `mnist_esd_rtrl.yaml` | ES-D-RTRL (BrainTrace linear-memory online) on MNIST |
-| `benchmark_comparison.yaml` | Multi-algorithm comparison (BPTT, STSF, OTTT, DECOLLE, ELL/FELL/BELL, S-TLLR, ES-D-RTRL) |
+| `benchmark_comparison.yaml` | Multi-algorithm comparison (BPTT, STSF, OTTT, DECOLLE, DRTP, OSTL, ELL/FELL/BELL, S-TLLR, ES-D-RTRL) |
+
+For OSTL-specific details and adaptation notes, see `docs/ostl.md`.
 
 ## CLI Arguments
 
