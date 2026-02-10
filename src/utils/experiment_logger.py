@@ -167,9 +167,12 @@ def set_all_seeds(seed: int, deterministic: bool = True) -> Dict[str, int]:
         seeds["cuda_seed"] = seed
 
         if deterministic:
-            # Enable deterministic algorithms
+            # Enable deterministic algorithms (trades speed for reproducibility)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+        else:
+            # Allow cuDNN to select faster convolution algorithms
+            torch.backends.cudnn.benchmark = True
 
     return seeds
 

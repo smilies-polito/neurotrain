@@ -25,14 +25,18 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.conv_network import ConvFCNetwork
-from networks.fc_network import FCNetwork
+from networks.get_network import get_network
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.drtp_trainer import DRTPTrainer
+from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.etlp_trainer import ETLPTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
@@ -97,6 +101,7 @@ def trainable(
         config.training.batch_size,
         config.data.timesteps,
         flatten=flatten_inputs,
+        device=device,
     )
 
     # Create the network (supports fc and recurrent architectures)
@@ -160,11 +165,11 @@ def trainable(
                 if module.bias is not None:
                     module.bias.requires_grad = False
 
-    # Optimizer
+    # Optimizer (BPTT only; ELL/FELL/BELL use per-layer optimizers in trainer)
     optimizer = None
     if config.training.optimizer is not None:
         optimizer_name = str(config.training.optimizer).lower()
-        if optimizer_name == "adam":
+        if optimizer_name == "adam" and config.trainer.name == "bptt":
             optimizer = optim.Adam(
                 network.parameters(),
                 lr=config.training.learning_rate,
@@ -199,8 +204,8 @@ def trainable(
             )
 
     # Create the trainer
-    # Enable gradients for BPTT (gradient-based), disable for local learners (STSF/DECOLLE)
-    requires_grad = config.trainer.name == "bptt"
+    # Enable gradients for BPTT and ELL/FELL/BELL; disable for STSF/DECOLLE/OTTT/E-prop
+    requires_grad = config.trainer.name in ("bptt", "ell", "fell", "bell")
     torch.set_grad_enabled(requires_grad)
     trainer_kwargs = {
         "network": network,
@@ -350,8 +355,10 @@ def get_trainer(trainer_name: str):
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
         "etlp": ETLPTrainer,
-        # Future trainers will be added here:
-        # "stdp": STDPTrainer,
+        "ell": ELLTrainer,
+        "fell": FELLTrainer,
+        "bell": BELLTrainer,
+        "esd_rtrl": ESDRTRLTrainer,
     }
     if trainer_name not in trainers:
         raise ValueError(

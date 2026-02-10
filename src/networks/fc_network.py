@@ -2,9 +2,12 @@ import snntorch as snn
 import torch
 import torch.nn as nn
 
+from networks.base_snn import BaseSNN
+
+
 #from ..utils.quantizer import fixed_point
 
-class FCNetwork(nn.Module):
+class FCNetwork(BaseSNN):
     """
     Feedforward network with Leaky Integrate-and-Fire (LIF) neurons.
     layer_sizes: [in, hidden1, …, hiddenK, out]
@@ -12,9 +15,9 @@ class FCNetwork(nn.Module):
     """
     def __init__(self, layer_sizes, beta, quant=False, threshold: float = 1.0):
         super().__init__()
-        self.input_size     = layer_sizes[0]
-        self.hidden_size    = layer_sizes[1:-1]
-        self.n_classes      = layer_sizes[-1]
+        self.input_size = layer_sizes[0]
+        self.hidden_size = layer_sizes[1:-1]
+        self._n_classes = layer_sizes[-1]
         # I am including the quantization parameters but I don't plan to use them for now
         self.quant          = quant
         self.threshold      = float(threshold)
@@ -36,7 +39,7 @@ class FCNetwork(nn.Module):
         print(f"Modules: {self.layers}")
         print(f"Input size: {self.input_size}")
         print(f"Hidden size: {self.hidden_size}")
-        print(f"Output size: {self.n_classes}")
+        print(f"Output size: {self._n_classes}")
         print(f"Beta: {beta}")
         print(f"Threshold: {self.threshold}")
 
@@ -60,6 +63,10 @@ class FCNetwork(nn.Module):
             spk_rec.append(spk)
             mem_rec.append(mem)
         return spk_rec, mem_rec
+
+    @property
+    def n_classes(self) -> int:
+        return self._n_classes
 
     def reset(self):
         for layer in self.layers:

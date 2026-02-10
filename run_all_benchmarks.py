@@ -15,12 +15,19 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
+import torch
 from benchmark_runner import benchmark_algorithm, print_comparison_summary, BenchmarkResult
+from utils.experiment_logger import set_all_seeds
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.ell_trainer import ELLTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
+from trainers.stllr_trainer import STLLRTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -31,6 +38,8 @@ RATE_CODED_DATASETS = {
     "MNIST": {
         "layer_sizes": [784, 256, 10],
         "timesteps": 25,
+        "local_classifier_timesteps": 10,  # paper-identical for ELL/FELL/BELL
+        "local_classifier_layer_sizes": [784, 800, 10],  # paper-identical MNISTDNN
         "task": "classification",
         "type": "rate-coded",
     },
@@ -114,6 +123,11 @@ ALGORITHMS = {
     "eprop": EpropTrainer,
     "decolle": DECOLLETrainer,
     "ottt": OTTTTrainer,
+    "ell": ELLTrainer,
+    "fell": FELLTrainer,
+    "bell": BELLTrainer,
+    "stllr": STLLRTrainer,
+    "esd_rtrl": ESDRTRLTrainer,
 }
 
 def _parse_csv_list(value: str):
@@ -224,6 +238,7 @@ def run_all_benchmarks(
     output_dir: str = "./benchmark_results",
     datasets: list = None,
     algorithms: list = None,
+    seed: int = 42,
 ):
     """Run benchmarks for all algorithms on all datasets."""
     
@@ -289,19 +304,49 @@ def run_all_benchmarks(
         dataset_results = {}
         
         for algo_name, trainer_class in selected_algorithms.items():
+            # Reset seed before each algorithm so they all start from the same RNG state
+            # (ensures fair comparison: same weight init, same data order)
+            set_all_seeds(seed, deterministic=True)
+
+            # Paper-identical ELL/FELL/BELL: tau=1, T=10, lr=5e-4, MNIST 784->800->10
+            is_local_classifier = algo_name in ("ell", "fell", "bell")
+            timesteps = (
+                dataset_config.get("local_classifier_timesteps", dataset_config["timesteps"])
+                if is_local_classifier
+                else dataset_config["timesteps"]
+            )
+            layer_sizes = (
+                dataset_config.get("local_classifier_layer_sizes", dataset_config["layer_sizes"])
+                if is_local_classifier and dataset_name == "MNIST"
+                else dataset_config["layer_sizes"]
+            )
+            tau = 1.0 if is_local_classifier else None
+            algo_lr = (
+                dataset_config.get("local_classifier_lr", 5e-4)
+                if is_local_classifier
+                else lr
+            )
+            algo_batch_size = (
+                dataset_config.get("local_classifier_batch_size", 100)
+                if is_local_classifier
+                else batch_size
+            )
+
             try:
                 result = benchmark_algorithm(
                     algorithm_name=algo_name,
                     trainer_class=trainer_class,
                     dataset=dataset_name,
-                    layer_sizes=dataset_config["layer_sizes"],
+                    layer_sizes=layer_sizes,
                     epochs=epochs,
-                    batch_size=batch_size,
-                    lr=lr,
-                    timesteps=dataset_config["timesteps"],
+                    batch_size=algo_batch_size,
+                    lr=algo_lr,
+                    timesteps=timesteps,
                     checkpoint_epochs=checkpoint_epochs,
                     device=device,
                     beta=beta,
+                    tau=tau,
+                    seed=seed,
                 )
                 dataset_results[algo_name] = result
             except Exception as e:
@@ -318,8 +363,14 @@ def run_all_benchmarks(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_file = output_path / f"full_benchmark_{timestamp}.json"
     
-    # Convert to serializable format
-    serializable_results = {}
+    # Convert to serializable format (include env for baseline comparison)
+    serializable_results = {
+        "_env": {
+            "seed": seed,
+            "pytorch_version": torch.__version__,
+            "cuda_available": torch.cuda.is_available(),
+        }
+    }
     for dataset, algos in all_results.items():
         serializable_results[dataset] = {}
         for algo, result in algos.items():
@@ -467,9 +518,26 @@ def main():
         default=None,
         help="Comma-separated algorithm names to run (default: all)",
     )
-    
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+
     args = parser.parse_args()
-    
+
+    # Reproducibility: set seed and print environment for baseline comparison
+    set_all_seeds(args.seed, deterministic=True)
+    cuda_available = torch.cuda.is_available()
+    env_line = (
+        f"Environment: PyTorch {torch.__version__}, "
+        f"CUDA available: {cuda_available}"
+        + (f", CUDA {torch.version.cuda}" if cuda_available else "")
+        + f", seed={args.seed}"
+    )
+    print(env_line)
+
     try:
         run_all_benchmarks(
             epochs=args.epochs,
@@ -479,6 +547,7 @@ def main():
             output_dir=args.output_dir,
             datasets=_parse_csv_list(args.datasets),
             algorithms=_parse_csv_list(args.algorithms),
+            seed=args.seed,
         )
     except ValueError as e:
         parser.error(str(e))

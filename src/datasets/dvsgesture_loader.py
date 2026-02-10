@@ -20,7 +20,7 @@ except ImportError:
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def DVSGestureLoader(batch_size, T):
+def DVSGestureLoader(batch_size, T, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for IBM's DVS Gesture dataset.
     
@@ -97,19 +97,23 @@ def DVSGestureLoader(batch_size, T):
         transform=transform,
     )
     
-    trainloader = DataLoader(
-        train_ds,
+    train_kw = dict(
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
         collate_fn=collate_fn,
+        pin_memory=pin_memory,
     )
+    if seed is not None:
+        train_kw["generator"] = torch.Generator().manual_seed(seed)
+    trainloader = DataLoader(train_ds, **train_kw)
     testloader = DataLoader(
         test_ds,
         batch_size=batch_size,
         shuffle=False,
         num_workers=4,
         collate_fn=collate_fn,
+        pin_memory=pin_memory,
     )
     
     return trainloader, testloader

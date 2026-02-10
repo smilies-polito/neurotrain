@@ -8,6 +8,11 @@ algorithms:
     - ottt # Online Training Through Time (local, eligibility traces)
     - decolle # Deep Continuous Local Learning (local)
     - drtp # Deep RPT (local)
+    - ell # Event-based Local Learning (local)
+    - fell # Full Event-based Local Learning (local)
+    - bell # Backprop Event-based Local Learning (local)
+    - stllr # STDP-inspired Temporal Local Learning Rule
+    - esd_rtrl # ES-D-RTRL (BrainTrace linear-memory online learning)
 
 # Dataset configuration
 dataset: "MNIST"
@@ -19,6 +24,7 @@ layer_sizes: [784, 256, 10]
 
 # Network parameters
 beta: 0.9 # LIF neuron leak factor
+tau: 1   # for ELL/FELL/BELL: decay = exp(-1/tau) (paper-identical)
 
 # Training hyperparameters
 epochs: 50

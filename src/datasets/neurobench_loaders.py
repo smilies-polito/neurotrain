@@ -177,7 +177,7 @@ class MackeyGlassWrapper(Dataset):
         return data[indices]
 
 
-def SpeechCommandsLoader(batch_size: int, timesteps: int):
+def SpeechCommandsLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Google Speech Commands (keyword spotting).
     
@@ -197,19 +197,21 @@ def SpeechCommandsLoader(batch_size: int, timesteps: int):
         train_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=True
+        shuffle=True,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         test_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=False
+        shuffle=False,
+        pin_memory=pin_memory,
     )
-    
+
     return trainloader, testloader
 
 
-def WISDMLoader(batch_size: int, timesteps: int):
+def WISDMLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for WISDM Human Activity Recognition.
     
@@ -228,19 +230,21 @@ def WISDMLoader(batch_size: int, timesteps: int):
         train_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=True
+        shuffle=True,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         test_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=False
+        shuffle=False,
+        pin_memory=pin_memory,
     )
-    
+
     return trainloader, testloader
 
 
-def PrimateReachingLoader(batch_size: int, timesteps: int):
+def PrimateReachingLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Primate Reaching motor prediction.
     
@@ -270,19 +274,21 @@ def PrimateReachingLoader(batch_size: int, timesteps: int):
         train_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=True
+        shuffle=True,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         test_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=False
+        shuffle=False,
+        pin_memory=pin_memory,
     )
-    
+
     return trainloader, testloader
 
 
-def MackeyGlassLoader(batch_size: int, timesteps: int):
+def MackeyGlassLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Mackey-Glass chaotic time series prediction.
     
@@ -312,15 +318,17 @@ def MackeyGlassLoader(batch_size: int, timesteps: int):
         train_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=True
+        shuffle=True,
+        pin_memory=pin_memory,
     )
     testloader = DataLoader(
         test_wrapped,
         batch_size=batch_size,
         num_workers=4,
-        shuffle=False
+        shuffle=False,
+        pin_memory=pin_memory,
     )
-    
+
     return trainloader, testloader
 
 

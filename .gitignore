@@ -103,6 +103,7 @@ Thumbs.db
 # Local config
 local_config.yaml
 .env.local
+.cursor
 
 # Repo for algorithm
 eprop/

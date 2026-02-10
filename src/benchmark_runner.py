@@ -35,7 +35,12 @@ from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.decolle_trainer import DECOLLETrainer
-from networks.fc_network import FCNetwork
+from trainers.ell_trainer import ELLTrainer
+from trainers.fell_trainer import FELLTrainer
+from trainers.bell_trainer import BELLTrainer
+from trainers.stllr_trainer import STLLRTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from networks.get_network import get_network
 from datasets.get_loader import get_loader
 from utils.neurobench_eval import run_neurobench
 
@@ -77,6 +82,36 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (drtp_trainer.py) - DRTP reference",
+    },
+    "ell": {
+        "name": "Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (ell_trainer.py) - Ma et al. 2022",
+    },
+    "fell": {
+        "name": "Full Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": True,
+        "source": "custom (fell_trainer.py) - Ma et al. 2022",
+    },
+    "bell": {
+        "name": "Backprop Event-based Local Learning",
+        "is_local": True,
+        "requires_backprop": True,
+        "source": "custom (bell_trainer.py) - Ma et al. 2022",
+    },
+    "stllr": {
+        "name": "STDP-inspired Temporal Local Learning Rule",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (stllr_trainer.py) - Apolinario & Roy, TMLR 2025",
+    },
+    "esd_rtrl": {
+        "name": "ES-D-RTRL (Eligibility-based Structured Diagonal RTRL)",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (esd_rtrl_trainer.py) - Wang et al. Nature Commun. 2026",
     },
 }
 
@@ -141,10 +176,11 @@ def train_one_epoch(
     total_correct = 0
     total_samples = 0
 
+    non_blocking = device.type == "cuda"
     for data, target in train_loader:
         # Data shape: [batch, features] -> transpose to [timesteps, batch, features]
-        data = data.transpose(0, 1).to(device)
-        target = target.to(device)
+        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+        target = target.to(device, non_blocking=non_blocking)
         batch_size = data.size(1)
 
         trainer.reset()
@@ -181,19 +217,32 @@ def evaluate(
     correct = 0
     total = 0
 
+    non_blocking = device.type == "cuda"
+    use_constant_input = getattr(network, "constant_input_per_timestep", False)
     for data, target in test_loader:
-        data = data.transpose(0, 1).to(device)
-        target = target.to(device)
+        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+        target = target.to(device, non_blocking=non_blocking)
+
+        if use_constant_input:
+            x_const = data.mean(dim=0)
+            if not getattr(network, "uses_raw_input", False) and x_const.shape[1] == 784:
+                x_const = (x_const * 0.3081 + 0.1307).clamp(0.0, 1.0)
 
         network.reset()
         spk_sum = None
         for t in range(data.size(0)):
-            out = network(data[t])
+            x_t = x_const if use_constant_input else data[t]
+            out = network(x_t)
             if isinstance(out, (tuple, list)):
-                spk = out[0]
+                # LocalClassifierNetwork returns (spk_rec, mem_rec); use decoder output mem_rec[-1] for readout.
+                if len(out) >= 2 and isinstance(out[1], (list, tuple)) and len(out[1]) > 0:
+                    to_accum = out[1][-1]
+                else:
+                    spk = out[0]
+                    to_accum = spk[-1]
             else:
-                spk = out
-            spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]
+                to_accum = out
+            spk_sum = to_accum if spk_sum is None else spk_sum + to_accum
 
         preds = spk_sum.argmax(dim=1)
         correct += preds.eq(target).sum().item()
@@ -214,6 +263,8 @@ def benchmark_algorithm(
     checkpoint_epochs: List[int],
     device: str,
     beta: float = 0.9,
+    tau: Optional[float] = None,
+    seed: Optional[int] = None,
 ) -> BenchmarkResult:
     """
     Run benchmark for a single algorithm.
@@ -235,6 +286,7 @@ def benchmark_algorithm(
         checkpoint_epochs: Epochs at which to record accuracy
         device: Device string ("cpu", "cuda")
         beta: LIF neuron beta parameter
+        tau: If set, local classifier uses decay=exp(-1/tau) (paper-identical)
 
     Returns:
         BenchmarkResult with all metrics
@@ -249,29 +301,41 @@ def benchmark_algorithm(
     )
     use_cuda = device.type == "cuda"
 
-    # Get data loaders
-    train_loader, test_loader = get_loader(dataset, batch_size, timesteps)
+    # Get data loaders (pass device for pin_memory when CUDA; seed for deterministic shuffle)
+    # ELL/FELL/BELL on MNIST: use raw [0,1] pixels (no Normalize, no rate coding) to match reference
+    use_raw_loader = (
+        algorithm_name in ("ell", "fell", "bell") and dataset == "MNIST"
+    )
+    train_loader, test_loader = get_loader(
+        dataset,
+        batch_size,
+        timesteps,
+        device=device,
+        seed=seed,
+        raw_for_local_classifier=use_raw_loader,
+    )
 
-    # Create network
-    if algorithm_name == "eprop":
-        from networks.recurrent_srnn import RecurrentSRNN
-
-        if len(layer_sizes) < 3:
-            raise ValueError(
-                "E-prop requires a recurrent architecture encoded as "
-                "`layer_sizes=[n_in, n_rec, n_out]`."
-            )
-        network = RecurrentSRNN(
-            n_in=layer_sizes[0],
-            n_rec=layer_sizes[1],
-            n_out=layer_sizes[-1],
-            threshold=1.0,
-            tau_mem=2.0,
-            tau_out=0.02,
-            dt=1e-3,
-        )
-    else:
-        network = FCNetwork(layer_sizes=layer_sizes, beta=beta)
+    # Create network via get_network (fc, recurrent, local_classifier, stllr)
+    model_arch = (
+        "recurrent"
+        if algorithm_name in ("eprop", "esd_rtrl")
+        else "local_classifier"
+        if algorithm_name in ("ell", "fell", "bell")
+        else "stllr"
+        if algorithm_name == "stllr"
+        else "fc"
+    )
+    # Use default threshold (1.0) for local classifiers; see docs/ell_fell_bell_accuracy_analysis.md
+    # for the 0.2 workaround if encoder does not spike with seed 42.
+    network = get_network(
+        algorithm_name=algorithm_name,
+        model_architecture=model_arch,
+        layer_sizes=layer_sizes,
+        beta=beta,
+        tau=tau,
+    )
+    if use_raw_loader:
+        network.uses_raw_input = True
 
     # Create trainer with appropriate settings
     if algorithm_name == "bptt":
@@ -330,6 +394,35 @@ def benchmark_algorithm(
             batch_size=batch_size,
             quant=False,
             use_optimizer=False,
+            optimizer=None,
+        )
+    elif algorithm_name in ("ell", "fell", "bell"):
+        # ELL/FELL/BELL: gradient-based local learning
+        torch.set_grad_enabled(True)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            use_raw_input=use_raw_loader,
+        )
+    elif algorithm_name == "stllr":
+        # S-TLLR: manual three-factor weight update
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            delay_ls=5,
+        )
+    elif algorithm_name == "esd_rtrl":
+        # ES-D-RTRL: BrainTrace linear-memory online learning
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            etrace_decay=0.9,
+            use_optimizer=True,
             optimizer=None,
         )
     else:
@@ -461,6 +554,11 @@ def run_comparison(
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
+        "ell": ELLTrainer,
+        "fell": FELLTrainer,
+        "bell": BELLTrainer,
+        "stllr": STLLRTrainer,
+        "esd_rtrl": ESDRTRLTrainer,
     }
 
     results = {}
@@ -482,6 +580,7 @@ def run_comparison(
             checkpoint_epochs=config["checkpoint_epochs"],
             device=config["device"],
             beta=config.get("beta", 0.9),
+            tau=config.get("tau"),
         )
         results[algo_name] = result
 
