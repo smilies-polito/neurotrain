@@ -8,7 +8,6 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from networks.etlp_network import ETLPNetwork
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 
@@ -197,30 +196,5 @@ class TestRecurrentSRNN:
     def test_network_reset(self):
         network = RecurrentSRNN(n_in=8, n_rec=16, n_out=4)
         x = torch.randn(1, 8)
-        network(x)
-        network.reset()
-
-
-class TestETLPNetwork:
-    """Test ETLPNetwork class."""
-
-    def test_network_creation(self):
-        network = ETLPNetwork(n_in=12, n_rec=6, n_out=3, dt=1.0)
-        assert network.n_in == 12
-        assert network.n_rec == 6
-        assert network.n_out == 3
-
-    def test_network_forward_shape(self):
-        network = ETLPNetwork(n_in=12, n_rec=6, n_out=3, dt=1.0)
-        batch_size = 4
-        x = torch.rand(batch_size, 12)
-        spk_rec, mem_rec = network(x)
-        assert len(spk_rec) == 2
-        assert spk_rec[-1].shape == (batch_size, 3)
-        assert mem_rec[-1].shape == (batch_size, 3)
-
-    def test_network_reset(self):
-        network = ETLPNetwork(n_in=12, n_rec=6, n_out=3, dt=1.0)
-        x = torch.rand(1, 12)
         network(x)
         network.reset()

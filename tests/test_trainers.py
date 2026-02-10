@@ -8,7 +8,6 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from networks.etlp_network import ETLPNetwork
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
@@ -494,7 +493,7 @@ class TestETLPTrainer:
 
     @pytest.fixture
     def network(self):
-        return ETLPNetwork(n_in=16, n_rec=8, n_out=4, dt=1.0)
+        return FCNetwork(layer_sizes=[16, 8, 4], beta=0.9)
 
     @pytest.fixture
     def trainer(self, network):

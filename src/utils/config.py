@@ -76,21 +76,17 @@ class DRTPConfig:
 class ETLPConfig:
     """Event-based Three-factor Local Plasticity (ETLP) configuration."""
 
-    n_rec: int = 200
-    dt: float = 1.0
-    tau_v: float = 80.0
-    tau_a: float = 10.0
-    tau_o: float = 80.0
-    theta: float = 5.0
-    thr: float = 1.0
-    n_ref: int = 5
-    recurrent: bool = False
-    train_rec: bool = False
-    spike_scale: float = 0.3
+    trace_decay: float = 0.9
+    surrogate_scale: float = 0.3
     voltage_reg: float = 0.0
     weight_l1: float = 0.0
     weight_l2: float = 0.0
     update_rate_hz: float = 100.0
+    dt_ms: float = 1.0
+    feedback_distribution: str = (
+        "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    )
+    feedback_scale: float = 1.0
 
 
 @dataclass
@@ -414,16 +410,23 @@ def validate_config(config: Config) -> List[str]:
         issues.append("drtp.feedback_scale must be positive")
 
     # ETLP validation
-    if config.etlp.n_rec <= 0:
-        issues.append("etlp.n_rec must be positive")
-    if config.etlp.dt <= 0:
-        issues.append("etlp.dt must be positive")
-    if config.etlp.tau_v <= 0 or config.etlp.tau_a <= 0 or config.etlp.tau_o <= 0:
-        issues.append("etlp.tau_v, etlp.tau_a, and etlp.tau_o must be positive")
-    if config.etlp.thr <= 0:
-        issues.append("etlp.thr must be positive")
+    if config.etlp.trace_decay <= 0:
+        issues.append("etlp.trace_decay must be positive")
+    if config.etlp.surrogate_scale <= 0:
+        issues.append("etlp.surrogate_scale must be positive")
+    if config.etlp.dt_ms <= 0:
+        issues.append("etlp.dt_ms must be positive")
     if config.etlp.update_rate_hz < 0:
         issues.append("etlp.update_rate_hz must be non-negative")
+    valid_etlp_distributions = ["kaiming_uniform", "uniform", "normal"]
+    if config.etlp.feedback_distribution not in valid_etlp_distributions:
+        issues.append(
+            f"etlp.feedback_distribution must be one of {valid_etlp_distributions}"
+        )
+    if config.etlp.feedback_scale <= 0:
+        issues.append("etlp.feedback_scale must be positive")
+    if config.trainer.name == "etlp" and config.model.architecture != "fc":
+        issues.append("ETLP currently supports model.architecture == 'fc' only")
 
     return issues
 

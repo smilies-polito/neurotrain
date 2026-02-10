@@ -25,7 +25,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.conv_network import ConvFCNetwork
-from networks.etlp_network import ETLPNetwork
 from networks.fc_network import FCNetwork
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
@@ -93,8 +92,6 @@ def trainable(
 
     # Get data loaders
     flatten_inputs = config.model.architecture != "conv"
-    if config.trainer.name == "etlp":
-        flatten_inputs = True
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
@@ -103,26 +100,7 @@ def trainable(
     )
 
     # Create the network (supports fc and recurrent architectures)
-    if config.trainer.name == "etlp":
-        n_in = config.model.layer_sizes[0]
-        n_out = config.model.layer_sizes[-1]
-        network = ETLPNetwork(
-            n_in=n_in,
-            n_rec=config.etlp.n_rec,
-            n_out=n_out,
-            dt=config.etlp.dt,
-            tau_v=config.etlp.tau_v,
-            tau_a=config.etlp.tau_a,
-            tau_o=config.etlp.tau_o,
-            theta=config.etlp.theta,
-            thr=config.etlp.thr,
-            n_ref=config.etlp.n_ref,
-            recurrent=config.etlp.recurrent,
-            train_rec=config.etlp.train_rec,
-            spike_scale=config.etlp.spike_scale,
-            keep_trace=False,
-        )
-    elif config.model.architecture == "recurrent":
+    if config.model.architecture == "recurrent":
         from networks.recurrent_srnn import RecurrentSRNN
 
         # Match original e-prop defaults for comparison
@@ -251,10 +229,15 @@ def trainable(
         )
     if issubclass(trainer_class, ETLPTrainer):
         trainer_kwargs.update(
+            trace_decay=config.etlp.trace_decay,
+            surrogate_scale=config.etlp.surrogate_scale,
             voltage_reg=config.etlp.voltage_reg,
             weight_l1=config.etlp.weight_l1,
             weight_l2=config.etlp.weight_l2,
             update_rate_hz=config.etlp.update_rate_hz,
+            dt_ms=config.etlp.dt_ms,
+            feedback_distribution=config.etlp.feedback_distribution,
+            feedback_scale=config.etlp.feedback_scale,
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
