@@ -37,6 +37,7 @@ from trainers.bell_trainer import BELLTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from trainers.tp_trainer import TPTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
@@ -205,7 +206,7 @@ def trainable(
 
     # Create the trainer
     # Enable gradients for BPTT and ELL/FELL/BELL; disable for STSF/DECOLLE/OTTT/E-prop
-    requires_grad = config.trainer.name in ("bptt", "ell", "fell", "bell")
+    requires_grad = config.trainer.name in ("bptt", "ell", "fell", "bell", "tp")
     torch.set_grad_enabled(requires_grad)
     trainer_kwargs = {
         "network": network,
@@ -359,6 +360,7 @@ def get_trainer(trainer_name: str):
         "fell": FELLTrainer,
         "bell": BELLTrainer,
         "esd_rtrl": ESDRTRLTrainer,
+        "tp": TPTrainer,
     }
     if trainer_name not in trainers:
         raise ValueError(

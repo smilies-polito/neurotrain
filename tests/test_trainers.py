@@ -714,3 +714,87 @@ class TestESDRTRLTrainer:
         loss, pred = trainer.train_sample(data, target)
         assert loss.device.type == "cpu"
 >>>>>>> development
+
+
+class TestTPTrainer:
+    """Test TPTrainer class (Trace Propagation)."""
+
+    @pytest.fixture
+    def network(self):
+        """Create an FCNetwork for TP."""
+        return FCNetwork(layer_sizes=[784, 100, 10], beta=0.98)
+
+    @pytest.fixture
+    def trainer(self, network):
+        from trainers.tp_trainer import TPTrainer
+
+        return TPTrainer(
+            network=network,
+            lr=0.001,
+            batch_size=32,  # Must be >= 2
+            alpha=0.77,
+            beta=0.98,
+            vth=0.66,
+            use_optimizer=True,
+        )
+
+    def test_tp_trainer_smoke(self, trainer):
+        """Smoke test: run train_sample, check loss and pred shape."""
+        T, B, F = 10, 32, 784  # B >= 2 required
+        data = torch.randn(T, B, F)
+        target = torch.randint(0, 10, (B,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (B,)
+        assert not torch.isnan(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 9
+
+    def test_tp_trainer_reset(self, trainer):
+        """Test that reset runs without error."""
+        trainer.reset()
+        # New implementation is stateless across batches (except network state)
+        # So just ensure it runs.
+
+    def test_tp_trainer_device_transfer(self, trainer):
+        """Test moving trainer to CPU."""
+        trainer = trainer.to("cpu")
+        # Check S matrix is on cpu
+        assert trainer.S.weight.device.type == "cpu"
+        
+        data = torch.randn(5, 8, 784)  # B=8 >= 2
+        target = torch.randint(0, 10, (8,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+
+    def test_tp_trainer_weights_change(self, network):
+        """Test that training modifies weights."""
+        from trainers.tp_trainer import TPTrainer
+
+        trainer = TPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=16,  # Must be >= 2
+        )
+        initial_weights = network.layers[0].weight.data.clone()
+
+        data = torch.randn(5, 16, 784)
+        target = torch.randint(0, 10, (16,))
+        trainer.train_sample(data, target)
+
+        assert not torch.allclose(initial_weights, network.layers[0].weight.data)
+
+    def test_tp_trainer_has_target_propagator(self, trainer):
+        """Test that trainer has target propagator layer S."""
+        assert hasattr(trainer, "S")
+        assert isinstance(trainer.S, torch.nn.Linear)
+        # Target propagator maps n_classes to first hidden size
+        assert trainer.S.in_features == 10  # n_classes
+        assert trainer.S.out_features == 100  # first hidden
+
+    def test_tp_trainer_batch_size_check(self, network):
+        """Test that batch size < 2 raises error."""
+        from trainers.tp_trainer import TPTrainer
+
+        with pytest.raises(ValueError, match="TP requires batch_size >= 2"):
+            TPTrainer(network=network, lr=0.001, batch_size=1)
