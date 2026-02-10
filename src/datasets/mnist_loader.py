@@ -1,14 +1,18 @@
 from pathlib import Path
+
 import torch
-from torchvision.datasets import MNIST
-from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
+from torchvision.datasets import MNIST
+from torchvision.transforms import Compose, Lambda, Normalize, ToTensor
+
 from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def MNISTLoaderRaw(batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None):
+def MNISTLoaderRaw(
+    batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None
+):
     """
     Returns DataLoaders for MNIST with raw [0, 1] pixels (no Normalize, no rate coding).
 
@@ -16,11 +20,13 @@ def MNISTLoaderRaw(batch_size, T, flatten: bool = True, pin_memory: bool = False
     Matches the reference (Deep Spike Learning with Local Classifiers): ToTensor() only.
     Used for ELL/FELL/BELL to feed the same raw image every timestep.
     """
-    transform = Compose([
-        ToTensor(),
-        Lambda(lambda x: x.view(-1)),
-        Lambda(lambda x: x.unsqueeze(0).expand(T, -1)),
-    ])
+    transform = Compose(
+        [
+            ToTensor(),
+            Lambda(lambda x: x.view(-1)),
+            Lambda(lambda x: x.unsqueeze(0).expand(T, -1)),
+        ]
+    )
     train_kw = dict(
         batch_size=batch_size,
         num_workers=4,
@@ -43,13 +49,16 @@ def MNISTLoaderRaw(batch_size, T, flatten: bool = True, pin_memory: bool = False
     return trainloader, testloader
 
 
-def MNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
+def MNISTLoader(
+    batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None
+):
     """
     Returns DataLoaders for MNIST, with rate-coded spikes over T timesteps.
 
     Args:
         batch_size: Batch size.
         T: Number of timesteps for rate coding.
+        flatten: If True, flatten spatial dimensions into feature vectors.
         pin_memory: If True, use pinned memory for faster CPU->GPU transfer (CUDA).
         seed: Optional int. If set, train DataLoader uses this seed for shuffle (deterministic order).
     """

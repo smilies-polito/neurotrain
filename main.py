@@ -26,17 +26,17 @@ from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.conv_network import ConvFCNetwork
 from networks.get_network import get_network
+from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
 from trainers.drtp_trainer import DRTPTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
-from trainers.bell_trainer import BELLTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
-from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.tp_trainer import TPTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
@@ -105,7 +105,7 @@ def trainable(
         device=device,
     )
 
-    # Create the network (supports fc and recurrent architectures)
+    # Create the network (conv uses dedicated class; others go through network factory)
     if config.model.architecture == "recurrent":
         from networks.recurrent_srnn import RecurrentSRNN
 
@@ -152,9 +152,12 @@ def trainable(
             quant=config.model.quantization,
         )
     else:
-        network = FCNetwork(
+        network = get_network(
+            algorithm_name=config.trainer.name,
+            model_architecture=config.model.architecture,
             layer_sizes=config.model.layer_sizes,
             beta=config.model.beta,
+            tau=config.model.tau,
             quant=config.model.quantization,
             threshold=config.model.threshold,
         )
@@ -166,11 +169,11 @@ def trainable(
                 if module.bias is not None:
                     module.bias.requires_grad = False
 
-    # Optimizer (BPTT only; ELL/FELL/BELL use per-layer optimizers in trainer)
+    # Optional optimizer (used by trainers that support optimizer-based updates)
     optimizer = None
     if config.training.optimizer is not None:
         optimizer_name = str(config.training.optimizer).lower()
-        if optimizer_name == "adam" and config.trainer.name == "bptt":
+        if optimizer_name == "adam":
             optimizer = optim.Adam(
                 network.parameters(),
                 lr=config.training.learning_rate,

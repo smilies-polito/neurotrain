@@ -394,15 +394,25 @@ def validate_config(config: Config) -> List[str]:
     # Model architecture validation
     valid_architectures = ["fc", "local_classifier", "recurrent", "stllr"]
     if config.model.architecture not in valid_architectures:
-        issues.append(
-            f"model.architecture must be one of {valid_architectures}"
-        )
+        issues.append(f"model.architecture must be one of {valid_architectures}")
 
     # Trainer validation
-    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"]
+    # valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"]
     valid_trainers = [
-        "stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell",
-        "stllr", "esd_rtrl", "stdp", "tp",
+        "stsf",
+        "bptt",
+        "decolle",
+        "eprop",
+        "ottt",
+        "ell",
+        "fell",
+        "bell",
+        "stllr",
+        "esd_rtrl",
+        "stdp",
+        "tp",
+        "etlp",
+        "drtp",
     ]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")

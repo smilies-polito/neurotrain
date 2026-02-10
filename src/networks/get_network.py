@@ -12,7 +12,6 @@ from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 
-
 # Compatibility: (algorithm, model_architecture) -> use this model
 # Algorithms that require specific models will override model_architecture
 _ALGORITHM_MODEL_OVERRIDE = {
@@ -49,9 +48,7 @@ def get_network(
         ValueError: If algorithm-model combination is incompatible.
     """
     # Some algorithms require a specific model regardless of config
-    effective_arch = _ALGORITHM_MODEL_OVERRIDE.get(
-        algorithm_name, model_architecture
-    )
+    effective_arch = _ALGORITHM_MODEL_OVERRIDE.get(algorithm_name, model_architecture)
 
     if effective_arch == "recurrent":
         if algorithm_name not in ("eprop", "esd_rtrl"):
@@ -88,7 +85,15 @@ def get_network(
         )
 
     if effective_arch == "local_classifier":
-        if algorithm_name not in ("ell", "fell", "bell", "bptt", "stsf", "decolle", "ottt"):
+        if algorithm_name not in (
+            "ell",
+            "fell",
+            "bell",
+            "bptt",
+            "stsf",
+            "decolle",
+            "ottt",
+        ):
             raise ValueError(
                 f"LocalClassifierNetwork is for ell/fell/bell or fc-compatible algorithms, "
                 f"got {algorithm_name}"
@@ -103,7 +108,9 @@ def get_network(
             if algorithm_name == "fell"
             else "bell"
         )
-        lc_kwargs = {k: v for k, v in kwargs.items() if k in ("threshold", "bias", "fa")}
+        lc_kwargs = {
+            k: v for k, v in kwargs.items() if k in ("threshold", "bias", "fa")
+        }
         return LocalClassifierNetwork(
             layer_sizes=layer_sizes,
             beta=beta,
@@ -122,4 +129,5 @@ def get_network(
         layer_sizes=layer_sizes,
         beta=beta,
         quant=kwargs.get("quant", False),
+        threshold=kwargs.get("threshold", 1.0),
     )
