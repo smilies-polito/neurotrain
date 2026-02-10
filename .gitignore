@@ -104,6 +104,4 @@ Thumbs.db
 local_config.yaml
 .env.local
 .cursor
-
-# Eprop implementation Frankler
-eprop/
+.zed
