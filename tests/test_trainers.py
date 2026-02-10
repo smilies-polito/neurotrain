@@ -9,14 +9,24 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.fc_network import FCNetwork
+from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from trainers.base_trainer import BaseTrainer
+from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
+<<<<<<< HEAD
 from trainers.drtp_trainer import DRTPTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.etlp_trainer import ETLPTrainer
+=======
+from trainers.ell_trainer import ELLTrainer
+from trainers.eprop_trainer import EpropTrainer
+from trainers.fell_trainer import FELLTrainer
+>>>>>>> development
 from trainers.stsf_trainer import STSFTrainer
+from trainers.stllr_trainer import STLLRTrainer
+from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 
 
 class TestBaseTrainer:
@@ -425,6 +435,7 @@ class TestDECOLLETrainer:
         assert not torch.allclose(before, network.layers[0].weight)
 
 
+<<<<<<< HEAD
 class TestDRTPTrainer:
     """Test DRTPTrainer class."""
 
@@ -519,3 +530,187 @@ class TestETLPTrainer:
         assert loss.shape == ()
         assert pred.shape == (batch_size, 1)
         assert not torch.isnan(loss)
+=======
+class TestELLTrainer:
+    """Test ELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="ell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return ELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_creation(self, trainer):
+        assert trainer.lr == 0.001
+        assert len(trainer.optimizers) == 2  # 2 blocks
+
+    def test_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+        assert not torch.isnan(loss)
+
+    def test_trainer_predictions_valid(self, trainer):
+        data = torch.randn(5, 16, 784)
+        target = torch.randint(0, 10, (16,))
+        loss, pred = trainer.train_sample(data, target)
+        assert pred.min() >= 0
+        assert pred.max() <= 9
+
+    def test_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 4, 784)
+        target = torch.randint(0, 10, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+
+
+class TestFELLTrainer:
+    """Test FELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="fell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return FELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+
+
+class TestBELLTrainer:
+    """Test BELLTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        return LocalClassifierNetwork(
+            layer_sizes=[784, 100, 10],
+            beta=0.9,
+            mode="bell",
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return BELLTrainer(network=network, lr=0.001, batch_size=32)
+
+    def test_trainer_train_sample(self, trainer):
+        data = torch.randn(5, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+
+
+class TestSTLLRTrainer:
+    """Test STLLRTrainer class."""
+
+    @pytest.fixture
+    def network(self):
+        from networks.stllr_network import STLLRNetwork
+
+        return STLLRNetwork(
+            layer_sizes=[784, 100, 10],
+            threshold=0.6,
+            leak=2.0,
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return STLLRTrainer(
+            network=network,
+            lr=0.001,
+            batch_size=32,
+            delay_ls=5,
+        )
+
+    def test_stllr_trainer_smoke(self, trainer):
+        """Smoke test: instantiate and run train_sample."""
+        data = torch.randn(10, 32, 784)
+        target = torch.randint(0, 10, (32,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (32,)
+        assert not torch.isnan(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 9
+
+    def test_stllr_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_stllr_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 8, 784)
+        target = torch.randint(0, 10, (8,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+
+
+class TestESDRTRLTrainer:
+    """Test ESDRTRLTrainer class (ES-D-RTRL, BrainTrace)."""
+
+    @pytest.fixture
+    def network(self):
+        """Create a small recurrent network for ES-D-RTRL."""
+        return RecurrentSRNN(
+            n_in=8,
+            n_rec=16,
+            n_out=4,
+            threshold=1.0,
+            tau_mem=2.0,
+            tau_out=0.02,
+            dt=1e-3,
+        )
+
+    @pytest.fixture
+    def trainer(self, network):
+        return ESDRTRLTrainer(
+            network=network,
+            lr=0.001,
+            batch_size=8,
+            etrace_decay=0.9,
+            use_optimizer=True,
+        )
+
+    def test_esd_rtrl_trainer_smoke(self, trainer):
+        """Smoke test: run train_sample, check loss and pred shape."""
+        T, B, F = 5, 8, 8
+        data = torch.randn(T, B, F)
+        target = torch.randint(0, 4, (B,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.dim() == 0
+        assert pred.shape == (B, 1)
+        assert not torch.isnan(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 3
+
+    def test_esd_rtrl_trainer_reset(self, trainer):
+        trainer.reset()
+
+    def test_esd_rtrl_trainer_device_transfer(self, trainer):
+        trainer = trainer.to("cpu")
+        data = torch.randn(5, 4, 8)
+        target = torch.randint(0, 4, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.device.type == "cpu"
+>>>>>>> development

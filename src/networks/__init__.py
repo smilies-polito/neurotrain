@@ -1,7 +1,6 @@
 """Neural network architectures for SNNs."""
 
-from networks.base_network import ExampleNet
-from networks.conv_network import ConvFCNetwork
+from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from networks.get_network import get_network
