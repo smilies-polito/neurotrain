@@ -1,15 +1,15 @@
-# MNIST DRTP FC2-500 Configuration
-# Direct Random Target Projection (DRTP) training on MNIST
+# MNIST ETLP Configuration
+# Event-based Three-factor Local Plasticity (ETLP) training on MNIST
 
 experiment:
-    name: "DRTP_MNIST_FC2_500"
+    name: "ETLP_MNIST"
     seed: 42
     deterministic: true
     log_dir: "./experiments"
 
 model:
     architecture: "fc"
-    layer_sizes: [784, 500, 500, 10] # [input, hidden..., output]
+    layer_sizes: [784, 200, 10] # [input, hidden, output]
     beta: 0.9375
     threshold: 1.0
     quantization: false
@@ -17,20 +17,27 @@ model:
 training:
     epochs: 30
     batch_size: 256
-    learning_rate: 0.01
-    optimizer: null
+    learning_rate: 0.0005
+    optimizer: "adam" # Use optimizer-driven ETLP updates
+    weight_decay: 0.0
+    freeze_conv: false
 
 trainer:
-    name: "drtp"
-    update_last: false # false = per-timestep updates
-    update_every: 1 # update every timestep
+    name: "etlp"
+    update_last: false
+    update_every: 1
     seq_batch: 1
 
-drtp:
-    loss: "mse"
+etlp:
+    trace_decay: 0.9375
+    surrogate_scale: 0.3
+    voltage_reg: 0.0
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 100.0
+    dt_ms: 1.0
     feedback_distribution: "kaiming_uniform"
     feedback_scale: 1.0
-    fixed_feedback: true
 
 data:
     dataset: "MNIST"
