@@ -18,6 +18,10 @@ complete-test-short:
 run-all-mnist:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
 
+# Trace Propagation on MNIST
+run-tp-mnist:
+	$(PYTHON) main.py --config configs/mnist_tp.yaml
+
 # Remove Python bytecode and caches
 clean:
 	find . -name "__pycache__" -type d -exec rm -rf {} +
