@@ -4,12 +4,14 @@ class Rate:
     """
     Simulate rate-coded spike trains from static images over T timesteps.
     """
-    def __init__(self, T):
+
+    def __init__(self, T, flatten: bool = True):
         self.T = T
+        self.flatten = flatten
 
     def __call__(self, input):
-        # Flatten image to vector
-        input = input.view(-1)
+        if self.flatten:
+            input = input.view(-1)
         # Allocate spike tensor [T x features]
         output = torch.zeros((self.T, *input.shape), device=input.device)
         for t in range(self.T):

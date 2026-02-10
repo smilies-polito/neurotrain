@@ -6,7 +6,7 @@ import numpy as np                                                      # type: 
 from torch.utils.data import DataLoader                                 # type: ignore
 from torchvision.datasets import MNIST, CIFAR10, FashionMNIST           # type: ignore
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda # type: ignore
-from torchvision.datasets import SVHN                                   # type: ignore 
+from torchvision.datasets import SVHN                                   # type: ignore
 from tonic.datasets import DVSGesture                                   # type: ignore
 # import custom dataset loaders
 from datasets.mnist_loader import MNISTLoader, MNISTLoaderRaw
@@ -44,7 +44,7 @@ NEUROBENCH_REGRESSION = ["PrimateReaching", "MackeyGlass"]
 ALL_DATASETS = STANDARD_DATASETS + NEUROBENCH_CLASSIFICATION + NEUROBENCH_REGRESSION
 
 
-def get_loader(name, batch_size, T, device=None, seed=None, raw_for_local_classifier=False):
+def get_loader(name, batch_size, T, flatten: bool = True, device=None, seed=None, raw_for_local_classifier=False):
     """
     Get train and test loaders for a dataset.
 
@@ -73,9 +73,9 @@ def get_loader(name, batch_size, T, device=None, seed=None, raw_for_local_classi
     if name == "MNIST":
         if raw_for_local_classifier:
             return MNISTLoaderRaw(batch_size, T, pin_memory=pin_memory, seed=seed)
-        return MNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return MNISTLoader(batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed)
     elif name == "CIFAR10":
-        return CIFAR10Loader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return CIFAR10Loader(batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed)
     elif name == "FashionMNIST":
         return FashionMNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
     elif name == "SVHN":

@@ -28,6 +28,7 @@ class CheckpointData:
     # Model and optimizer
     model_state_dict: Dict[str, Any]
     optimizer_state_dict: Optional[Dict[str, Any]]
+    trainer_state_dict: Optional[Dict[str, Any]]
 
     # Training state
     epoch: int
@@ -184,6 +185,7 @@ class CheckpointManager:
         metrics: Dict[str, float],
         config: Dict[str, Any],
         filename: str,
+        trainer_state_dict: Optional[Dict[str, Any]] = None,
     ) -> Path:
         """
         Save a checkpoint.
@@ -204,6 +206,7 @@ class CheckpointManager:
         checkpoint = {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict() if optimizer else None,
+            "trainer_state_dict": trainer_state_dict,
             "epoch": epoch,
             "global_step": self.global_step,
             "best_metric": self.best_metric,
@@ -226,6 +229,7 @@ class CheckpointManager:
         epoch: int,
         metrics: Dict[str, float],
         config: Dict[str, Any],
+        trainer_state_dict: Optional[Dict[str, Any]] = None,
     ) -> Optional[Path]:
         """
         Save checkpoint if conditions are met (best, latest, or periodic).
@@ -260,19 +264,37 @@ class CheckpointManager:
         # Save best checkpoint
         if self.save_best and is_best:
             saved_path = self.save(
-                model, optimizer, epoch, metrics, config, "checkpoint_best.pt"
+                model,
+                optimizer,
+                epoch,
+                metrics,
+                config,
+                "checkpoint_best.pt",
+                trainer_state_dict=trainer_state_dict,
             )
 
         # Save latest checkpoint
         if self.save_latest:
             saved_path = self.save(
-                model, optimizer, epoch, metrics, config, "checkpoint_latest.pt"
+                model,
+                optimizer,
+                epoch,
+                metrics,
+                config,
+                "checkpoint_latest.pt",
+                trainer_state_dict=trainer_state_dict,
             )
 
         # Save periodic checkpoint
         if self.save_every > 0 and (epoch + 1) % self.save_every == 0:
             saved_path = self.save(
-                model, optimizer, epoch, metrics, config, f"checkpoint_epoch_{epoch}.pt"
+                model,
+                optimizer,
+                epoch,
+                metrics,
+                config,
+                f"checkpoint_epoch_{epoch}.pt",
+                trainer_state_dict=trainer_state_dict,
             )
             self._cleanup_old_checkpoints()
 
@@ -323,6 +345,7 @@ class CheckpointManager:
         return CheckpointData(
             model_state_dict=checkpoint["model_state_dict"],
             optimizer_state_dict=checkpoint.get("optimizer_state_dict"),
+            trainer_state_dict=checkpoint.get("trainer_state_dict"),
             epoch=checkpoint["epoch"],
             global_step=checkpoint.get("global_step", 0),
             best_metric=checkpoint.get("best_metric", 0),
@@ -395,8 +418,9 @@ class CheckpointManager:
 
 def resume_training(
     checkpoint_path: Union[str, Path],
-    model: nn.Module,
+    model: Optional[nn.Module] = None,
     optimizer: Optional[torch.optim.Optimizer] = None,
+    trainer: Optional[nn.Module] = None,
     restore_rng: bool = True,
 ) -> CheckpointData:
     """
@@ -404,8 +428,9 @@ def resume_training(
 
     Args:
         checkpoint_path: Path to checkpoint file
-        model: PyTorch model to restore
+        model: PyTorch model to restore (optional)
         optimizer: PyTorch optimizer to restore (optional)
+        trainer: Trainer instance to restore (optional)
         restore_rng: Whether to restore RNG state
 
     Returns:
@@ -415,11 +440,19 @@ def resume_training(
     checkpoint = manager.load(checkpoint_path)
 
     # Restore model state
-    model.load_state_dict(checkpoint.model_state_dict)
+    if model is not None:
+        model.load_state_dict(checkpoint.model_state_dict)
 
     # Restore optimizer state
     if optimizer is not None and checkpoint.optimizer_state_dict is not None:
         optimizer.load_state_dict(checkpoint.optimizer_state_dict)
+
+    # Restore trainer state (if provided)
+    if trainer is not None and checkpoint.trainer_state_dict is not None:
+        if hasattr(trainer, "load_checkpoint_state"):
+            trainer.load_checkpoint_state(checkpoint.trainer_state_dict)
+        else:
+            trainer.load_state_dict(checkpoint.trainer_state_dict, strict=False)
 
     # Restore RNG state for exact reproducibility
     if restore_rng and checkpoint.rng_state:
@@ -430,4 +463,3 @@ def resume_training(
     print(f"Best {manager.metric_name}: {checkpoint.best_metric:.4f} (epoch {checkpoint.best_epoch})")
 
     return checkpoint
-

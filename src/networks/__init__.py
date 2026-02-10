@@ -9,6 +9,7 @@ from networks.base_network import ExampleNet
 __all__ = [
     "BaseSNN",
     "FCNetwork",
+    "ConvFCNetwork",
     "RecurrentSRNN",
     "get_network",
     "ExampleNet",

@@ -8,7 +8,7 @@ from datasets.rate import Rate
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def MNISTLoaderRaw(batch_size, T, pin_memory: bool = False, seed=None):
+def MNISTLoaderRaw(batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for MNIST with raw [0, 1] pixels (no Normalize, no rate coding).
 
@@ -53,12 +53,14 @@ def MNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
         pin_memory: If True, use pinned memory for faster CPU->GPU transfer (CUDA).
         seed: Optional int. If set, train DataLoader uses this seed for shuffle (deterministic order).
     """
-    transform = Compose([
+    transforms = [
         ToTensor(),
         Normalize((0.1307,), (0.3081,)),
-        Rate(T),
-        Lambda(lambda x: torch.flatten(x, start_dim=1))
-    ])
+        Rate(T, flatten=flatten),
+    ]
+    if flatten:
+        transforms.append(Lambda(lambda x: torch.flatten(x, start_dim=1)))
+    transform = Compose(transforms)
     train_kw = dict(
         batch_size=batch_size,
         num_workers=4,

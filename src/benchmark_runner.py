@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from trainers.base_trainer import BaseTrainer
 from trainers.bptt_trainer import BPTTTrainer
+from trainers.drtp_trainer import DRTPTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.eprop_trainer import EpropTrainer
@@ -75,6 +76,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (eprop_trainer.py) - Bellec et al. 2020",
+    },
+    "drtp": {
+        "name": "Direct Random Target Projection",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (drtp_trainer.py) - DRTP reference",
     },
     "ell": {
         "name": "Event-based Local Learning",
@@ -378,6 +385,17 @@ def benchmark_algorithm(
             surrogate="sigmoid",
             surrogate_scale=2.0,
         )
+    elif algorithm_name == "drtp":
+        # DRTP uses target-projection signals with fixed random feedback
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            quant=False,
+            use_optimizer=False,
+            optimizer=None,
+        )
     elif algorithm_name in ("ell", "fell", "bell"):
         # ELL/FELL/BELL: gradient-based local learning
         torch.set_grad_enabled(True)
@@ -535,6 +553,7 @@ def run_comparison(
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ottt": OTTTTrainer,
+        "drtp": DRTPTrainer,
         "ell": ELLTrainer,
         "fell": FELLTrainer,
         "bell": BELLTrainer,

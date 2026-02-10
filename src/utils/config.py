@@ -7,7 +7,7 @@ Uses dataclasses for typed, validated configuration.
 
 import json
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -30,6 +30,7 @@ class ModelConfig:
 
     architecture: str = "fc"  # "fc", "local_classifier", "recurrent"
     layer_sizes: List[int] = field(default_factory=lambda: [784, 200, 10])
+    conv_layers: List[Dict[str, int]] = field(default_factory=list)
     beta: float = 0.9375
     tau: Optional[float] = None  # for ELL/FELL/BELL: decay = exp(-1/tau) when set
     threshold: float = 1.0
@@ -43,18 +44,50 @@ class TrainingConfig:
     epochs: int = 100
     batch_size: int = 256
     learning_rate: float = 0.01
-    optimizer: Optional[str] = None  # None for manual updates, "adam", "sgd"
+    optimizer: Optional[str] = (
+        None  # None for manual updates, "adam", "sgd", "nag", "rmsprop"
+    )
     weight_decay: float = 0.0
+    freeze_conv: bool = False
 
 
 @dataclass
 class TrainerConfig:
     """Trainer-specific configuration."""
 
-    name: str = "stsf"  # "stsf", "bptt", "eprop", "stdp"
+    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"
     update_last: bool = False
     update_every: int = 1
     seq_batch: int = 1
+
+
+@dataclass
+class DRTPConfig:
+    """Direct Random Target Projection configuration."""
+
+    loss: str = "mse"  # "mse", "bce", "ce"
+    feedback_distribution: str = (
+        "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    )
+    feedback_scale: float = 1.0
+    fixed_feedback: bool = True
+
+
+@dataclass
+class ETLPConfig:
+    """Event-based Three-factor Local Plasticity (ETLP) configuration."""
+
+    trace_decay: float = 0.9
+    surrogate_scale: float = 0.3
+    voltage_reg: float = 0.0
+    weight_l1: float = 0.0
+    weight_l2: float = 0.0
+    update_rate_hz: float = 100.0
+    dt_ms: float = 1.0
+    feedback_distribution: str = (
+        "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
+    )
+    feedback_scale: float = 1.0
 
 
 @dataclass
@@ -97,6 +130,8 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     trainer: TrainerConfig = field(default_factory=TrainerConfig)
+    drtp: DRTPConfig = field(default_factory=DRTPConfig)
+    etlp: ETLPConfig = field(default_factory=ETLPConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -151,6 +186,8 @@ class Config:
             model=ModelConfig(**config_dict.get("model", {})),
             training=TrainingConfig(**config_dict.get("training", {})),
             trainer=TrainerConfig(**config_dict.get("trainer", {})),
+            drtp=DRTPConfig(**config_dict.get("drtp", {})),
+            etlp=ETLPConfig(**config_dict.get("etlp", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -303,6 +340,18 @@ def validate_config(config: Config) -> List[str]:
     if config.model.beta <= 0 or config.model.beta >= 1:
         issues.append("model.beta should be in (0, 1)")
 
+    if config.model.architecture == "conv":
+        if not config.model.conv_layers:
+            issues.append("model.conv_layers must be provided for conv architecture")
+        else:
+            required_keys = {"out_channels", "kernel_size"}
+            for idx, layer in enumerate(config.model.conv_layers):
+                missing = required_keys - set(layer.keys())
+                if missing:
+                    issues.append(
+                        f"model.conv_layers[{idx}] missing keys: {sorted(missing)}"
+                    )
+
     # Training validation
     if config.training.epochs <= 0:
         issues.append("training.epochs must be positive")
@@ -313,18 +362,31 @@ def validate_config(config: Config) -> List[str]:
     if config.training.learning_rate <= 0:
         issues.append("training.learning_rate must be positive")
 
+    if config.training.optimizer is not None:
+        valid_optimizers = ["adam", "sgd", "nag", "rmsprop"]
+        if str(config.training.optimizer).lower() not in valid_optimizers:
+            issues.append(
+                f"training.optimizer must be one of {valid_optimizers} or null"
+            )
+
     # Data validation
     if config.data.timesteps <= 0:
         issues.append("data.timesteps must be positive")
 
     valid_datasets = [
         # Rate-coded image classification
-        "MNIST", "CIFAR10", "FashionMNIST", "SVHN",
+        "MNIST",
+        "CIFAR10",
+        "FashionMNIST",
+        "SVHN",
         # Event-based neuromorphic (ideal for DECOLLE)
-        "NMNIST", "DVSGesture",
+        "NMNIST",
+        "DVSGesture",
         # NeuroBench official benchmarks
-        "SpeechCommands", "WISDM",  # Classification
-        "PrimateReaching", "MackeyGlass",  # Regression
+        "SpeechCommands",
+        "WISDM",  # Classification
+        "PrimateReaching",
+        "MackeyGlass",  # Regression
     ]
     if config.data.dataset not in valid_datasets:
         issues.append(f"data.dataset must be one of {valid_datasets}")
@@ -337,12 +399,46 @@ def validate_config(config: Config) -> List[str]:
         )
 
     # Trainer validation
+    valid_trainers = ["stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "stdp"]
     valid_trainers = [
         "stsf", "bptt", "decolle", "eprop", "ottt", "ell", "fell", "bell",
         "stllr", "esd_rtrl", "stdp", "tp",
     ]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
+
+    # DRTP validation
+    valid_drtp_losses = ["mse", "bce", "ce"]
+    loss_name = str(config.drtp.loss).lower()
+    if loss_name not in valid_drtp_losses:
+        issues.append(f"drtp.loss must be one of {valid_drtp_losses}")
+
+    valid_drtp_distributions = ["kaiming_uniform", "uniform", "normal"]
+    if config.drtp.feedback_distribution not in valid_drtp_distributions:
+        issues.append(
+            f"drtp.feedback_distribution must be one of {valid_drtp_distributions}"
+        )
+    if config.drtp.feedback_scale <= 0:
+        issues.append("drtp.feedback_scale must be positive")
+
+    # ETLP validation
+    if config.etlp.trace_decay <= 0:
+        issues.append("etlp.trace_decay must be positive")
+    if config.etlp.surrogate_scale <= 0:
+        issues.append("etlp.surrogate_scale must be positive")
+    if config.etlp.dt_ms <= 0:
+        issues.append("etlp.dt_ms must be positive")
+    if config.etlp.update_rate_hz < 0:
+        issues.append("etlp.update_rate_hz must be non-negative")
+    valid_etlp_distributions = ["kaiming_uniform", "uniform", "normal"]
+    if config.etlp.feedback_distribution not in valid_etlp_distributions:
+        issues.append(
+            f"etlp.feedback_distribution must be one of {valid_etlp_distributions}"
+        )
+    if config.etlp.feedback_scale <= 0:
+        issues.append("etlp.feedback_scale must be positive")
+    if config.trainer.name == "etlp" and config.model.architecture != "fc":
+        issues.append("ETLP currently supports model.architecture == 'fc' only")
 
     return issues
 
@@ -359,4 +455,3 @@ def print_config(config: Config) -> None:
             print(f"  {key}: {value}")
 
     print("=" * 60 + "\n")
-
