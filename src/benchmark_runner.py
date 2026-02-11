@@ -435,6 +435,7 @@ def benchmark_algorithm(
             batch_size=batch_size,
             pseudo_derivative="tanh",
             output_loss="ce",
+            output_readout="spk",
             feedback_scale=1.0,
             feedback_seed=42,
             target_dim=layer_sizes[-1],

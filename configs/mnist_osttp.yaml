@@ -28,7 +28,8 @@ trainer:
 
 osttp:
   pseudo_derivative: "tanh" # "tanh" or "fast_sigmoid"
-  output_loss: "ce" # "ce", "bce", or "mse"
+  output_loss: "ce" # "ce", "mse", "bce_logits", or "bce_probs"
+  output_readout: "spk" # "spk", "mem", "logits", "probs"
   feedback_scale: 1.0
   feedback_seed: 42
   target_dim: 10 # null = inferred from network.n_classes

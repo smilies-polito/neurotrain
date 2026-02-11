@@ -4,7 +4,9 @@ import os
 import sys
 
 import pytest
+import snntorch as snn
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -47,6 +49,69 @@ def _make_ostl_temporal_batch(
     data = x_static.unsqueeze(1).repeat(1, timesteps, 1)
     data += 0.01 * torch.randn_like(data)
     return data, target
+
+
+class _JSBLikeSigmoidNet(nn.Module):
+    """Linear->Leaky hidden layer with dense sigmoid readout."""
+
+    def __init__(self, in_features: int = 88, hidden: int = 150, out_features: int = 88):
+        super().__init__()
+        self._n_classes = out_features
+        self.fc1 = nn.Linear(in_features, hidden, bias=False)
+        self.lif1 = snn.Leaky(beta=0.9, reset_mechanism="zero", reset_delay=True)
+        self.fc2 = nn.Linear(hidden, out_features)
+        self.sigmoid = nn.Sigmoid()
+
+    @property
+    def n_classes(self) -> int:
+        return self._n_classes
+
+    def reset(self) -> None:
+        self.lif1.reset_mem()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cur = self.fc1(x)
+        spk, _mem = self.lif1(cur)
+        logits = self.fc2(spk)
+        return self.sigmoid(logits)
+
+
+class _SHDLikeIntegratorNet(nn.Module):
+    """Linear->RLeaky hidden layer with Linear->Leaky integrator readout."""
+
+    def __init__(self, in_features: int = 64, hidden: int = 450, out_features: int = 20):
+        super().__init__()
+        self._n_classes = out_features
+        self.fc1 = nn.Linear(in_features, hidden, bias=False)
+        self.rlif = snn.RLeaky(
+            beta=0.9,
+            linear_features=hidden,
+            all_to_all=True,
+            reset_mechanism="subtract",
+            reset_delay=True,
+        )
+        self.fc2 = nn.Linear(hidden, out_features, bias=False)
+        self.out_int = snn.Leaky(
+            beta=0.95,
+            threshold=1e9,
+            reset_mechanism="none",
+            reset_delay=True,
+        )
+
+    @property
+    def n_classes(self) -> int:
+        return self._n_classes
+
+    def reset(self) -> None:
+        self.rlif.reset_mem()
+        self.out_int.reset_mem()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cur_h = self.fc1(x)
+        spk_h, _mem_h = self.rlif(cur_h)
+        cur_o = self.fc2(spk_h)
+        _spk_o, mem_o = self.out_int(cur_o)
+        return mem_o
 
 
 class TestBaseTrainer:
@@ -624,6 +689,7 @@ class TestOSTTPTrainer:
             batch_size=64,
             pseudo_derivative="tanh",
             output_loss="ce",
+            output_readout="spk",
             feedback_scale=1.0,
             feedback_seed=42,
             use_optimizer=False,
@@ -663,6 +729,109 @@ class TestOSTTPTrainer:
         fb = getattr(trainer, trainer._feedback_names[0])
         assert fb.requires_grad is False
         assert fb.shape == (2, 8)
+
+    def test_jsb_like_sigmoid_readout_smoke(self):
+        network = _JSBLikeSigmoidNet(in_features=88, hidden=150, out_features=88)
+        trainer = OSTTPTrainer(
+            network=network,
+            lr=0.05,
+            batch_size=4,
+            pseudo_derivative="tanh",
+            output_loss="bce_probs",
+            output_readout="probs",
+            target_dim=88,
+            use_optimizer=False,
+        )
+
+        timesteps = 5
+        batch_size = 4
+        data = torch.randn(timesteps, batch_size, 88)
+        target = torch.randint(0, 2, (timesteps, batch_size, 88), dtype=torch.float32)
+
+        w_hidden_before = network.fc1.weight.detach().clone()
+        w_out_before = network.fc2.weight.detach().clone()
+
+        loss, pred = trainer.train_sample(data, target)
+
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
+        assert pred.shape == (batch_size, 1)
+        assert not torch.allclose(w_hidden_before, network.fc1.weight.detach())
+        assert not torch.allclose(w_out_before, network.fc2.weight.detach())
+
+    def test_jsb_like_logits_readout_smoke(self):
+        class _JSBLikeLogitsNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self._n_classes = 88
+                self.fc1 = nn.Linear(88, 150, bias=False)
+                self.lif1 = snn.Leaky(beta=0.9, reset_mechanism="zero", reset_delay=True)
+                self.fc2 = nn.Linear(150, 88)
+
+            @property
+            def n_classes(self):
+                return self._n_classes
+
+            def reset(self):
+                self.lif1.reset_mem()
+
+            def forward(self, x: torch.Tensor):
+                cur = self.fc1(x)
+                spk, _mem = self.lif1(cur)
+                return self.fc2(spk)
+
+        network = _JSBLikeLogitsNet()
+        trainer = OSTTPTrainer(
+            network=network,
+            lr=0.05,
+            batch_size=4,
+            pseudo_derivative="tanh",
+            output_loss="bce_logits",
+            output_readout="logits",
+            target_dim=88,
+            use_optimizer=False,
+        )
+
+        timesteps = 4
+        batch_size = 4
+        data = torch.randn(timesteps, batch_size, 88)
+        target = torch.randint(0, 2, (timesteps, batch_size, 88), dtype=torch.float32)
+
+        w_out_before = network.fc2.weight.detach().clone()
+        loss, pred = trainer.train_sample(data, target)
+
+        assert torch.isfinite(loss)
+        assert pred.shape == (batch_size, 1)
+        assert not torch.allclose(w_out_before, network.fc2.weight.detach())
+
+    def test_shd_like_integrator_readout_smoke(self):
+        network = _SHDLikeIntegratorNet(in_features=64, hidden=450, out_features=20)
+        trainer = OSTTPTrainer(
+            network=network,
+            lr=0.02,
+            batch_size=3,
+            pseudo_derivative="tanh",
+            output_loss="ce",
+            output_readout="mem",
+            target_dim=20,
+            use_optimizer=False,
+        )
+
+        timesteps = 5
+        batch_size = 3
+        data = torch.randn(timesteps, batch_size, 64)
+        target = torch.randint(0, 20, (batch_size,))
+
+        w_hidden_before = network.fc1.weight.detach().clone()
+        w_out_before = network.fc2.weight.detach().clone()
+
+        loss, pred = trainer.train_sample(data, target)
+
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
+        assert pred.shape == (batch_size, 1)
+        assert not torch.allclose(w_hidden_before, network.fc1.weight.detach())
+        assert not torch.allclose(w_out_before, network.fc2.weight.detach())
 
 
 class TestETLPTrainer:

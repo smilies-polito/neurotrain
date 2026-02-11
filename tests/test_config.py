@@ -83,6 +83,7 @@ class TestConfig:
         config = Config()
         assert config.osttp.pseudo_derivative == "tanh"
         assert config.osttp.output_loss == "ce"
+        assert config.osttp.output_readout == "mem"
         assert config.osttp.feedback_scale == 1.0
         assert config.osttp.grad_clip == 0.0
 
@@ -179,3 +180,19 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("OSTTP currently supports" in issue for issue in issues)
+
+    def test_osttp_bce_logits_requires_logits_readout(self):
+        config = Config()
+        config.osttp.output_loss = "bce_logits"
+        config.osttp.output_readout = "probs"
+
+        issues = validate_config(config)
+        assert any("bce_logits" in issue for issue in issues)
+
+    def test_osttp_bce_probs_requires_probs_readout(self):
+        config = Config()
+        config.osttp.output_loss = "bce_probs"
+        config.osttp.output_readout = "logits"
+
+        issues = validate_config(config)
+        assert any("bce_probs" in issue for issue in issues)

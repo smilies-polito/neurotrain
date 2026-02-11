@@ -263,6 +263,7 @@ def trainable(
         trainer_kwargs.update(
             pseudo_derivative=config.osttp.pseudo_derivative,
             output_loss=config.osttp.output_loss,
+            output_readout=config.osttp.output_readout,
             feedback_scale=config.osttp.feedback_scale,
             feedback_seed=config.osttp.feedback_seed,
             target_dim=config.osttp.target_dim,
