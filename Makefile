@@ -57,13 +57,13 @@ bptt-all-datasets:
 
 # STSF
 stsf-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms stsf
+	$(PYTHON) main.py --config configs/mnist_default.yaml --epochs $(EPOCHS)
 stsf-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stsf
 
 # E-prop
 eprop-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms eprop
+	$(PYTHON) main.py --config configs/mnist_eprop.yaml --epochs $(EPOCHS)
 eprop-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms eprop
 
@@ -81,61 +81,61 @@ ottt-all-datasets:
 
 # DRTP
 drtp-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms drtp
+	$(PYTHON) main.py --config configs/mnist_drtp.yaml --epochs $(EPOCHS)
 drtp-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms drtp
 
 # OSTL
 ostl-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms ostl
+	$(PYTHON) main.py --config configs/mnist_ostl.yaml --epochs $(EPOCHS)
 ostl-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ostl
 
 # ELL
 ell-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms ell
+	$(PYTHON) main.py --config configs/mnist_ell.yaml --epochs $(EPOCHS)
 ell-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ell
 
 # FELL
 fell-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms fell
+	$(PYTHON) main.py --config configs/mnist_fell.yaml --epochs $(EPOCHS)
 fell-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms fell
 
 # BELL
 bell-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms bell
+	$(PYTHON) main.py --config configs/mnist_bell.yaml --epochs $(EPOCHS)
 bell-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms bell
 
 # STLLR
 stllr-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms stllr
+	$(PYTHON) main.py --config configs/mnist_stllr.yaml --epochs $(EPOCHS)
 stllr-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stllr
 
 # STOP
 stop-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms stop
+	$(PYTHON) main.py --config configs/mnist_stop.yaml --epochs $(EPOCHS)
 stop-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stop
 
 # ETLP
 etlp-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms etlp
+	$(PYTHON) main.py --config configs/mnist_etlp.yaml --epochs $(EPOCHS)
 etlp-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms etlp
 
 # Trace Propagation (TP)
 tp-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms tp
+	$(PYTHON) main.py --config configs/mnist_tp.yaml --epochs $(EPOCHS)
 tp-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms tp
 
 # ES-D-RTRL
 esd-rtrl-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms esd_rtrl
+	$(PYTHON) main.py --config configs/mnist_esd_rtrl.yaml --epochs $(EPOCHS)
 esd-rtrl-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms esd_rtrl
 
