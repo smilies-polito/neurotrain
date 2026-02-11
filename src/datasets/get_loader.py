@@ -79,7 +79,7 @@ def get_loader(name, batch_size, T, flatten: bool = True, device=None, seed=None
     elif name == "FashionMNIST":
         return FashionMNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
     elif name == "SVHN":
-        return SVHNLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return SVHNLoader(batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed)
     elif name == "DVSGesture":
         return DVSGestureLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
     # Event-based neuromorphic datasets

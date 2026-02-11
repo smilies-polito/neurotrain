@@ -38,11 +38,15 @@ from trainers.drtp_trainer import DRTPTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.ottt_trainer import OTTTTrainer
+from trainers.stop_trainer import STOPTrainer
 from trainers.stllr_trainer import STLLRTrainer
 from trainers.stsf_trainer import STSFTrainer
+from trainers.tp_trainer import TPTrainer
 from utils.neurobench_eval import run_neurobench
 
 # Algorithm metadata (not computed, just documented)
@@ -89,6 +93,12 @@ ALGORITHM_INFO = {
         "requires_backprop": False,
         "source": "custom (ostl_trainer.py) - Bohnstingl et al. 2020",
     },
+    "osttp": {
+        "name": "OSTTP (Online Spatio-Temporal Target Projection)",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (osttp_trainer.py) - target-projected OSTL rule",
+    },
     "ell": {
         "name": "Event-based Local Learning",
         "is_local": True,
@@ -118,6 +128,24 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (esd_rtrl_trainer.py) - Wang et al. Nature Commun. 2026",
+    },
+    "stop": {
+        "name": "STOP (SpatioTemporal Orthogonal Propagation)",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (stop_trainer.py) - Gao et al. 2025",
+    },
+    "etlp": {
+        "name": "Event-based Three-factor Local Plasticity",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (etlp_trainer.py) - Quintana et al. 2024",
+    },
+    "tp": {
+        "name": "Trace Propagation",
+        "is_local": True,
+        "requires_backprop": True,
+        "source": "custom (tp_trainer.py) - Pes et al. 2026",
     },
 }
 
@@ -419,6 +447,22 @@ def benchmark_algorithm(
             use_optimizer=False,
             optimizer=None,
         )
+    elif algorithm_name == "osttp":
+        # OSTTP: fixed target projection + OSTL temporal eligibility traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            pseudo_derivative="tanh",
+            output_loss="ce",
+            output_readout="spk",
+            feedback_scale=1.0,
+            feedback_seed=42,
+            target_dim=layer_sizes[-1],
+            use_optimizer=False,
+            optimizer=None,
+        )
     elif algorithm_name in ("ell", "fell", "bell"):
         # ELL/FELL/BELL: gradient-based local learning
         torch.set_grad_enabled(True)
@@ -445,6 +489,45 @@ def benchmark_algorithm(
             lr=lr,
             batch_size=batch_size,
             etrace_decay=0.9,
+            use_optimizer=True,
+            optimizer=None,
+        )
+    elif algorithm_name == "stop":
+        # STOP: spatial-per-timestep deltas + forward temporal traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            loss_type="ce",
+            surrogate="exp",
+            learn_weights=True,
+            learn_thresholds=True,
+            learn_leakage=True,
+            use_optimizer=False,
+            optimizer=None,
+        )
+    elif algorithm_name == "etlp":
+        # ETLP: event-driven three-factor local plasticity
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            trace_decay=beta,
+            surrogate_scale=0.3,
+            use_optimizer=False,
+            optimizer=None,
+            update_last=False,
+            update_every=1,
+        )
+    elif algorithm_name == "tp":
+        # TP relies on local autograd through its surrogate spike function
+        torch.set_grad_enabled(True)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
             use_optimizer=True,
             optimizer=None,
         )
@@ -576,6 +659,7 @@ def run_comparison(
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ostl": OSTLTrainer,
+        "osttp": OSTTPTrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
         "ell": ELLTrainer,
@@ -583,6 +667,9 @@ def run_comparison(
         "bell": BELLTrainer,
         "stllr": STLLRTrainer,
         "esd_rtrl": ESDRTRLTrainer,
+        "stop": STOPTrainer,
+        "etlp": ETLPTrainer,
+        "tp": TPTrainer,
     }
 
     results = {}

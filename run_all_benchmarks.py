@@ -26,8 +26,14 @@ from trainers.eprop_trainer import EpropTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.stllr_trainer import STLLRTrainer
+from trainers.stop_trainer import STOPTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from trainers.drtp_trainer import DRTPTrainer
+from trainers.ostl_trainer import OSTLTrainer
+from trainers.etlp_trainer import ETLPTrainer
+from trainers.tp_trainer import TPTrainer
 
 
 # Dataset configurations: dataset_name -> (input_size, num_classes, layer_sizes)
@@ -123,10 +129,16 @@ ALGORITHMS = {
     "eprop": EpropTrainer,
     "decolle": DECOLLETrainer,
     "ottt": OTTTTrainer,
+    "drtp": DRTPTrainer,
+    "ostl": OSTLTrainer,
     "ell": ELLTrainer,
     "fell": FELLTrainer,
     "bell": BELLTrainer,
+    "osttp": OSTTPTrainer,
     "stllr": STLLRTrainer,
+    "stop": STOPTrainer,
+    "etlp": ETLPTrainer,
+    "tp": TPTrainer,
     "esd_rtrl": ESDRTRLTrainer,
 }
 
@@ -548,6 +560,7 @@ def main():
             datasets=_parse_csv_list(args.datasets),
             algorithms=_parse_csv_list(args.algorithms),
             seed=args.seed,
+            checkpoint_epochs = list(range(1, args.epochs + 1))
         )
     except ValueError as e:
         parser.error(str(e))

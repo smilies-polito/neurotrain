@@ -77,10 +77,11 @@ class TestFullPipeline:
         )
 
         # Run one epoch
-        torch.set_grad_enabled(False)
-        metrics = LearningAlgorithms.train_epoch(
-            trainer, trainloader, device="cpu", print_every=None
-        )
+        # Use a context manager so the global grad mode is always restored.
+        with torch.set_grad_enabled(False):
+            metrics = LearningAlgorithms.train_epoch(
+                trainer, trainloader, device="cpu", print_every=None
+            )
 
         assert "loss" in metrics
         assert "accuracy" in metrics
@@ -278,4 +279,3 @@ class TestReproducibility:
 
         # Weights should be different
         assert not torch.allclose(results[0], results[1])
-
