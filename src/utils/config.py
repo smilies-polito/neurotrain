@@ -425,7 +425,15 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"data.dataset must be one of {valid_datasets}")
 
     # Model architecture validation
-    valid_architectures = ["fc", "local_classifier", "recurrent", "stllr"]
+    valid_architectures = [
+        "fc",
+        "conv",
+        "local_classifier",
+        "recurrent",
+        "stllr",
+        "vgg11",
+        "resnet18",
+    ]
     if config.model.architecture not in valid_architectures:
         issues.append(f"model.architecture must be one of {valid_architectures}")
 
@@ -523,8 +531,16 @@ def validate_config(config: Config) -> List[str]:
         issues.append("stop.static_input_timesteps must be positive")
     if config.stop.cosine_schedule and config.stop.cosine_t_max <= 0:
         issues.append("stop.cosine_t_max must be > 0 when stop.cosine_schedule is true")
-    if config.trainer.name == "stop" and config.model.architecture not in ("fc", "conv"):
-        issues.append("STOP currently supports model.architecture in {'fc', 'conv'} only")
+    if config.trainer.name == "stop" and config.model.architecture not in (
+        "fc",
+        "conv",
+        "vgg11",
+        "resnet18",
+    ):
+        issues.append(
+            "STOP currently supports model.architecture in "
+            "{'fc', 'conv', 'vgg11', 'resnet18'} only"
+        )
 
     return issues
 

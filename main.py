@@ -98,7 +98,7 @@ def trainable(
     print(f"Using device: {device}")
 
     # Get data loaders
-    flatten_inputs = config.model.architecture != "conv"
+    flatten_inputs = config.model.architecture not in ("conv", "vgg11", "resnet18")
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,

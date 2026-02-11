@@ -4,6 +4,31 @@ DEVICE ?= cuda
 EPOCHS ?= 50
 STOP_TEST_EPOCHS ?= 5
 STOP_MIN_GAIN ?= 0.0
+STOP_COMPLEX_EPOCHS ?= 10
+STOP_COMPLEX_BATCH_SIZE ?= 32
+STOP_COMPLEX_TIMESTEPS ?= 8
+STOP_COMPLEX_LR ?= 0.005
+
+# STOP complex backbones: per-target defaults (override from CLI if needed)
+STOP_VGG11_CIFAR10_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
+STOP_VGG11_CIFAR10_BATCH_SIZE ?= 32
+STOP_VGG11_CIFAR10_TIMESTEPS ?= 4
+STOP_VGG11_CIFAR10_LR ?= 0.001
+
+STOP_RESNET18_CIFAR10_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
+STOP_RESNET18_CIFAR10_BATCH_SIZE ?= 8
+STOP_RESNET18_CIFAR10_TIMESTEPS ?= 8
+STOP_RESNET18_CIFAR10_LR ?= 0.006
+
+STOP_VGG11_SVHN_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
+STOP_VGG11_SVHN_BATCH_SIZE ?= 32
+STOP_VGG11_SVHN_TIMESTEPS ?= 4
+STOP_VGG11_SVHN_LR ?= 0.001
+
+STOP_RESNET18_SVHN_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
+STOP_RESNET18_SVHN_BATCH_SIZE ?= 16
+STOP_RESNET18_SVHN_TIMESTEPS ?= 8
+STOP_RESNET18_SVHN_LR ?= 0.003
 
 
 
@@ -37,7 +62,11 @@ complete-test-short:
 # Convenience target: run all algorithms on MNIST only
 all-mnist:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
-	
+
+# Convenience target: run all algorithms on CIFAR10 only
+all-cifar10:
+	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets CIFAR10 $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
+
 
 
 #   /$$$$$$  /$$        /$$$$$$   /$$$$$$  /$$$$$$$  /$$$$$$ /$$$$$$$$ /$$   /$$ /$$      /$$
@@ -138,6 +167,26 @@ esd-rtrl-mnist:
 	$(PYTHON) main.py --config configs/mnist_esd_rtrl.yaml --epochs $(EPOCHS)
 esd-rtrl-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms esd_rtrl
+
+
+# STOP on complex datasets (new backbones)
+stop-vgg11-cifar10:
+	$(PYTHON) main.py --config configs/cifar10_stop_vgg11.yaml --epochs $(STOP_VGG11_CIFAR10_EPOCHS) --batch-size $(STOP_VGG11_CIFAR10_BATCH_SIZE) --T $(STOP_VGG11_CIFAR10_TIMESTEPS) --lr $(STOP_VGG11_CIFAR10_LR)
+stop-resnet18-cifar10:
+	$(PYTHON) main.py --config configs/cifar10_stop_resnet18.yaml --epochs $(STOP_RESNET18_CIFAR10_EPOCHS) --batch-size $(STOP_RESNET18_CIFAR10_BATCH_SIZE) --T $(STOP_RESNET18_CIFAR10_TIMESTEPS) --lr $(STOP_RESNET18_CIFAR10_LR)
+stop-vgg11-svhn:
+	$(PYTHON) main.py --config configs/svhn_stop_vgg11.yaml --epochs $(STOP_VGG11_SVHN_EPOCHS) --batch-size $(STOP_VGG11_SVHN_BATCH_SIZE) --T $(STOP_VGG11_SVHN_TIMESTEPS) --lr $(STOP_VGG11_SVHN_LR)
+stop-resnet18-svhn:
+	$(PYTHON) main.py --config configs/svhn_stop_resnet18.yaml --epochs $(STOP_RESNET18_SVHN_EPOCHS) --batch-size $(STOP_RESNET18_SVHN_BATCH_SIZE) --T $(STOP_RESNET18_SVHN_TIMESTEPS) --lr $(STOP_RESNET18_SVHN_LR)
+stop-newnets-cifar10:
+	$(MAKE) stop-vgg11-cifar10
+	$(MAKE) stop-resnet18-cifar10
+stop-newnets-svhn:
+	$(MAKE) stop-vgg11-svhn
+	$(MAKE) stop-resnet18-svhn
+stop-newnets-all:
+	$(MAKE) stop-newnets-cifar10
+	$(MAKE) stop-newnets-svhn
 
 
 

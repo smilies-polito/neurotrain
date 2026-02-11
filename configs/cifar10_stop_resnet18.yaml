@@ -1,0 +1,57 @@
+# CIFAR10 STOP Configuration (Spiking ResNet18)
+
+experiment:
+  name: "STOP_RESNET18_CIFAR10"
+  seed: 42
+  deterministic: true
+  log_dir: "./experiments"
+
+model:
+  architecture: "resnet18"
+  layer_sizes: [3072, 10]
+  beta: 0.9
+  threshold: 1.0
+  quantization: false
+
+training:
+  epochs: 20
+  batch_size: 64
+  learning_rate: 0.001
+  optimizer: null
+
+trainer:
+  name: "stop"
+  update_last: false
+  update_every: 1
+  seq_batch: 1
+
+stop:
+  loss: "ce"
+  surrogate: "exp"
+  learn_weights: true
+  learn_thresholds: true
+  learn_leakage: true
+  lr_weight: null
+  lr_threshold: null
+  lr_leakage: null
+  threshold_min: 0.001
+  momentum: 0.0
+  cosine_schedule: false
+  cosine_t_max: 0
+  static_input_timesteps: 1
+
+data:
+  dataset: "CIFAR10"
+  timesteps: 4
+  data_dir: "./src/Data"
+  num_workers: 4
+
+hardware:
+  device: "auto"
+  mixed_precision: false
+
+checkpoint:
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2

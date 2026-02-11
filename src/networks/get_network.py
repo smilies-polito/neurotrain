@@ -11,6 +11,8 @@ import torch
 from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
+from networks.spiking_resnet18 import SpikingResNet18
+from networks.spiking_vgg11 import SpikingVGG11
 
 # Compatibility: (algorithm, model_architecture) -> use this model
 # Algorithms that require specific models will override model_architecture
@@ -119,11 +121,32 @@ def get_network(
             **lc_kwargs,
         )
 
+    if effective_arch == "vgg11":
+        return SpikingVGG11(
+            input_channels=kwargs.get("input_channels", 3),
+            num_classes=kwargs.get("num_classes", layer_sizes[-1]),
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+            base_channels=kwargs.get("base_channels", 64),
+            surrogate=kwargs.get("surrogate", "exp"),
+        )
+
+    if effective_arch == "resnet18":
+        return SpikingResNet18(
+            input_channels=kwargs.get("input_channels", 3),
+            num_classes=kwargs.get("num_classes", layer_sizes[-1]),
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+            base_channels=kwargs.get("base_channels", 64),
+            surrogate=kwargs.get("surrogate", "exp"),
+        )
+
     # Default: FCNetwork
     if effective_arch != "fc":
         raise ValueError(
             f"Unknown model architecture '{effective_arch}'. "
-            "Use 'fc', 'local_classifier', 'recurrent', or 'stllr'."
+            "Use 'fc', 'conv', 'local_classifier', 'recurrent', 'stllr', "
+            "'vgg11', or 'resnet18'."
         )
     return FCNetwork(
         layer_sizes=layer_sizes,
