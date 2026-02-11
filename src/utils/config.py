@@ -57,7 +57,7 @@ class TrainerConfig:
     """Trainer-specific configuration."""
 
     name: str = (
-        "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "ostl", "stdp"
+        "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "ostl", "osttp", "stdp"
     )
     update_last: bool = False
     update_every: int = 1
@@ -99,6 +99,20 @@ class OSTLConfig:
 
     surrogate_scale: float = 5.0
     grad_clip: float = 0.0
+
+
+@dataclass
+class OSTTPConfig:
+    """OSTTP (Online Spatio-Temporal Learning with Target Projection)."""
+
+    pseudo_derivative: str = "tanh"  # "tanh", "fast_sigmoid"
+    output_loss: str = "ce"  # "ce", "mse", "bce_logits", "bce_probs" (or "bce" alias)
+    output_readout: str = "mem"  # "spk", "mem", "logits", "probs"
+    feedback_scale: float = 1.0
+    feedback_seed: int = 42
+    target_dim: Optional[int] = None
+    grad_clip: float = 0.0
+    debug: bool = False
 
 
 @dataclass
@@ -144,6 +158,7 @@ class Config:
     drtp: DRTPConfig = field(default_factory=DRTPConfig)
     etlp: ETLPConfig = field(default_factory=ETLPConfig)
     ostl: OSTLConfig = field(default_factory=OSTLConfig)
+    osttp: OSTTPConfig = field(default_factory=OSTTPConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -201,6 +216,7 @@ class Config:
             drtp=DRTPConfig(**config_dict.get("drtp", {})),
             etlp=ETLPConfig(**config_dict.get("etlp", {})),
             ostl=OSTLConfig(**config_dict.get("ostl", {})),
+            osttp=OSTTPConfig(**config_dict.get("osttp", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -429,6 +445,7 @@ def validate_config(config: Config) -> List[str]:
         "decolle",
         "eprop",
         "ostl",
+        "osttp",
         "ottt",
         "ell",
         "fell",
@@ -493,6 +510,29 @@ def validate_config(config: Config) -> List[str]:
             issues.append(
                 "Recurrent OSTL requires model.recurrent_type in ['snu', 'ssnu']"
             )
+
+    # OSTTP validation
+    valid_pseudo = ["tanh", "fast_sigmoid"]
+    if config.osttp.pseudo_derivative not in valid_pseudo:
+        issues.append(f"osttp.pseudo_derivative must be one of {valid_pseudo}")
+    valid_output_losses = ["ce", "mse", "bce", "bce_logits", "bce_probs"]
+    if config.osttp.output_loss not in valid_output_losses:
+        issues.append(f"osttp.output_loss must be one of {valid_output_losses}")
+    valid_output_readouts = ["spk", "mem", "logits", "probs"]
+    if config.osttp.output_readout not in valid_output_readouts:
+        issues.append(f"osttp.output_readout must be one of {valid_output_readouts}")
+    if config.osttp.output_loss == "bce_logits" and config.osttp.output_readout != "logits":
+        issues.append("osttp.output_loss='bce_logits' requires osttp.output_readout='logits'")
+    if config.osttp.output_loss == "bce_probs" and config.osttp.output_readout != "probs":
+        issues.append("osttp.output_loss='bce_probs' requires osttp.output_readout='probs'")
+    if config.osttp.feedback_scale <= 0:
+        issues.append("osttp.feedback_scale must be positive")
+    if config.osttp.grad_clip < 0:
+        issues.append("osttp.grad_clip must be non-negative")
+    if config.osttp.target_dim is not None and config.osttp.target_dim <= 0:
+        issues.append("osttp.target_dim must be positive when provided")
+    if config.trainer.name == "osttp" and config.model.architecture != "fc":
+        issues.append("OSTTP currently supports model.architecture == 'fc' only")
 
     return issues
 

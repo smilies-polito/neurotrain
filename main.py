@@ -36,6 +36,7 @@ from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.tp_trainer import TPTrainer
@@ -282,6 +283,17 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
+    if issubclass(trainer_class, OSTTPTrainer):
+        trainer_kwargs.update(
+            pseudo_derivative=config.osttp.pseudo_derivative,
+            output_loss=config.osttp.output_loss,
+            output_readout=config.osttp.output_readout,
+            feedback_scale=config.osttp.feedback_scale,
+            feedback_seed=config.osttp.feedback_seed,
+            target_dim=config.osttp.target_dim,
+            grad_clip=config.osttp.grad_clip,
+            debug=config.osttp.debug,
+        )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
 
@@ -389,6 +401,7 @@ def get_trainer(trainer_name: str):
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ostl": OSTLTrainer,
+        "osttp": OSTTPTrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
         "etlp": ETLPTrainer,
