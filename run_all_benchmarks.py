@@ -26,6 +26,7 @@ from trainers.eprop_trainer import EpropTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.bell_trainer import BELLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.stllr_trainer import STLLRTrainer
 from trainers.stop_trainer import STOPTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
@@ -133,6 +134,7 @@ ALGORITHMS = {
     "ell": ELLTrainer,
     "fell": FELLTrainer,
     "bell": BELLTrainer,
+    "osttp": OSTTPTrainer,
     "stllr": STLLRTrainer,
     "stop": STOPTrainer,
     "etlp": ETLPTrainer,

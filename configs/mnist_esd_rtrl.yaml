@@ -3,40 +3,41 @@
 # Wang et al., Nature Communications 2026
 
 experiment:
-  name: "ESD_RTRL_MNIST"
-  seed: 42
-  deterministic: true
-  log_dir: "./experiments"
+    name: "ESD_RTRL_MNIST"
+    seed: 42
+    deterministic: true
+    log_dir: "./experiments"
 
 model:
-  architecture: "recurrent"
-  layer_sizes: [784, 256, 10]  # n_in, n_rec, n_out (match benchmark)
-  beta: 0.9
-  threshold: 1.0
-  quantization: false
+    architecture: "recurrent"
+    recurrent_type: "standard" # Aliases: "standard", "srnn"
+    layer_sizes: [784, 256, 10] # n_in, n_rec, n_out (match benchmark)
+    beta: 0.9
+    threshold: 1.0
+    quantization: false
 
 training:
-  epochs: 50
-  batch_size: 128
-  learning_rate: 0.001
-  optimizer: "adam"
+    epochs: 50
+    batch_size: 128
+    learning_rate: 0.001
+    optimizer: "adam"
 
 trainer:
-  name: "esd_rtrl"
-  etrace_decay: 0.9  # Eligibility trace decay (reference default)
+    name: "esd_rtrl"
+    etrace_decay: 0.9 # Eligibility trace decay (reference default)
 
 data:
-  dataset: "MNIST"
-  timesteps: 25
-  data_dir: "./src/Data"
-  num_workers: 4
+    dataset: "MNIST"
+    timesteps: 25
+    data_dir: "./src/Data"
+    num_workers: 4
 
 hardware:
-  device: "auto"
-  mixed_precision: false
+    device: "auto"
+    mixed_precision: false
 
 checkpoint:
-  save_every: 0
-  save_best: true
-  save_latest: true
-  max_keep: 2
+    save_every: 0
+    save_best: true
+    save_latest: true
+    max_keep: 2

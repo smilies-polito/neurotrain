@@ -9,6 +9,7 @@ algorithms:
     - decolle # Deep Continuous Local Learning (local)
     - drtp # Deep RPT (local)
     - ostl # Online Spatio-Temporal Learning (local)
+    - osttp # OSTTP: target-projected OSTL traces (local)
     - ell # Event-based Local Learning (local)
     - fell # Full Event-based Local Learning (local)
     - bell # Backprop Event-based Local Learning (local)

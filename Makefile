@@ -199,6 +199,10 @@ stop-newnets-all:
 # |  $$$$$$/   | $$    /$$$$$$| $$$$$$$$|  $$$$$$/
 #  \______/    |__/   |______/|________/ \______/ 
 
+# OSTTP on MNIST
+run-osttp-mnist:
+	$(PYTHON) main.py --config configs/mnist_osttp.yaml
+
 # Remove Python bytecode and caches
 clean:
 	find . -name "__pycache__" -type d -exec rm -rf {} +

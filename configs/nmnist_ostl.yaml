@@ -2,46 +2,47 @@
 # Online Spatio-Temporal Learning on event-based N-MNIST
 
 experiment:
-  name: "OSTL_NMNIST"
-  seed: 42
-  deterministic: true
-  log_dir: "./experiments"
+    name: "OSTL_NMNIST"
+    seed: 42
+    deterministic: true
+    log_dir: "./experiments"
 
 model:
-  architecture: "fc"
-  layer_sizes: [1156, 400, 200, 10]  # 34x34 flattened input for N-MNIST
-  beta: 0.95
-  threshold: 1.0
-  quantization: false
+    architecture: "recurrent"
+    recurrent_type: "snu" # Paper-aligned SNU recurrence
+    layer_sizes: [1156, 256, 256, 10] # Paper-style OSTL MLP (2x256 hidden), N-MNIST input=34x34
+    beta: 0.95
+    threshold: 1.0
+    quantization: false
 
 training:
-  epochs: 75
-  batch_size: 64
-  learning_rate: 0.001
-  optimizer: null  # null = manual OSTL update; can be "adam"/"sgd"/"nag"/"rmsprop"
+    epochs: 75
+    batch_size: 64
+    learning_rate: 0.001
+    optimizer: null # null = manual OSTL update; can be "adam"/"sgd"/"nag"/"rmsprop"
 
 trainer:
-  name: "ostl"
-  update_last: false
-  update_every: 1
-  seq_batch: 1
+    name: "ostl"
+    update_last: false
+    update_every: 1
+    seq_batch: 1
 
 ostl:
-  surrogate_scale: 5.0
-  grad_clip: 1.0
+    surrogate_scale: 5.0
+    grad_clip: 1.0
 
 data:
-  dataset: "NMNIST"
-  timesteps: 25
-  data_dir: "./src/Data"
-  num_workers: 4
+    dataset: "NMNIST"
+    timesteps: 25
+    data_dir: "./src/Data"
+    num_workers: 4
 
 hardware:
-  device: "auto"
-  mixed_precision: false
+    device: "auto"
+    mixed_precision: false
 
 checkpoint:
-  save_every: 0
-  save_best: true
-  save_latest: true
-  max_keep: 2
+    save_every: 0
+    save_best: true
+    save_latest: true
+    max_keep: 2

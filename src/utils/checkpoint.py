@@ -9,6 +9,7 @@ Provides save/load functionality for:
 - Configuration
 """
 
+import multiprocessing as mp
 import random
 import signal
 import sys
@@ -62,7 +63,8 @@ def get_rng_state() -> Dict[str, Any]:
         "torch": torch.get_rng_state(),
     }
 
-    if torch.cuda.is_available():
+    # Guard against CUDA lazy-init in forked worker processes.
+    if torch.cuda.is_available() and torch.cuda.is_initialized():
         rng_state["cuda"] = torch.cuda.get_rng_state_all()
 
     return rng_state
@@ -372,10 +374,9 @@ class CheckpointManager:
 
     def has_checkpoint(self) -> bool:
         """Check if any checkpoint exists."""
-        return (
-            (self.checkpoint_dir / "checkpoint_latest.pt").exists()
-            or (self.checkpoint_dir / "checkpoint_best.pt").exists()
-        )
+        return (self.checkpoint_dir / "checkpoint_latest.pt").exists() or (
+            self.checkpoint_dir / "checkpoint_best.pt"
+        ).exists()
 
     def setup_graceful_exit(
         self,
@@ -396,16 +397,23 @@ class CheckpointManager:
         self._config_ref = config
 
         def signal_handler(signum, frame):
+            # DataLoader workers inherit handlers on fork; never checkpoint there.
+            if mp.current_process().name != "MainProcess":
+                sys.exit(130)
+
             print("\n\nInterrupted! Saving checkpoint before exit...")
             if self._model_ref is not None:
-                self.save(
-                    self._model_ref,
-                    self._optimizer_ref,
-                    self._current_epoch,
-                    {},
-                    self._config_ref,
-                    "checkpoint_interrupted.pt",
-                )
+                try:
+                    self.save(
+                        self._model_ref,
+                        self._optimizer_ref,
+                        self._current_epoch,
+                        {},
+                        self._config_ref,
+                        "checkpoint_interrupted.pt",
+                    )
+                except Exception as exc:  # pragma: no cover - interruption path
+                    print(f"Checkpoint save on interrupt failed: {exc}")
             print("Checkpoint saved. Exiting.")
 
             # Restore original handler and re-raise
@@ -460,6 +468,8 @@ def resume_training(
         print("RNG state restored for exact reproducibility")
 
     print(f"Resumed from epoch {checkpoint.epoch}")
-    print(f"Best {manager.metric_name}: {checkpoint.best_metric:.4f} (epoch {checkpoint.best_epoch})")
+    print(
+        f"Best {manager.metric_name}: {checkpoint.best_metric:.4f} (epoch {checkpoint.best_epoch})"
+    )
 
     return checkpoint
