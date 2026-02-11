@@ -95,7 +95,7 @@ snn-training-benchmarking/
 
 ---
 
-## State 2: Current State (BPTT Baseline + NeuroBench Integration)
+## State 2: Benchmarking Foundation (BPTT Baseline + NeuroBench Integration)
 
 **Date:** 2025-12-06  
 **Tag:** `v0.2.0-benchmarking`
@@ -272,7 +272,53 @@ MNIST          | STSF   | 203,264      | 810.7 KB     | 0.3836     | 3,128,450  
 
 ---
 
-## State 3: Target State (Full Benchmark Suite)
+## State 3: Current State (OSTL Recurrent Recursion Integration)
+
+**Date:** 2026-02-10  
+**Tag:** `unreleased`  
+**Commit:** `156b01bab06f274872160810ba2ef61be6016cef`  
+**Message:** `adding custom recurrent networks for ostl`
+
+### Description
+
+Current HEAD introduces recurrent OSTL support with explicit recurrent weights and recursive eligibility updates, enabling paper-aligned SNU/sSNU configurations for OSTL on frame-based and event-based tasks.
+
+### Characteristics
+
+| Aspect | Status |
+|--------|--------|
+| OSTL Model Support | `fc` + `recurrent` architectures |
+| Recurrent Network | New `RecurrentFCNetwork` (`src/networks/recurrent_fc_network.py`) |
+| Recurrent Types | `snu`, `ssnu` (validated for OSTL) |
+| Recursion in Training | Added recurrent eligibility recursion (`eps_r`) and recurrent weight updates in `OSTLTrainer` |
+| Learning Signal Propagation | Recursive layer-wise signal propagation uses feed-forward path (without recurrent Jacobian approximation) |
+| Config Contract | New `model.recurrent_type` with algorithm-specific validation |
+| Test Coverage | Added config validation and recurrent OSTL trainer update tests |
+
+### Key Commit Changes (OSTL Recursion-Specific)
+
+- Added recurrent OSTL network with per-layer feed-forward (`W_l`) and recurrent (`R_l`) matrices, plus state reset/compatibility hooks.
+- Extended `OSTLTrainer` to detect recurrent layers, maintain recurrent eligibility traces, and apply recurrent gradients (`grad_r`) alongside feed-forward gradients (`grad_w`).
+- Updated model factory and training entrypoint to route recurrent OSTL to `RecurrentFCNetwork` and enforce `recurrent_type` constraints.
+- Updated OSTL configs to recurrent paper-style defaults in `configs/mnist_ostl.yaml` (`architecture: recurrent`, `recurrent_type: snu`, `[784, 256, 256, 10]`) and `configs/nmnist_ostl.yaml` (`architecture: recurrent`, `recurrent_type: snu`, `[1156, 256, 256, 10]`).
+- Added tests ensuring recurrent OSTL config validation and recurrent weight updates occur during training.
+
+### Capabilities
+
+- Run recurrent OSTL with custom SNU/sSNU layers.
+- Train both feed-forward and recurrent parameters under OSTL local updates.
+- Configure recurrent behavior declaratively via YAML (`model.recurrent_type`).
+- Use the same trainer entrypoints for OSTL FC and recurrent variants.
+
+### Current Limitations
+
+1. Recurrent OSTL is restricted to `model.recurrent_type` in `["snu", "ssnu"]`.
+2. Recurrent learning-signal recursion uses the paper-style approximation without recurrent Jacobian terms.
+3. Full suite target items (regression support, complete NeuroBench dataset activation, extra algorithms) remain pending.
+
+---
+
+## State 4: Target State (Full Benchmark Suite)
 
 **Date:** TBD  
 **Tag:** `v0.3.0-complete`
@@ -298,15 +344,19 @@ Full benchmark suite with regression support, all NeuroBench datasets working, a
 |------|----|-------------|
 | State 0 → State 1 | Modular architecture, reproducibility, checkpointing, testing |
 | State 1 → State 2 | BPTT trainer, NeuroBench v2.1.0 integration, multi-dataset benchmarking, efficiency metrics |
-| State 2 → State 3 | Regression support, full NeuroBench dataset suite, additional algorithms |
+| State 2 → State 3 | Recurrent OSTL network path, recursive recurrent eligibility updates, new recurrent config/test constraints |
+| State 3 → State 4 | Regression support, full NeuroBench dataset suite, additional algorithms |
 
 ---
 
 ## Version Control Tags
 
 ```bash
-# Tag current state
+# Historical benchmark state
 git tag -a v0.2.0-benchmarking -m "BPTT baseline + NeuroBench integration"
+
+# Current state (recommended, currently untagged)
+git tag -a v0.2.1-ostl-recurrent -m "OSTL recurrent SNU/sSNU + recursive eligibility updates"
 
 # After full benchmark suite
 git tag -a v0.3.0-complete -m "Full benchmark suite with regression support"
