@@ -78,6 +78,15 @@ class TestConfig:
         assert config.ostl.surrogate_scale == 5.0
         assert config.ostl.grad_clip == 0.0
 
+    def test_default_stop_config(self):
+        """Test STOP config defaults."""
+        config = Config()
+        assert config.stop.loss == "ce"
+        assert config.stop.surrogate == "exp"
+        assert config.stop.learn_weights is True
+        assert config.stop.learn_thresholds is True
+        assert config.stop.learn_leakage is True
+
 
 class TestConfigIO:
     """Test config file I/O."""
@@ -162,3 +171,12 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("OSTL currently supports" in issue for issue in issues)
+
+    def test_stop_requires_fc_or_conv_architecture(self):
+        """Test STOP validation enforces FC/Conv architecture."""
+        config = Config()
+        config.trainer.name = "stop"
+        config.model.architecture = "recurrent"
+
+        issues = validate_config(config)
+        assert any("STOP currently supports" in issue for issue in issues)

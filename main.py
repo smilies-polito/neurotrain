@@ -37,6 +37,7 @@ from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
 from trainers.ottt_trainer import OTTTTrainer
+from trainers.stop_trainer import STOPTrainer
 from trainers.stsf_trainer import STSFTrainer
 from trainers.tp_trainer import TPTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
@@ -258,6 +259,22 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
+    if issubclass(trainer_class, STOPTrainer):
+        trainer_kwargs.update(
+            loss_type=config.stop.loss,
+            surrogate=config.stop.surrogate,
+            learn_weights=config.stop.learn_weights,
+            learn_thresholds=config.stop.learn_thresholds,
+            learn_leakage=config.stop.learn_leakage,
+            lr_weight=config.stop.lr_weight,
+            lr_threshold=config.stop.lr_threshold,
+            lr_leakage=config.stop.lr_leakage,
+            threshold_min=config.stop.threshold_min,
+            momentum=config.stop.momentum,
+            cosine_schedule=config.stop.cosine_schedule,
+            cosine_t_max=config.stop.cosine_t_max,
+            static_input_timesteps=config.stop.static_input_timesteps,
+        )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
 
@@ -373,6 +390,7 @@ def get_trainer(trainer_name: str):
         "bell": BELLTrainer,
         "esd_rtrl": ESDRTRLTrainer,
         "tp": TPTrainer,
+        "stop": STOPTrainer,
     }
     if trainer_name not in trainers:
         raise ValueError(

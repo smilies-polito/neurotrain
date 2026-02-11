@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from LearningAlgorithms import LearningAlgorithms
+from networks.conv_network import ConvFCNetwork
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
@@ -24,6 +25,7 @@ from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
+from trainers.stop_trainer import STOPTrainer
 from trainers.stllr_trainer import STLLRTrainer
 from trainers.stsf_trainer import STSFTrainer
 
@@ -639,6 +641,201 @@ class TestETLPTrainer:
         assert loss.shape == ()
         assert pred.shape == (batch_size, 1)
         assert not torch.isnan(loss)
+
+
+class TestSTOPTrainer:
+    """Tests for STOP (spatiotemporal orthogonal propagation) trainer."""
+
+    @pytest.fixture
+    def fc_network(self):
+        return FCNetwork(layer_sizes=[16, 12, 4], beta=0.9, threshold=0.7)
+
+    @pytest.fixture
+    def trainer(self, fc_network):
+        return STOPTrainer(
+            network=fc_network,
+            lr=0.01,
+            batch_size=8,
+            loss_type="ce",
+            surrogate="exp",
+        )
+
+    @staticmethod
+    def _collect_thresholds(network):
+        values = []
+        for layer in network.layers:
+            if hasattr(layer, "threshold"):
+                thr = getattr(layer, "threshold")
+                if isinstance(thr, torch.Tensor):
+                    values.append(thr.detach().clone())
+                else:
+                    values.append(torch.tensor(float(thr)))
+        return values
+
+    @staticmethod
+    def _collect_leaks(network):
+        values = []
+        for layer in network.layers:
+            if hasattr(layer, "beta"):
+                beta = getattr(layer, "beta")
+                if isinstance(beta, torch.Tensor):
+                    values.append(beta.detach().clone())
+                else:
+                    values.append(torch.tensor(float(beta)))
+        return values
+
+    def test_stop_train_sample_smoke(self, trainer):
+        data = torch.rand(6, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        loss, pred = trainer.train_sample(data, target)
+
+        assert loss.shape == ()
+        assert pred.shape == (8, 1)
+        assert torch.isfinite(loss)
+        assert pred.min() >= 0
+        assert pred.max() <= 3
+
+    def test_stop_weights_change_when_enabled(self, fc_network):
+        trainer = STOPTrainer(
+            network=fc_network,
+            lr=0.05,
+            batch_size=8,
+            learn_weights=True,
+            learn_thresholds=False,
+            learn_leakage=False,
+        )
+        before = fc_network.layers[0].weight.detach().clone()
+        data = torch.rand(6, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        trainer.train_sample(data, target)
+        after = fc_network.layers[0].weight.detach()
+        assert not torch.allclose(before, after)
+
+    def test_stop_w_mode_keeps_theta_and_alpha_fixed(self, fc_network):
+        trainer = STOPTrainer(
+            network=fc_network,
+            lr=0.05,
+            batch_size=8,
+            learn_weights=True,
+            learn_thresholds=False,
+            learn_leakage=False,
+        )
+
+        theta_before = self._collect_thresholds(fc_network)
+        alpha_before = self._collect_leaks(fc_network)
+
+        data = torch.rand(5, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        trainer.train_sample(data, target)
+
+        theta_after = self._collect_thresholds(fc_network)
+        alpha_after = self._collect_leaks(fc_network)
+        for b, a in zip(theta_before, theta_after):
+            assert torch.allclose(b, a)
+        for b, a in zip(alpha_before, alpha_after):
+            assert torch.allclose(b, a)
+
+    def test_stop_wt_mode_keeps_alpha_fixed(self, fc_network):
+        trainer = STOPTrainer(
+            network=fc_network,
+            lr=0.05,
+            batch_size=8,
+            learn_weights=True,
+            learn_thresholds=True,
+            learn_leakage=False,
+        )
+
+        alpha_before = self._collect_leaks(fc_network)
+        data = torch.rand(5, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        trainer.train_sample(data, target)
+        alpha_after = self._collect_leaks(fc_network)
+
+        for b, a in zip(alpha_before, alpha_after):
+            assert torch.allclose(b, a)
+
+    def test_stop_wl_mode_keeps_threshold_fixed(self, fc_network):
+        trainer = STOPTrainer(
+            network=fc_network,
+            lr=0.05,
+            batch_size=8,
+            learn_weights=True,
+            learn_thresholds=False,
+            learn_leakage=True,
+        )
+
+        theta_before = self._collect_thresholds(fc_network)
+        data = torch.rand(5, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        trainer.train_sample(data, target)
+        theta_after = self._collect_thresholds(fc_network)
+
+        for b, a in zip(theta_before, theta_after):
+            assert torch.allclose(b, a)
+
+    def test_stop_clamps_threshold_and_leak(self, fc_network):
+        trainer = STOPTrainer(
+            network=fc_network,
+            lr=0.5,
+            batch_size=8,
+            learn_weights=False,
+            learn_thresholds=True,
+            learn_leakage=True,
+            lr_threshold=1.0,
+            lr_leakage=1.0,
+            threshold_min=0.05,
+        )
+
+        data = torch.rand(8, 8, 16)
+        target = torch.randint(0, 4, (8,))
+        trainer.train_sample(data, target)
+
+        for layer in fc_network.layers:
+            if hasattr(layer, "threshold"):
+                thr = getattr(layer, "threshold")
+                thr_min = float(thr.min().item()) if isinstance(thr, torch.Tensor) else float(thr)
+                assert thr_min >= 0.05 - 1e-8
+            if hasattr(layer, "beta"):
+                beta = getattr(layer, "beta")
+                if isinstance(beta, torch.Tensor):
+                    assert float(beta.min().item()) >= -1e-8
+                    assert float(beta.max().item()) <= 1.0 + 1e-8
+                else:
+                    assert 0.0 <= float(beta) <= 1.0
+
+    def test_stop_conv_smoke(self):
+        network = ConvFCNetwork(
+            input_shape=(1, 8, 8),
+            conv_layers=[
+                {
+                    "out_channels": 2,
+                    "kernel_size": 3,
+                    "stride": 1,
+                    "padding": 1,
+                    "pool_kernel": 2,
+                    "pool_stride": 2,
+                }
+            ],
+            layer_sizes=[6, 3],
+            beta=0.9,
+            threshold=0.7,
+            quant=False,
+        )
+        trainer = STOPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            loss_type="mse",
+            surrogate="rational",
+        )
+
+        data = torch.rand(5, 4, 1, 8, 8)
+        target = torch.randint(0, 3, (4,))
+        loss, pred = trainer.train_sample(data, target)
+
+        assert loss.shape == ()
+        assert pred.shape == (4, 1)
+        assert torch.isfinite(loss)
 
 
 class TestELLTrainer:

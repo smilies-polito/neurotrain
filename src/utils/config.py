@@ -101,6 +101,25 @@ class OSTLConfig:
 
 
 @dataclass
+class STOPConfig:
+    """STOP (SpatioTemporal Orthogonal Propagation) configuration."""
+
+    loss: str = "ce"  # "ce", "mse"
+    surrogate: str = "exp"  # "exp", "rational"
+    learn_weights: bool = True
+    learn_thresholds: bool = True
+    learn_leakage: bool = True
+    lr_weight: Optional[float] = None
+    lr_threshold: Optional[float] = None
+    lr_leakage: Optional[float] = None
+    threshold_min: float = 1e-3
+    momentum: float = 0.0
+    cosine_schedule: bool = False
+    cosine_t_max: int = 0
+    static_input_timesteps: int = 1
+
+
+@dataclass
 class DataConfig:
     """Dataset configuration."""
 
@@ -143,6 +162,7 @@ class Config:
     drtp: DRTPConfig = field(default_factory=DRTPConfig)
     etlp: ETLPConfig = field(default_factory=ETLPConfig)
     ostl: OSTLConfig = field(default_factory=OSTLConfig)
+    stop: STOPConfig = field(default_factory=STOPConfig)
     data: DataConfig = field(default_factory=DataConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
@@ -200,6 +220,7 @@ class Config:
             drtp=DRTPConfig(**config_dict.get("drtp", {})),
             etlp=ETLPConfig(**config_dict.get("etlp", {})),
             ostl=OSTLConfig(**config_dict.get("ostl", {})),
+            stop=STOPConfig(**config_dict.get("stop", {})),
             data=DataConfig(**config_dict.get("data", {})),
             hardware=HardwareConfig(**config_dict.get("hardware", {})),
             checkpoint=CheckpointConfig(**config_dict.get("checkpoint", {})),
@@ -426,6 +447,7 @@ def validate_config(config: Config) -> List[str]:
         "tp",
         "etlp",
         "drtp",
+        "stop",
     ]
     if config.trainer.name not in valid_trainers:
         issues.append(f"trainer.name must be one of {valid_trainers}")
@@ -470,6 +492,39 @@ def validate_config(config: Config) -> List[str]:
         issues.append("ostl.grad_clip must be non-negative")
     if config.trainer.name == "ostl" and config.model.architecture != "fc":
         issues.append("OSTL currently supports model.architecture == 'fc' only")
+
+    # STOP validation
+    valid_stop_losses = ["ce", "mse"]
+    if str(config.stop.loss).lower() not in valid_stop_losses:
+        issues.append(f"stop.loss must be one of {valid_stop_losses}")
+
+    valid_stop_surrogates = ["exp", "rational"]
+    if str(config.stop.surrogate).lower() not in valid_stop_surrogates:
+        issues.append(f"stop.surrogate must be one of {valid_stop_surrogates}")
+
+    if not (config.stop.learn_weights or config.stop.learn_thresholds or config.stop.learn_leakage):
+        issues.append(
+            "stop requires at least one of learn_weights / learn_thresholds / learn_leakage"
+        )
+
+    for key, value in (
+        ("stop.lr_weight", config.stop.lr_weight),
+        ("stop.lr_threshold", config.stop.lr_threshold),
+        ("stop.lr_leakage", config.stop.lr_leakage),
+    ):
+        if value is not None and value <= 0:
+            issues.append(f"{key} must be positive when set")
+
+    if config.stop.threshold_min <= 0:
+        issues.append("stop.threshold_min must be positive")
+    if config.stop.momentum < 0 or config.stop.momentum >= 1:
+        issues.append("stop.momentum must be in [0, 1)")
+    if config.stop.static_input_timesteps <= 0:
+        issues.append("stop.static_input_timesteps must be positive")
+    if config.stop.cosine_schedule and config.stop.cosine_t_max <= 0:
+        issues.append("stop.cosine_t_max must be > 0 when stop.cosine_schedule is true")
+    if config.trainer.name == "stop" and config.model.architecture not in ("fc", "conv"):
+        issues.append("STOP currently supports model.architecture in {'fc', 'conv'} only")
 
     return issues
 

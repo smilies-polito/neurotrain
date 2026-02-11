@@ -104,9 +104,4 @@ Thumbs.db
 local_config.yaml
 .env.local
 .cursor
-
-# Repo for algorithm
-eprop/
-ETLP/
-DirectRandomTargetProjection/
-ostl/
+.zed

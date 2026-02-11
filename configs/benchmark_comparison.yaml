@@ -13,6 +13,7 @@ algorithms:
     - fell # Full Event-based Local Learning (local)
     - bell # Backprop Event-based Local Learning (local)
     - stllr # STDP-inspired Temporal Local Learning Rule
+    - stop # Spatiotemporal Orthogonal Propagation (local)
     - esd_rtrl # ES-D-RTRL (BrainTrace linear-memory online learning)
 
 # Dataset configuration
