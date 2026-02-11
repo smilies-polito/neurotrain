@@ -24,6 +24,7 @@ from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.stllr_trainer import STLLRTrainer
 from trainers.stsf_trainer import STSFTrainer
 
@@ -606,6 +607,62 @@ class TestOSTLTrainer:
         assert torch.isfinite(loss)
         assert pred.shape == (16, 1)
         assert pred.device.type == "cuda"
+
+
+class TestOSTTPTrainer:
+    """OSTTP trainer tests on synthetic temporal classification."""
+
+    def _make_trainer(self, lr: float = 0.05):
+        network = FCNetwork(
+            layer_sizes=[4, 8, 2],
+            beta=0.9,
+            threshold=0.5,
+        )
+        return OSTTPTrainer(
+            network=network,
+            lr=lr,
+            batch_size=64,
+            pseudo_derivative="tanh",
+            output_loss="ce",
+            feedback_scale=1.0,
+            feedback_seed=42,
+            use_optimizer=False,
+        )
+
+    def test_train_sample_shapes_and_finite(self):
+        trainer = self._make_trainer()
+        data, target = _make_ostl_temporal_batch(batch_size=32, timesteps=5)
+
+        loss, pred = trainer.train_sample(data.transpose(0, 1), target)
+
+        assert loss.shape == ()
+        assert pred.shape == (32, 1)
+        assert torch.isfinite(loss)
+        assert pred.min().item() >= 0
+        assert pred.max().item() <= 1
+
+    def test_weights_change(self):
+        trainer = self._make_trainer(lr=0.1)
+        data, target = _make_ostl_temporal_batch(batch_size=64, timesteps=6)
+        temporal = data.transpose(0, 1)
+
+        w0_before = trainer.network.layers[0].weight.detach().clone()
+        trainer.train_sample(temporal, target)
+        w0_after = trainer.network.layers[0].weight.detach()
+
+        assert not torch.allclose(w0_before, w0_after)
+
+    def test_feedback_matrices_fixed(self):
+        trainer = self._make_trainer(lr=0.05)
+        data, target = _make_ostl_temporal_batch(batch_size=16, timesteps=4)
+
+        trainer.train_sample(data.transpose(0, 1), target)
+
+        assert trainer._feedback_ready is True
+        assert len(trainer._feedback_names) == 1  # one hidden layer for [4, 8, 2]
+        fb = getattr(trainer, trainer._feedback_names[0])
+        assert fb.requires_grad is False
+        assert fb.shape == (2, 8)
 
 
 class TestETLPTrainer:

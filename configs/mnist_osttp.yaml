@@ -1,0 +1,52 @@
+# MNIST OSTTP Configuration
+# Online Spatio-Temporal Learning with Target Projection (forward-only, no BPTT)
+
+experiment:
+  name: "OSTTP_MNIST"
+  seed: 42
+  deterministic: true
+  log_dir: "./experiments"
+
+model:
+  architecture: "fc"
+  layer_sizes: [784, 200, 10]
+  beta: 0.9375
+  threshold: 1.0
+  quantization: false
+
+training:
+  epochs: 50
+  batch_size: 128
+  learning_rate: 0.001
+  optimizer: null # null = manual OSTTP update; can be "adam"/"sgd"/"nag"/"rmsprop"
+
+trainer:
+  name: "osttp"
+  update_last: false
+  update_every: 1
+  seq_batch: 1
+
+osttp:
+  pseudo_derivative: "tanh" # "tanh" or "fast_sigmoid"
+  output_loss: "ce" # "ce", "bce", or "mse"
+  feedback_scale: 1.0
+  feedback_seed: 42
+  target_dim: 10 # null = inferred from network.n_classes
+  grad_clip: 0.0
+  debug: false
+
+data:
+  dataset: "MNIST"
+  timesteps: 25
+  data_dir: "./src/Data"
+  num_workers: 4
+
+hardware:
+  device: "auto"
+  mixed_precision: false
+
+checkpoint:
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2

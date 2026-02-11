@@ -40,6 +40,7 @@ from trainers.eprop_trainer import EpropTrainer
 from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 from trainers.ottt_trainer import OTTTTrainer
 from trainers.stllr_trainer import STLLRTrainer
 from trainers.stsf_trainer import STSFTrainer
@@ -88,6 +89,12 @@ ALGORITHM_INFO = {
         "is_local": True,
         "requires_backprop": False,
         "source": "custom (ostl_trainer.py) - Bohnstingl et al. 2020",
+    },
+    "osttp": {
+        "name": "OSTTP (Online Spatio-Temporal Target Projection)",
+        "is_local": True,
+        "requires_backprop": False,
+        "source": "custom (osttp_trainer.py) - target-projected OSTL rule",
     },
     "ell": {
         "name": "Event-based Local Learning",
@@ -419,6 +426,21 @@ def benchmark_algorithm(
             use_optimizer=False,
             optimizer=None,
         )
+    elif algorithm_name == "osttp":
+        # OSTTP: fixed target projection + OSTL temporal eligibility traces
+        torch.set_grad_enabled(False)
+        trainer = trainer_class(
+            network=network,
+            lr=lr,
+            batch_size=batch_size,
+            pseudo_derivative="tanh",
+            output_loss="ce",
+            feedback_scale=1.0,
+            feedback_seed=42,
+            target_dim=layer_sizes[-1],
+            use_optimizer=False,
+            optimizer=None,
+        )
     elif algorithm_name in ("ell", "fell", "bell"):
         # ELL/FELL/BELL: gradient-based local learning
         torch.set_grad_enabled(True)
@@ -576,6 +598,7 @@ def run_comparison(
         "eprop": EpropTrainer,
         "decolle": DECOLLETrainer,
         "ostl": OSTLTrainer,
+        "osttp": OSTTPTrainer,
         "ottt": OTTTTrainer,
         "drtp": DRTPTrainer,
         "ell": ELLTrainer,

@@ -78,6 +78,14 @@ class TestConfig:
         assert config.ostl.surrogate_scale == 5.0
         assert config.ostl.grad_clip == 0.0
 
+    def test_default_osttp_config(self):
+        """Test OSTTP config defaults."""
+        config = Config()
+        assert config.osttp.pseudo_derivative == "tanh"
+        assert config.osttp.output_loss == "ce"
+        assert config.osttp.feedback_scale == 1.0
+        assert config.osttp.grad_clip == 0.0
+
 
 class TestConfigIO:
     """Test config file I/O."""
@@ -162,3 +170,12 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("OSTL currently supports" in issue for issue in issues)
+
+    def test_osttp_requires_fc_architecture(self):
+        """Test OSTTP validation enforces FC architecture."""
+        config = Config()
+        config.trainer.name = "osttp"
+        config.model.architecture = "recurrent"
+
+        issues = validate_config(config)
+        assert any("OSTTP currently supports" in issue for issue in issues)
