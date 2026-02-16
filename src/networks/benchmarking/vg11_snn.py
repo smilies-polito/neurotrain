@@ -109,7 +109,7 @@ class VG11SNN(BaseSNN):
             in_channels = out_channels
 
         with torch.no_grad():
-            dummy = torch.zeros(1, *self.in_shape)
+            dummy = torch.zeros(2, *self.in_shape)
             for conv, norm, pool in zip(self.conv_layers, self.conv_norms, self.pool_layers):
                 dummy = pool(norm(conv(dummy)))
             flat_features = int(dummy.flatten(1).shape[1])
