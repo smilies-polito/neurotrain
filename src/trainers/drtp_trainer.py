@@ -218,7 +218,9 @@ class DRTPTrainer(BaseTrainer):
             layer.weight.data -= grad_w
 
     @torch.no_grad()
-    def train_sample(self, data: torch.Tensor, target: torch.Tensor):
+    def train_sample(
+        self, data: torch.Tensor, target: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Train on a single batch using DRTP.
 
