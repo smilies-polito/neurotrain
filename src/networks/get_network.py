@@ -10,7 +10,6 @@ import torch
 
 from networks.base_snn import BaseSNN
 from networks.fc_network import FCNetwork
-from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from networks.spiking_resnet18 import SpikingResNet18
 from networks.spiking_vgg11 import SpikingVGG11
@@ -72,21 +71,9 @@ def get_network(
                 dt=1e-3,
             )
 
-        if algorithm_name == "ostl":
-            if recurrent_type not in ("snu", "ssnu"):
-                raise ValueError(
-                    "For ostl recurrent model, recurrent_type must be one of: snu, ssnu."
-                )
-            return RecurrentFCNetwork(
-                layer_sizes=layer_sizes,
-                beta=beta,
-                quant=kwargs.get("quant", False),
-                threshold=kwargs.get("threshold", 1.0),
-                recurrent_type=recurrent_type,
-            )
-
         raise ValueError(
-            f"Recurrent architecture is only compatible with eprop, esd_rtrl, or ostl, got {algorithm_name}"
+            "Recurrent architecture is only compatible with eprop or esd_rtrl, "
+            f"got {algorithm_name}"
         )
 
     if effective_arch == "stllr":

@@ -22,14 +22,16 @@ from trainers.base_trainer import BaseTrainer
 
 class OSTLTrainer(BaseTrainer):
     """
-    Online Spatio-Temporal Learning (OSTL) trainer.
+    Online Spatio-Temporal Learning (OSTL) trainer for feed-forward SNNs only.
 
     Notes on framework adaptation:
     - The paper formulation includes a separate output readout matrix W_out.
-      Here we use an identity readout over the network output spikes so OSTL
-      fits the existing model interface without adding extra model parameters.
+      Here we use an identity readout over the selected final-layer output
+      (spikes or membrane) so OSTL fits the existing model interface without
+      adding extra model parameters.
     - The framework's FCNetwork has no trainable bias by default; this trainer
       therefore applies OSTL updates to weights only.
+    - Recurrent weight matrices are intentionally unsupported in this trainer.
     """
 
     def __init__(
@@ -44,6 +46,7 @@ class OSTLTrainer(BaseTrainer):
         quant: bool = False,
         use_optimizer: bool = False,
         optimizer: Optional[torch.optim.Optimizer] = None,
+        output_mode: str = "spike",
         **kwargs,
     ):
         super().__init__()
@@ -56,36 +59,60 @@ class OSTLTrainer(BaseTrainer):
         self.update_every = int(update_every)
         self.quant = quant
         self.use_optimizer = bool(use_optimizer)
+        self.output_mode = str(output_mode).lower()
 
-        self.linear_layers: List[nn.Linear] = [
-            layer
-            for layer in getattr(self.network, "layers", [])
-            if isinstance(layer, nn.Linear)
-        ]
-        self.lif_layers: List[snn.Leaky] = [
-            layer
-            for layer in getattr(self.network, "layers", [])
-            if isinstance(layer, snn.Leaky)
-        ]
-        self.recurrent_layers: List[nn.Linear] = list(
-            getattr(self.network, "recurrent_layers", [])
-        )
-
-        if not self.linear_layers or len(self.linear_layers) != len(self.lif_layers):
-            raise TypeError(
-                "OSTLTrainer expects an FCNetwork-like model with alternating "
-                "Linear and snn.Leaky layers."
+        if self.output_mode not in ("spike", "mem"):
+            raise ValueError(
+                f"Invalid OSTL output_mode='{output_mode}'. Use 'spike' or 'mem'."
             )
-        if self.recurrent_layers and len(self.recurrent_layers) != len(
-            self.linear_layers
-        ):
+
+        if not hasattr(self.network, "layers"):
             raise TypeError(
-                "If recurrent_layers are present, they must match the number of "
-                "feed-forward linear layers."
+                "OSTLTrainer expects network.layers with alternating "
+                "[nn.Linear, snn.Leaky] modules."
+            )
+        raw_layers = getattr(self.network, "layers")
+        if not isinstance(raw_layers, (nn.ModuleList, list, tuple)):
+            raise TypeError(
+                "OSTLTrainer expects network.layers to be a ModuleList/list/tuple."
+            )
+        if len(raw_layers) == 0 or len(raw_layers) % 2 != 0:
+            raise TypeError(
+                "OSTLTrainer expects an even-length alternating [nn.Linear, "
+                "snn.Leaky] structure in network.layers."
+            )
+
+        self.linear_layers: List[nn.Linear] = []
+        self.lif_layers: List[snn.Leaky] = []
+        for idx, layer in enumerate(raw_layers):
+            if idx % 2 == 0:
+                if not isinstance(layer, nn.Linear):
+                    raise TypeError(
+                        "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
+                        f"in network.layers; found {type(layer).__name__} at index {idx}."
+                    )
+                self.linear_layers.append(layer)
+            else:
+                if not isinstance(layer, snn.Leaky):
+                    raise TypeError(
+                        "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
+                        f"in network.layers; found {type(layer).__name__} at index {idx}."
+                    )
+                self.lif_layers.append(layer)
+
+        recurrent_layers = getattr(self.network, "recurrent_layers", None)
+        if recurrent_layers is not None and len(recurrent_layers) > 0:
+            raise TypeError(
+                "OSTLTrainer is feed-forward only and does not support "
+                "network.recurrent_layers."
+            )
+        if len(self.linear_layers) != len(self.lif_layers):
+            raise RuntimeError(
+                "OSTLTrainer internal invariant violated: number of Linear and "
+                "snn.Leaky layers must match."
             )
 
         self.num_layers = len(self.linear_layers)
-        self.has_recurrent_weights = bool(self.recurrent_layers)
         self.n_classes = int(getattr(self.network, "n_classes"))
 
         self.layer_decay = [self._to_float(lif.beta) for lif in self.lif_layers]
@@ -145,8 +172,21 @@ class OSTLTrainer(BaseTrainer):
         num_timesteps, batch_size, _ = data.shape
         device = data.device
 
-        target_onehot = torch.zeros(batch_size, self.n_classes, device=device)
+        if len(self.linear_layers) != len(self.lif_layers):
+            raise RuntimeError(
+                "OSTLTrainer internal invariant violated: len(linear_layers) "
+                "must equal len(lif_layers)."
+            )
+
+        target_onehot = torch.zeros(
+            batch_size, self.n_classes, device=device, dtype=data.dtype
+        )
         target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
+        if target_onehot.shape != (batch_size, self.n_classes):
+            raise RuntimeError(
+                "OSTLTrainer internal invariant violated: target_onehot must "
+                f"have shape ({batch_size}, {self.n_classes})."
+            )
 
         self.network.reset()
         if self.use_optimizer and self.optimizer is not None:
@@ -158,16 +198,6 @@ class OSTLTrainer(BaseTrainer):
             )
             for layer in self.linear_layers
         ]
-        eps_r = (
-            [
-                torch.zeros(
-                    batch_size, layer.out_features, layer.out_features, device=device
-                )
-                for layer in self.recurrent_layers
-            ]
-            if self.has_recurrent_weights
-            else None
-        )
         prev_mem = [
             torch.zeros(batch_size, layer.out_features, device=device)
             for layer in self.linear_layers
@@ -181,15 +211,29 @@ class OSTLTrainer(BaseTrainer):
             for layer in self.linear_layers
         ]
 
-        spk_sum = torch.zeros(batch_size, self.n_classes, device=device)
+        output_sum = torch.zeros(
+            batch_size, self.n_classes, device=device, dtype=data.dtype
+        )
         total_loss = torch.tensor(0.0, device=device)
 
         for t in range(num_timesteps):
             spk_rec, mem_rec = self.network(data[t])
-            spk_sum += spk_rec[-1]
+            if len(spk_rec) != self.num_layers or len(mem_rec) != self.num_layers:
+                raise ValueError(
+                    "OSTLTrainer expects network forward to return per-layer "
+                    "spike/membrane lists with length equal to number of layers."
+                )
+
+            output_t = spk_rec[-1] if self.output_mode == "spike" else mem_rec[-1]
+            if output_t.shape != (batch_size, self.n_classes):
+                raise ValueError(
+                    "OSTLTrainer expects final selected output shape "
+                    f"({batch_size}, {self.n_classes}), got {tuple(output_t.shape)} "
+                    f"for output_mode='{self.output_mode}'."
+                )
+            output_sum += output_t
 
             e_w_per_layer = []
-            e_r_per_layer = []
             h_prime_per_layer = []
 
             for layer_idx in range(self.num_layers):
@@ -216,23 +260,13 @@ class OSTLTrainer(BaseTrainer):
                 e_w_t = h_prime_t.unsqueeze(-1) * eps_w[layer_idx]
                 e_w_per_layer.append(e_w_t)
 
-                if self.has_recurrent_weights and eps_r is not None:
-                    # Recurrent eligibility for R_l uses previous output of same layer.
-                    # This follows the same local recursion as feed-forward eligibility.
-                    eps_r[layer_idx] = ds_ds_prev.unsqueeze(-1) * eps_r[
-                        layer_idx
-                    ] + prev_spk[layer_idx].unsqueeze(1)
-                    e_r_t = h_prime_t.unsqueeze(-1) * eps_r[layer_idx]
-                    e_r_per_layer.append(e_r_t)
-
             learning_signals = [None] * self.num_layers
-            # Fixed identity readout adaptation of Eq. (19)
-            learning_signals[-1] = spk_rec[-1] - target_onehot
+            # Fixed identity readout adaptation of Eq. (19):
+            # use selected output readout (spikes or membrane) at final layer.
+            learning_signals[-1] = output_t - target_onehot
 
             # Eq. (18): recursive learning signal propagation over layers
-            # For recurrent OSTL we use the "without recurrent Jacobian" approximation
-            # described in the paper's recurrent complexity discussion, i.e. propagate
-            # signals across depth via feed-forward weights only.
+            # Propagate across depth via feed-forward weights only.
             for layer_idx in range(self.num_layers - 2, -1, -1):
                 next_h_prime = h_prime_per_layer[layer_idx + 1]
                 w_next = self.linear_layers[layer_idx + 1].weight
@@ -259,18 +293,6 @@ class OSTLTrainer(BaseTrainer):
                     )
                     self._accumulate_or_apply_grad(layer, grad_w)
 
-                    if self.has_recurrent_weights:
-                        rec_layer = self.recurrent_layers[layer_idx]
-                        grad_r = (
-                            torch.einsum(
-                                "bi,bij->ij",
-                                learning_signals[layer_idx],
-                                e_r_per_layer[layer_idx],
-                            )
-                            / batch_size
-                        )
-                        self._accumulate_or_apply_grad(rec_layer, grad_r)
-
                 if self.use_optimizer and self.optimizer is not None:
                     self.optimizer.step()
                     self.optimizer.zero_grad(set_to_none=True)
@@ -280,10 +302,10 @@ class OSTLTrainer(BaseTrainer):
                 prev_spk[layer_idx] = spk_rec[layer_idx].detach()
                 prev_h_prime[layer_idx] = h_prime_per_layer[layer_idx].detach()
 
-            total_loss += F.mse_loss(spk_rec[-1], target_onehot)
+            total_loss += F.mse_loss(output_t, target_onehot)
 
         loss = total_loss / num_timesteps
-        pred = spk_sum.argmax(dim=1, keepdim=True)
+        pred = output_sum.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
     def reset(self) -> None:
