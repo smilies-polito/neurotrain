@@ -78,6 +78,7 @@ class TestConfig:
         config = Config()
         assert config.ostl.surrogate_scale == 5.0
         assert config.ostl.grad_clip == 0.0
+        assert config.ostl.output_mode == "spike"
 
     def test_default_stop_config(self):
         """Test STOP config defaults."""
@@ -173,25 +174,22 @@ class TestConfigValidation:
         issues = validate_config(config)
         assert any("dataset" in issue for issue in issues)
 
-    def test_ostl_recurrent_requires_snu_type(self):
-        """Test recurrent OSTL validation enforces snu/ssnu types."""
+    def test_ostl_requires_fc_architecture(self):
+        """Test OSTL validation enforces feed-forward FC architecture."""
         config = Config()
         config.trainer.name = "ostl"
         config.model.architecture = "recurrent"
-        config.model.recurrent_type = "standard"
 
         issues = validate_config(config)
-        assert any("Recurrent OSTL requires" in issue for issue in issues)
+        assert any("OSTL currently supports" in issue for issue in issues)
 
-    def test_ostl_recurrent_snu_is_valid(self):
-        """Test recurrent OSTL with SNU type passes validation."""
+    def test_ostl_invalid_output_mode(self):
+        """Test OSTL validation rejects unsupported output_mode values."""
         config = Config()
-        config.trainer.name = "ostl"
-        config.model.architecture = "recurrent"
-        config.model.recurrent_type = "snu"
+        config.ostl.output_mode = "logits"
 
         issues = validate_config(config)
-        assert not any("Recurrent OSTL requires" in issue for issue in issues)
+        assert any("ostl.output_mode" in issue for issue in issues)
 
     def test_invalid_recurrent_type(self):
         """Test validation catches invalid recurrent model type."""
@@ -210,7 +208,6 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("eprop/esd_rtrl require" in issue for issue in issues)
-        assert any("OSTL currently supports" in issue for issue in issues)
 
     def test_stop_requires_fc_or_conv_architecture(self):
         """Test STOP validation enforces FC/Conv architecture."""

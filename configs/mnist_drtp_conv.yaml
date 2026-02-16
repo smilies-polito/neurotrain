@@ -1,32 +1,39 @@
-# MNIST DRTP Configuration
-# Direct Random Target Projection (DRTP) training on MNIST
+# MNIST DRTP Convolutional Configuration
+# Spiking conversion of paper CONV topology:
+# Conv(32, 5x5, stride=1, padding=2) -> MaxPool(2x2, stride=2) -> FC(1000) -> FC(10)
 
 experiment:
-    name: "DRTP_MNIST"
+    name: "DRTP_MNIST_CONV32_FC1000"
     seed: 42
     deterministic: true
     log_dir: "./experiments"
 
 model:
-    architecture: "fc"
-    layer_sizes: [784, 500, 500, 10] # [input, hidden..., output]
+    architecture: "conv"
+    conv_layers:
+        - out_channels: 32
+          kernel_size: 5
+          stride: 1
+          padding: 2
+          pool_kernel: 2
+          pool_stride: 2
+    layer_sizes: [1000, 10] # FC(1000) -> FC(10)
     beta: 0.9375
     threshold: 1.0
     quantization: false
 
 training:
-    # this is the parameter from the paper
-    epochs: 20
+    epochs: 50
     batch_size: 256
     learning_rate: 0.005
-    optimizer: null # null = manual DRTP updates; can be "adam"/"sgd"/"nag"/"rmsprop"
+    optimizer: null # null = manual DRTP updates
     weight_decay: 0.0
     freeze_conv: false
 
 trainer:
     name: "drtp"
-    update_last: false # false = per-timestep updates
-    update_every: 1 # update every timestep
+    update_last: false
+    update_every: 1
     seq_batch: 1
 
 drtp:
