@@ -2,9 +2,13 @@
 Network factory with algorithm-model compatibility matrix.
 
 Returns the appropriate network for a given algorithm and model architecture.
+
+Supports two modes via network_mode:
+- "benchmarking" (B): Uses networks from networks/benchmarking/ (FCSNN, RSNN, etc.)
+- "reproducibility" (R): Uses networks from flat structure (FCNetwork, LocalClassifier, etc.)
 """
 
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 import torch
 
@@ -13,6 +17,8 @@ from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from networks.spiking_resnet18 import SpikingResNet18
 from networks.spiking_vgg11 import SpikingVGG11
+
+NetworkMode = Literal["benchmarking", "reproducibility"]
 
 # Compatibility: (algorithm, model_architecture) -> use this model
 # Algorithms that require specific models will override model_architecture
@@ -26,11 +32,65 @@ _ALGORITHM_MODEL_OVERRIDE = {
 }
 
 
+# Algorithms that require architectures not available in benchmarking/ (no LocalClassifier, STLLR)
+_BENCHMARKING_UNSUPPORTED_ALGORITHMS = ("ell", "fell", "bell", "stllr")
+
+
+def get_benchmarking_network(
+    algorithm_name: str,
+    layer_sizes: list,
+    beta: float = 0.9,
+    dataset: Optional[str] = None,
+    **kwargs: Any,
+) -> BaseSNN:
+    """
+    Create a network from networks/benchmarking/ for benchmarking mode.
+
+    Uses FCSNN for feedforward algorithms, RSNN for recurrent (eprop, esd_rtrl).
+    Maps layer_sizes [in, hidden..., out] to in_shape, hidden_sizes, num_classes.
+
+    Raises ValueError for ell, fell, bell, stllr (no benchmarking equivalent).
+    """
+    if algorithm_name in _BENCHMARKING_UNSUPPORTED_ALGORITHMS:
+        raise ValueError(
+            f"Algorithm '{algorithm_name}' has no benchmarking network equivalent. "
+            f"Use mode R (reproducibility) for ell, fell, bell, stllr."
+        )
+    num_classes = layer_sizes[-1]
+    hidden_sizes = tuple(layer_sizes[1:-1])
+    input_size = layer_sizes[0]
+
+    # Use flattened in_shape: (input_size,) for compatibility with rate-coded loaders
+    in_shape = (input_size,)
+
+    if algorithm_name in ("eprop", "esd_rtrl"):
+        from networks.benchmarking.r_snn import RSNN
+
+        return RSNN(
+            in_shape=in_shape,
+            num_classes=num_classes,
+            hidden_sizes=hidden_sizes,
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+    else:
+        from networks.benchmarking.fc_snn import FCSNN
+
+        return FCSNN(
+            in_shape=in_shape,
+            num_classes=num_classes,
+            hidden_sizes=hidden_sizes,
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+
+
 def get_network(
     algorithm_name: str,
     model_architecture: str,
     layer_sizes: list,
     beta: float = 0.9,
+    network_mode: NetworkMode = "reproducibility",
     **kwargs: Any,
 ) -> BaseSNN:
     """
@@ -41,6 +101,7 @@ def get_network(
         model_architecture: Requested model ("fc", "local_classifier", "recurrent").
         layer_sizes: Network layer sizes [input, hidden..., output].
         beta: LIF neuron leak factor (for fc and local_classifier).
+        network_mode: "benchmarking" (B) uses networks/benchmarking/, "reproducibility" (R) uses flat structure.
         **kwargs: Additional arguments passed to network constructors.
 
     Returns:
@@ -49,6 +110,15 @@ def get_network(
     Raises:
         ValueError: If algorithm-model combination is incompatible.
     """
+    if network_mode == "benchmarking":
+        return get_benchmarking_network(
+            algorithm_name=algorithm_name,
+            layer_sizes=layer_sizes,
+            beta=beta,
+            dataset=kwargs.get("dataset"),
+            **kwargs,
+        )
+
     # Some algorithms require a specific model regardless of config
     effective_arch = _ALGORITHM_MODEL_OVERRIDE.get(algorithm_name, model_architecture)
 

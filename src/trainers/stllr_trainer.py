@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from trainers.base_trainer import BaseTrainer
-from networks.stllr_layers import LinearSTLLR
+from networks.stllr_network import LinearSTLLR
 
 
 def _ce_grad_output(output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
