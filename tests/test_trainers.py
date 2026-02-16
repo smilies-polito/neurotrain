@@ -540,9 +540,13 @@ class TestDRTPTrainer:
             network=network,
             lr=0.05,
             batch_size=4,
+            loss_type="mse",
+            output_mode="spike",
             feedback_distribution="kaiming_uniform",
             feedback_scale=0.1,
             fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
             use_optimizer=False,
         )
 
@@ -557,6 +561,27 @@ class TestDRTPTrainer:
         target = torch.randint(0, 2, (4,))
         loss, pred = trainer.train_sample(data, target)
         assert loss.shape == ()
+        assert pred.shape == (4, 1)
+
+    def test_trainer_train_sample_mem_mode(self, network):
+        trainer = DRTPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            loss_type="bce",
+            output_mode="mem",
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
+            use_optimizer=False,
+        )
+        data = torch.randn(3, 4, 2)
+        target = torch.randint(0, 2, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
         assert pred.shape == (4, 1)
 
     def test_loss_decreases(self, trainer, network):

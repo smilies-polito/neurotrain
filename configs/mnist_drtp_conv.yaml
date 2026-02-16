@@ -23,11 +23,12 @@ model:
     quantization: false
 
 training:
-    epochs: 50
-    batch_size: 256
+    epochs: 100
+    batch_size: 60
     learning_rate: 0.005
-    optimizer: null # null = manual DRTP updates
+    optimizer: "adam"
     weight_decay: 0.0
+    # CONV(trained) when false; CONV(random) when true.
     freeze_conv: false
 
 trainer:
@@ -37,7 +38,10 @@ trainer:
     seq_batch: 1
 
 drtp:
-    loss: "mse"
+    loss: "bce"
+    output_mode: "mem" # paper-aligned reference ("spike" for compatibility experiments)
+    surrogate_scale: 5.0
+    surrogate_type: "logistic"
     feedback_distribution: "kaiming_uniform"
     feedback_scale: 1.0
     fixed_feedback: true

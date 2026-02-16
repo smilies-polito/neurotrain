@@ -66,7 +66,10 @@ class TrainerConfig:
 class DRTPConfig:
     """Direct Random Target Projection configuration."""
 
-    loss: str = "mse"  # "mse", "bce", "ce"
+    loss: str = "mse"  # "mse", "bce"
+    output_mode: str = "mem"  # "mem", "spike"
+    surrogate_scale: float = 5.0
+    surrogate_type: str = "logistic"
     feedback_distribution: str = (
         "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
     )
@@ -490,10 +493,19 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 
     # DRTP validation
-    valid_drtp_losses = ["mse", "bce", "ce"]
+    valid_drtp_losses = ["mse", "bce"]
     loss_name = str(config.drtp.loss).lower()
     if loss_name not in valid_drtp_losses:
         issues.append(f"drtp.loss must be one of {valid_drtp_losses}")
+    valid_drtp_output_modes = ["mem", "spike"]
+    drtp_output_mode = str(config.drtp.output_mode).lower()
+    if drtp_output_mode not in valid_drtp_output_modes:
+        issues.append(f"drtp.output_mode must be one of {valid_drtp_output_modes}")
+    if config.drtp.surrogate_scale <= 0:
+        issues.append("drtp.surrogate_scale must be positive")
+    valid_drtp_surrogates = ["logistic"]
+    if str(config.drtp.surrogate_type).lower() not in valid_drtp_surrogates:
+        issues.append(f"drtp.surrogate_type must be one of {valid_drtp_surrogates}")
 
     valid_drtp_distributions = ["kaiming_uniform", "uniform", "normal"]
     if config.drtp.feedback_distribution not in valid_drtp_distributions:
