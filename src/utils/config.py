@@ -56,9 +56,7 @@ class TrainingConfig:
 class TrainerConfig:
     """Trainer-specific configuration."""
 
-    name: str = (
-        "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "ostl", "osttp", "stdp"
-    )
+    name: str = "stsf"  # "stsf", "bptt", "decolle", "eprop", "drtp", "etlp", "ostl", "osttp", "stdp"
     update_last: bool = False
     update_every: int = 1
     seq_batch: int = 1
@@ -68,7 +66,10 @@ class TrainerConfig:
 class DRTPConfig:
     """Direct Random Target Projection configuration."""
 
-    loss: str = "mse"  # "mse", "bce", "ce"
+    loss: str = "mse"  # "mse", "bce"
+    output_mode: str = "mem"  # "mem", "spike"
+    surrogate_scale: float = 5.0
+    surrogate_type: str = "logistic"
     feedback_distribution: str = (
         "kaiming_uniform"  # "kaiming_uniform", "uniform", "normal"
     )
@@ -99,6 +100,7 @@ class OSTLConfig:
 
     surrogate_scale: float = 5.0
     grad_clip: float = 0.0
+    output_mode: str = "spike"  # "spike", "mem"
 
 
 @dataclass
@@ -491,10 +493,19 @@ def validate_config(config: Config) -> List[str]:
         issues.append(f"trainer.name must be one of {valid_trainers}")
 
     # DRTP validation
-    valid_drtp_losses = ["mse", "bce", "ce"]
+    valid_drtp_losses = ["mse", "bce"]
     loss_name = str(config.drtp.loss).lower()
     if loss_name not in valid_drtp_losses:
         issues.append(f"drtp.loss must be one of {valid_drtp_losses}")
+    valid_drtp_output_modes = ["mem", "spike"]
+    drtp_output_mode = str(config.drtp.output_mode).lower()
+    if drtp_output_mode not in valid_drtp_output_modes:
+        issues.append(f"drtp.output_mode must be one of {valid_drtp_output_modes}")
+    if config.drtp.surrogate_scale <= 0:
+        issues.append("drtp.surrogate_scale must be positive")
+    valid_drtp_surrogates = ["logistic"]
+    if str(config.drtp.surrogate_type).lower() not in valid_drtp_surrogates:
+        issues.append(f"drtp.surrogate_type must be one of {valid_drtp_surrogates}")
 
     valid_drtp_distributions = ["kaiming_uniform", "uniform", "normal"]
     if config.drtp.feedback_distribution not in valid_drtp_distributions:
@@ -528,18 +539,11 @@ def validate_config(config: Config) -> List[str]:
         issues.append("ostl.surrogate_scale must be positive")
     if config.ostl.grad_clip < 0:
         issues.append("ostl.grad_clip must be non-negative")
+    if str(config.ostl.output_mode).lower() not in ("spike", "mem"):
+        issues.append("ostl.output_mode must be one of ['spike', 'mem']")
     if config.trainer.name == "ostl":
-        if config.model.architecture not in ("fc", "recurrent"):
-            issues.append(
-                "OSTL supports model.architecture in ['fc', 'recurrent'] only"
-            )
-        if (
-            config.model.architecture == "recurrent"
-            and config.model.recurrent_type not in ("snu", "ssnu")
-        ):
-            issues.append(
-                "Recurrent OSTL requires model.recurrent_type in ['snu', 'ssnu']"
-            )
+        if config.model.architecture != "fc":
+            issues.append("OSTL currently supports model.architecture == 'fc' only")
 
     # OSTTP validation
     valid_pseudo = ["tanh", "fast_sigmoid"]
@@ -551,10 +555,20 @@ def validate_config(config: Config) -> List[str]:
     valid_output_readouts = ["spk", "mem", "logits", "probs"]
     if config.osttp.output_readout not in valid_output_readouts:
         issues.append(f"osttp.output_readout must be one of {valid_output_readouts}")
-    if config.osttp.output_loss == "bce_logits" and config.osttp.output_readout != "logits":
-        issues.append("osttp.output_loss='bce_logits' requires osttp.output_readout='logits'")
-    if config.osttp.output_loss == "bce_probs" and config.osttp.output_readout != "probs":
-        issues.append("osttp.output_loss='bce_probs' requires osttp.output_readout='probs'")
+    if (
+        config.osttp.output_loss == "bce_logits"
+        and config.osttp.output_readout != "logits"
+    ):
+        issues.append(
+            "osttp.output_loss='bce_logits' requires osttp.output_readout='logits'"
+        )
+    if (
+        config.osttp.output_loss == "bce_probs"
+        and config.osttp.output_readout != "probs"
+    ):
+        issues.append(
+            "osttp.output_loss='bce_probs' requires osttp.output_readout='probs'"
+        )
     if config.osttp.feedback_scale <= 0:
         issues.append("osttp.feedback_scale must be positive")
     if config.osttp.grad_clip < 0:
@@ -573,7 +587,11 @@ def validate_config(config: Config) -> List[str]:
     if str(config.stop.surrogate).lower() not in valid_stop_surrogates:
         issues.append(f"stop.surrogate must be one of {valid_stop_surrogates}")
 
-    if not (config.stop.learn_weights or config.stop.learn_thresholds or config.stop.learn_leakage):
+    if not (
+        config.stop.learn_weights
+        or config.stop.learn_thresholds
+        or config.stop.learn_leakage
+    ):
         issues.append(
             "stop requires at least one of learn_weights / learn_thresholds / learn_leakage"
         )

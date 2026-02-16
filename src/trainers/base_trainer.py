@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-import numpy as np 
+
 import torch
-import math
 import torch.nn as nn
+
 
 class BaseTrainer(ABC, nn.Module):
     """
@@ -11,17 +11,19 @@ class BaseTrainer(ABC, nn.Module):
     """
 
     @abstractmethod
-    def train_sample(self, data, target):
+    def train_sample(
+        self, data: torch.Tensor, target: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Train the model on a single sample.
         Must be implemented by subclasses.
         """
-        pass
+        ...
 
     @abstractmethod
-    def reset(self):
+    def reset(self) -> None:
         """
         Reset the trainer's state.
         Must be implemented by subclasses.
         """
-        pass
+        ...

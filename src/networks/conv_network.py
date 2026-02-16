@@ -115,6 +115,7 @@ class ConvFCNetwork(nn.Module):
         spk_rec, mem_rec = [], []
         self._last_layer_inputs = []
         self._last_layer_spks = []
+        self._last_layer_mems = []
 
         out = x
         for conv, lif, pool in self.conv_blocks:
@@ -126,6 +127,7 @@ class ConvFCNetwork(nn.Module):
             spk_rec.append(spk)
             mem_rec.append(mem)
             self._last_layer_spks.append(spk)
+            self._last_layer_mems.append(mem)
             out = pool(spk)
 
         out = out.view(out.size(0), -1)
@@ -138,6 +140,7 @@ class ConvFCNetwork(nn.Module):
             spk_rec.append(spk)
             mem_rec.append(mem)
             self._last_layer_spks.append(spk)
+            self._last_layer_mems.append(mem)
             out = spk
 
         return spk_rec, mem_rec
@@ -150,7 +153,9 @@ class ConvFCNetwork(nn.Module):
 
     def layer_output_shapes(self) -> List[Tuple[int, ...]]:
         with torch.no_grad():
-            dummy = torch.zeros((1, *self.input_shape), device=self.trainable_layers[0].weight.device)
+            dummy = torch.zeros(
+                (1, *self.input_shape), device=self.trainable_layers[0].weight.device
+            )
             self.reset()
             spk_rec, _ = self.forward(dummy)
             self.reset()
