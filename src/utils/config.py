@@ -100,6 +100,7 @@ class OSTLConfig:
 
     surrogate_scale: float = 5.0
     grad_clip: float = 0.0
+    output_mode: str = "spike"  # "spike", "mem"
 
 
 @dataclass
@@ -538,18 +539,11 @@ def validate_config(config: Config) -> List[str]:
         issues.append("ostl.surrogate_scale must be positive")
     if config.ostl.grad_clip < 0:
         issues.append("ostl.grad_clip must be non-negative")
+    if str(config.ostl.output_mode).lower() not in ("spike", "mem"):
+        issues.append("ostl.output_mode must be one of ['spike', 'mem']")
     if config.trainer.name == "ostl":
-        if config.model.architecture not in ("fc", "recurrent"):
-            issues.append(
-                "OSTL supports model.architecture in ['fc', 'recurrent'] only"
-            )
-        if (
-            config.model.architecture == "recurrent"
-            and config.model.recurrent_type not in ("snu", "ssnu")
-        ):
-            issues.append(
-                "Recurrent OSTL requires model.recurrent_type in ['snu', 'ssnu']"
-            )
+        if config.model.architecture != "fc":
+            issues.append("OSTL currently supports model.architecture == 'fc' only")
 
     # OSTTP validation
     valid_pseudo = ["tanh", "fast_sigmoid"]

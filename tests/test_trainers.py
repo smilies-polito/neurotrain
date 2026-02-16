@@ -618,7 +618,7 @@ class TestDRTPTrainer:
 class TestOSTLTrainer:
     """OSTL trainer tests on synthetic temporal classification."""
 
-    def _make_trainer(self, lr: float = 0.05):
+    def _make_trainer(self, lr: float = 0.05, output_mode: str = "spike"):
         network = FCNetwork(
             layer_sizes=[4, 8, 2],
             beta=0.9,
@@ -631,6 +631,7 @@ class TestOSTLTrainer:
             surrogate_scale=5.0,
             grad_clip=1.0,
             use_optimizer=False,
+            output_mode=output_mode,
         )
 
     def test_train_sample_shapes_and_finite(self):
@@ -671,6 +672,35 @@ class TestOSTLTrainer:
         assert torch.isfinite(loss)
         assert pred.shape == (24, 1)
 
+    def test_train_sample_mem_output_mode_shapes_and_finite(self):
+        trainer = self._make_trainer(output_mode="mem")
+        data, target = _make_ostl_temporal_batch(batch_size=32, timesteps=6)
+
+        loss, pred = trainer.train_sample(data.transpose(0, 1), target)
+
+        assert loss.shape == ()
+        assert pred.shape == (32, 1)
+        assert torch.isfinite(loss)
+        assert pred.min().item() >= 0
+        assert pred.max().item() <= 1
+
+    def test_invalid_output_mode_raises(self):
+        network = FCNetwork(
+            layer_sizes=[4, 8, 2],
+            beta=0.9,
+            threshold=0.5,
+        )
+        with pytest.raises(ValueError, match="output_mode"):
+            OSTLTrainer(
+                network=network,
+                lr=0.05,
+                batch_size=32,
+                surrogate_scale=5.0,
+                grad_clip=1.0,
+                use_optimizer=False,
+                output_mode="invalid",
+            )
+
     def test_learning_algorithms_train_epoch_integration(self):
         trainer = self._make_trainer(lr=0.05)
         data, target = _make_ostl_temporal_batch(batch_size=64, timesteps=6)
@@ -690,31 +720,49 @@ class TestOSTLTrainer:
         assert torch.isfinite(torch.tensor(metrics["loss"]))
         assert 0.0 <= metrics["accuracy"] <= 1.0
 
-    def test_recurrent_snu_train_sample_and_weight_update(self):
+    def test_recurrent_network_is_rejected(self):
         network = RecurrentFCNetwork(
             layer_sizes=[4, 8, 2],
             beta=0.9,
             threshold=0.5,
             recurrent_type="snu",
         )
-        trainer = OSTLTrainer(
-            network=network,
-            lr=0.05,
-            batch_size=32,
-            surrogate_scale=5.0,
-            grad_clip=1.0,
-            use_optimizer=False,
-        )
-        data, target = _make_ostl_temporal_batch(batch_size=32, timesteps=6)
-        temporal = data.transpose(0, 1)
+        with pytest.raises(TypeError, match="feed-forward only"):
+            OSTLTrainer(
+                network=network,
+                lr=0.05,
+                batch_size=32,
+                surrogate_scale=5.0,
+                grad_clip=1.0,
+                use_optimizer=False,
+            )
 
-        rec_before = network.recurrent_layers[0].weight.detach().clone()
-        loss, pred = trainer.train_sample(temporal, target)
-        rec_after = network.recurrent_layers[0].weight.detach().clone()
+    def test_non_alternating_layers_are_rejected(self):
+        class _BadNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = nn.ModuleList(
+                    [nn.Linear(4, 8, bias=False), nn.Linear(8, 2, bias=False)]
+                )
+                self._n_classes = 2
 
-        assert torch.isfinite(loss)
-        assert pred.shape == (32, 1)
-        assert not torch.allclose(rec_before, rec_after)
+            @property
+            def n_classes(self):
+                return self._n_classes
+
+            def reset(self):
+                pass
+
+            def forward(self, x: torch.Tensor):
+                raise RuntimeError("Not used")
+
+        with pytest.raises(TypeError, match="alternating"):
+            OSTLTrainer(
+                network=_BadNet(),
+                lr=0.05,
+                batch_size=16,
+                use_optimizer=False,
+            )
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_cuda_train_sample_runs(self):
