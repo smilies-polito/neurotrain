@@ -28,9 +28,9 @@ from trainers.esd_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
-from trainers.stop_trainer import STOPTrainer
 from trainers.osttp_trainer import OSTTPTrainer
 from trainers.stllr_trainer import STLLRTrainer
+from trainers.stop_trainer import STOPTrainer
 from trainers.stsf_trainer import STSFTrainer
 
 
@@ -57,7 +57,9 @@ def _make_ostl_temporal_batch(
 class _JSBLikeSigmoidNet(nn.Module):
     """Linear->Leaky hidden layer with dense sigmoid readout."""
 
-    def __init__(self, in_features: int = 88, hidden: int = 150, out_features: int = 88):
+    def __init__(
+        self, in_features: int = 88, hidden: int = 150, out_features: int = 88
+    ):
         super().__init__()
         self._n_classes = out_features
         self.fc1 = nn.Linear(in_features, hidden, bias=False)
@@ -82,7 +84,9 @@ class _JSBLikeSigmoidNet(nn.Module):
 class _SHDLikeIntegratorNet(nn.Module):
     """Linear->RLeaky hidden layer with Linear->Leaky integrator readout."""
 
-    def __init__(self, in_features: int = 64, hidden: int = 450, out_features: int = 20):
+    def __init__(
+        self, in_features: int = 64, hidden: int = 450, out_features: int = 20
+    ):
         super().__init__()
         self._n_classes = out_features
         self.fc1 = nn.Linear(in_features, hidden, bias=False)
@@ -536,9 +540,13 @@ class TestDRTPTrainer:
             network=network,
             lr=0.05,
             batch_size=4,
+            loss_type="mse",
+            output_mode="spike",
             feedback_distribution="kaiming_uniform",
             feedback_scale=0.1,
             fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
             use_optimizer=False,
         )
 
@@ -553,6 +561,27 @@ class TestDRTPTrainer:
         target = torch.randint(0, 2, (4,))
         loss, pred = trainer.train_sample(data, target)
         assert loss.shape == ()
+        assert pred.shape == (4, 1)
+
+    def test_trainer_train_sample_mem_mode(self, network):
+        trainer = DRTPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            loss_type="bce",
+            output_mode="mem",
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
+            use_optimizer=False,
+        )
+        data = torch.randn(3, 4, 2)
+        target = torch.randint(0, 2, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
         assert pred.shape == (4, 1)
 
     def test_loss_decreases(self, trainer, network):
@@ -794,7 +823,9 @@ class TestOSTTPTrainer:
                 super().__init__()
                 self._n_classes = 88
                 self.fc1 = nn.Linear(88, 150, bias=False)
-                self.lif1 = snn.Leaky(beta=0.9, reset_mechanism="zero", reset_delay=True)
+                self.lif1 = snn.Leaky(
+                    beta=0.9, reset_mechanism="zero", reset_delay=True
+                )
                 self.fc2 = nn.Linear(150, 88)
 
             @property
@@ -1046,7 +1077,11 @@ class TestSTOPTrainer:
         for layer in fc_network.layers:
             if hasattr(layer, "threshold"):
                 thr = getattr(layer, "threshold")
-                thr_min = float(thr.min().item()) if isinstance(thr, torch.Tensor) else float(thr)
+                thr_min = (
+                    float(thr.min().item())
+                    if isinstance(thr, torch.Tensor)
+                    else float(thr)
+                )
                 assert thr_min >= 0.05 - 1e-8
             if hasattr(layer, "beta"):
                 beta = getattr(layer, "beta")

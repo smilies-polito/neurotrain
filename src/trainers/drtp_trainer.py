@@ -3,11 +3,13 @@ DRTP (Direct Random Target Projection) trainer for spiking networks.
 
 Uses fixed random feedback matrices to project targets directly to hidden layers,
 bypassing backpropagation through the network. Output layer is trained with a
-local loss on spike counts, while hidden layers receive target projections.
+local loss on selected output readout (membrane/spike), while hidden layers
+receive target projections modulated by local surrogate derivatives.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import List, Optional
 
 import torch
@@ -24,7 +26,10 @@ class DRTPTrainer(BaseTrainer):
         network: Network to train
         lr: Learning rate
         batch_size: Training batch size
-        loss_type: Output loss type ("mse", "bce", "ce")
+        loss_type: Output loss type ("mse", "bce")
+        output_mode: Readout for output loss/update ("mem" or "spike")
+        surrogate_scale: Scale for surrogate derivative
+        surrogate_type: Surrogate type ("logistic")
         feedback_distribution: Distribution for random feedback matrices
         feedback_scale: Multiplicative scale for feedback matrices
         fixed_feedback: If True, keep fixed feedback matrices for the run
@@ -37,6 +42,8 @@ class DRTPTrainer(BaseTrainer):
     """
 
     _VALID_DISTS = ("kaiming_uniform", "uniform", "normal")
+    _VALID_OUTPUT_MODES = ("mem", "spike")
+    _VALID_SURROGATES = ("logistic",)
 
     def __init__(
         self,
@@ -44,6 +51,9 @@ class DRTPTrainer(BaseTrainer):
         lr: float,
         batch_size: int,
         loss_type: str = "mse",
+        output_mode: str = "mem",
+        surrogate_scale: float = 5.0,
+        surrogate_type: str = "logistic",
         feedback_distribution: str = "kaiming_uniform",
         feedback_scale: float = 1.0,
         fixed_feedback: bool = True,
@@ -61,6 +71,16 @@ class DRTPTrainer(BaseTrainer):
             raise ValueError(
                 f"feedback_distribution must be one of {self._VALID_DISTS}, got {feedback_distribution}"
             )
+        if str(output_mode).lower() not in self._VALID_OUTPUT_MODES:
+            raise ValueError(
+                f"output_mode must be one of {self._VALID_OUTPUT_MODES}, got {output_mode}"
+            )
+        if str(surrogate_type).lower() not in self._VALID_SURROGATES:
+            raise ValueError(
+                f"surrogate_type must be one of {self._VALID_SURROGATES}, got {surrogate_type}"
+            )
+        if float(surrogate_scale) <= 0.0:
+            raise ValueError("surrogate_scale must be positive")
 
         self.network = network
         self.lr = float(lr)
@@ -76,7 +96,17 @@ class DRTPTrainer(BaseTrainer):
 
         self.n_classes = int(getattr(network, "n_classes", 0))
         self.loss_type = str(loss_type).lower()
-        self.loss_value = 1.0
+        self.output_mode = str(output_mode).lower()
+        self.surrogate_scale = float(surrogate_scale)
+        self.surrogate_type = str(surrogate_type).lower()
+        # Since this paper was implemented for ANN this is particulary important to warn about,
+        # as the original DRTP loss choice is not ideal for SNNs.
+        if self.loss_type == "bce" and self.output_mode != "mem":
+            warnings.warn(
+                "Paper-reference DRTP uses loss_type='bce' with output_mode='mem'. "
+                "Current configuration is non-reference.",
+                stacklevel=2,
+            )
         self.loss_fn = nn.MSELoss()
         self._loss_target_kind = "onehot"
         self._output_error_fn = self._mse_error
@@ -89,11 +119,14 @@ class DRTPTrainer(BaseTrainer):
             raise ValueError("DRTPTrainer requires a network with trainable layers.")
 
         self.layer_output_shapes = self._infer_layer_output_shapes()
+        self.layer_thresholds = self._resolve_layer_thresholds()
 
         # Setup optimizer if requested
         self._external_optimizer = optimizer
         if self.use_optimizer:
-            self.optimizer = optimizer or torch.optim.Adam(network.parameters(), lr=self.lr)
+            self.optimizer = optimizer or torch.optim.Adam(
+                network.parameters(), lr=self.lr
+            )
         else:
             self.optimizer = None
 
@@ -129,7 +162,9 @@ class DRTPTrainer(BaseTrainer):
             return layers, types
 
         layers = [
-            layer for layer in getattr(self.network, "layers", []) if isinstance(layer, nn.Linear)
+            layer
+            for layer in getattr(self.network, "layers", [])
+            if isinstance(layer, nn.Linear)
         ]
         return layers, ["linear"] * len(layers)
 
@@ -152,24 +187,61 @@ class DRTPTrainer(BaseTrainer):
             )
         return [tuple(int(v) for v in shape) for shape in shapes]
 
+    @staticmethod
+    def _to_float(value) -> float:
+        if isinstance(value, torch.Tensor):
+            return float(value.detach().item())
+        return float(value)
+
+    def _resolve_layer_thresholds(self) -> List[float]:
+        """
+        Resolve one threshold value per trainable layer in forward order.
+        """
+        if hasattr(self.network, "conv_blocks") and hasattr(self.network, "fc_blocks"):
+            thresholds: list[float] = []
+            for _, lif, _ in getattr(self.network, "conv_blocks"):
+                thresholds.append(self._to_float(getattr(lif, "threshold", 1.0)))
+            for _, lif in getattr(self.network, "fc_blocks"):
+                thresholds.append(self._to_float(getattr(lif, "threshold", 1.0)))
+            if len(thresholds) == self.num_layers:
+                return thresholds
+
+        raw_layers = getattr(self.network, "layers", None)
+        if raw_layers is not None:
+            thresholds = [
+                self._to_float(getattr(layer, "threshold", 1.0))
+                for layer in raw_layers
+                if hasattr(layer, "threshold")
+            ]
+            if len(thresholds) == self.num_layers:
+                return thresholds
+
+        return [1.0] * self.num_layers
+
+    def _surrogate_derivative(
+        self, membrane: torch.Tensor, threshold: float
+    ) -> torch.Tensor:
+        """
+        Local surrogate derivative h'(u-th) used in hidden-layer DRTP updates.
+        """
+        if self.surrogate_type == "logistic":
+            centered = membrane - threshold
+            scaled = self.surrogate_scale * centered
+            sig = torch.sigmoid(scaled)
+            return self.surrogate_scale * sig * (1.0 - sig)
+        raise ValueError(f"Unsupported surrogate_type '{self.surrogate_type}'")
+
     def _configure_loss(self, loss_type: str) -> None:
         if loss_type in ("mse", "mse_loss"):
             self.loss_fn = nn.MSELoss()
-            self.loss_value = 2.0 / max(self.n_classes, 1)
             self._loss_target_kind = "onehot"
             self._output_error_fn = self._mse_error
         elif loss_type in ("bce", "binary_cross_entropy"):
             self.loss_fn = nn.BCEWithLogitsLoss()
-            self.loss_value = 1.0 / max(self.n_classes, 1)
             self._loss_target_kind = "onehot"
             self._output_error_fn = self._bce_error
-        elif loss_type in ("ce", "cross_entropy"):
-            self.loss_fn = nn.CrossEntropyLoss()
-            self.loss_value = 1.0
-            self._loss_target_kind = "index"
-            self._output_error_fn = self._ce_error
         else:
-            raise ValueError('loss_type must be one of {"mse", "bce", "ce"}')
+            raise ValueError('loss_type must be one of {"mse", "bce"}')
 
     @staticmethod
     def _mse_error(output: torch.Tensor, target_onehot: torch.Tensor) -> torch.Tensor:
@@ -178,10 +250,6 @@ class DRTPTrainer(BaseTrainer):
     @staticmethod
     def _bce_error(output: torch.Tensor, target_onehot: torch.Tensor) -> torch.Tensor:
         return torch.sigmoid(output) - target_onehot
-
-    @staticmethod
-    def _ce_error(output: torch.Tensor, target_onehot: torch.Tensor) -> torch.Tensor:
-        return torch.softmax(output, dim=1) - target_onehot
 
     def _project_targets(
         self, targets_onehot: torch.Tensor, feedback: torch.Tensor
@@ -192,7 +260,9 @@ class DRTPTrainer(BaseTrainer):
         proj = torch.matmul(targets_onehot, flat_fb)
         return proj.view(targets_onehot.size(0), *feedback.shape[1:])
 
-    def _sample_feedback(self, device: torch.device, dtype: torch.dtype) -> List[torch.Tensor]:
+    def _sample_feedback(
+        self, device: torch.device, dtype: torch.dtype
+    ) -> List[torch.Tensor]:
         """Sample fresh feedback matrices for this batch."""
         mats = []
         for shape in self.layer_output_shapes[:-1]:
@@ -215,7 +285,7 @@ class DRTPTrainer(BaseTrainer):
         if self.use_optimizer and self.optimizer is not None:
             self._accumulate_grad(layer, grad_w)
         else:
-            layer.weight.data -= grad_w
+            layer.weight.data -= self.lr * grad_w
 
     @torch.no_grad()
     def train_sample(
@@ -230,38 +300,54 @@ class DRTPTrainer(BaseTrainer):
 
         Returns:
             loss: scalar tensor
-            pred: [batch, 1] predictions from summed spikes
+            pred: [batch, 1] predictions from summed selected readout
         """
         num_timesteps = data.shape[0]
         batch_size = data.shape[1]
         device = data.device
 
-        tgt_onehot = torch.zeros(batch_size, self.n_classes, device=device)
+        tgt_onehot = torch.zeros(
+            batch_size, self.n_classes, device=device, dtype=data.dtype
+        )
         tgt_onehot.scatter_(1, target.unsqueeze(1), 1.0)
 
         self.network.reset()
         if self.use_optimizer and self.optimizer is not None:
             self.optimizer.zero_grad(set_to_none=True)
 
-        feedback = self.feedback if self.fixed_feedback else self._sample_feedback(
-            device=device, dtype=data.dtype
+        feedback = (
+            self.feedback
+            if self.fixed_feedback
+            else self._sample_feedback(device=device, dtype=data.dtype)
         )
 
-        spk_sum = None
+        spk_sum = torch.zeros(
+            batch_size, self.n_classes, device=device, dtype=data.dtype
+        )
+        mem_sum = torch.zeros(
+            batch_size, self.n_classes, device=device, dtype=data.dtype
+        )
+        output_last = None
 
         for t in range(num_timesteps):
-            spks, _ = self.network(data[t])
-            spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]
+            spks, mems = self.network(data[t])
+            if len(spks) != self.num_layers or len(mems) != self.num_layers:
+                raise ValueError(
+                    "DRTPTrainer expects network forward to return per-layer "
+                    "spike/membrane lists with length equal to trainable layers."
+                )
+
+            spk_sum += spks[-1]
+            mem_sum += mems[-1]
+            output_t = mems[-1] if self.output_mode == "mem" else spks[-1]
+            output_last = output_t
+
             layer_inputs = getattr(self.network, "_last_layer_inputs", None)
-            layer_spks = getattr(self.network, "_last_layer_spks", None)
-            if (
-                layer_inputs is None
-                or layer_spks is None
-                or len(layer_inputs) != self.num_layers
-                or len(layer_spks) != self.num_layers
-            ):
+            layer_mems = getattr(self.network, "_last_layer_mems", None)
+            if layer_inputs is None or len(layer_inputs) != self.num_layers:
                 layer_inputs = None
-                layer_spks = None
+            if layer_mems is None or len(layer_mems) != self.num_layers:
+                layer_mems = None
 
             should_update = True
             if self.update_last:
@@ -276,15 +362,25 @@ class DRTPTrainer(BaseTrainer):
             for layer_idx in range(self.num_hidden):
                 if layer_inputs is None:
                     x_pre = data[t] if layer_idx == 0 else spks[layer_idx - 1]
-                    x_post = spks[layer_idx]
                 else:
                     x_pre = layer_inputs[layer_idx]
-                    x_post = layer_spks[layer_idx]
+
+                if layer_mems is None:
+                    mem_k = mems[layer_idx]
+                else:
+                    mem_k = layer_mems[layer_idx]
 
                 proj = self._project_targets(tgt_onehot, feedback[layer_idx])
-                if not self.use_optimizer:
-                    proj = proj * (self.lr / batch_size)
-                delta = proj * x_post
+                hprime_k = self._surrogate_derivative(
+                    mem_k, self.layer_thresholds[layer_idx]
+                )
+                if self.layer_types[layer_idx] == "conv" and proj.shape != mem_k.shape:
+                    raise ValueError(
+                        "DRTP conv projection shape mismatch: "
+                        f"proj={tuple(proj.shape)} vs mem={tuple(mem_k.shape)} "
+                        f"at hidden layer {layer_idx}."
+                    )
+                delta = proj * hprime_k
 
                 layer = self.trainable_layers[layer_idx]
                 if self.layer_types[layer_idx] == "conv":
@@ -299,40 +395,45 @@ class DRTPTrainer(BaseTrainer):
                     )
                 else:
                     grad_w = torch.matmul(delta.transpose(0, 1), x_pre)
+                grad_w = grad_w / batch_size
                 self._apply_update(layer, grad_w)
 
-            # Output layer update (local loss on spikes)
-            error = self._output_error_fn(spks[-1], tgt_onehot)
+            # Output layer update from selected readout (membrane/spike).
+            error = self._output_error_fn(output_t, tgt_onehot)
             if layer_inputs is None:
                 x_pre_out = spks[-2] if self.num_hidden > 0 else data[t]
             else:
                 x_pre_out = layer_inputs[-1]
-            if self.use_optimizer:
-                loss_grad = error * self.loss_value
-            else:
-                loss_grad = error * self.loss_value * (self.lr / batch_size)
             if self.layer_types[-1] == "conv":
                 grad_out = torch.nn.grad.conv2d_weight(
                     x_pre_out,
                     self.trainable_layers[-1].weight.shape,
-                    loss_grad,
+                    error,
                     stride=self.trainable_layers[-1].stride,
                     padding=self.trainable_layers[-1].padding,
                     dilation=self.trainable_layers[-1].dilation,
                     groups=self.trainable_layers[-1].groups,
                 )
             else:
-                grad_out = torch.matmul(loss_grad.transpose(0, 1), x_pre_out)
+                grad_out = torch.matmul(error.transpose(0, 1), x_pre_out)
+            grad_out = grad_out / batch_size
             self._apply_update(self.trainable_layers[-1], grad_out)
             if self.use_optimizer and self.optimizer is not None:
                 self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
 
-        if self._loss_target_kind == "index":
-            loss = self.loss_fn(spk_sum, target)
+        if self.output_mode == "mem":
+            readout_for_loss = output_last if self.update_last else mem_sum
+            pred_readout = mem_sum
         else:
-            loss = self.loss_fn(spk_sum, tgt_onehot)
-        pred = spk_sum.argmax(dim=1, keepdim=True)
+            readout_for_loss = spk_sum
+            pred_readout = spk_sum
+
+        if self._loss_target_kind == "index":
+            loss = self.loss_fn(readout_for_loss, target)
+        else:
+            loss = self.loss_fn(readout_for_loss, tgt_onehot)
+        pred = pred_readout.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
     def reset(self):

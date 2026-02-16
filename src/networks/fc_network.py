@@ -4,8 +4,9 @@ import torch.nn as nn
 
 from networks.base_snn import BaseSNN
 
-
 #from ..utils.quantizer import fixed_point
+# from ..utils.quantizer import fixed_point
+
 
 class FCNetwork(BaseSNN):
     """
@@ -13,20 +14,21 @@ class FCNetwork(BaseSNN):
     layer_sizes: [in, hidden1, …, hiddenK, out]
     beta: leakiness parameter
     """
+
     def __init__(self, layer_sizes, beta, quant=False, threshold: float = 1.0):
         super().__init__()
         self.input_size = layer_sizes[0]
         self.hidden_size = layer_sizes[1:-1]
         self._n_classes = layer_sizes[-1]
         # I am including the quantization parameters but I don't plan to use them for now
-        self.quant          = quant
-        self.threshold      = float(threshold)
+        self.quant = quant
+        self.threshold = float(threshold)
 
         layers = []
         for i in range(len(layer_sizes) - 1):
-            #threshold_val = fixed_point(1.0, fp_dec=FP_DEC, bitwidth=BW) if self.quant else 1.0
+            # threshold_val = fixed_point(1.0, fp_dec=FP_DEC, bitwidth=BW) if self.quant else 1.0
             threshold_val = self.threshold
-            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1], bias=False))
             layers.append(snn.Leaky(beta=beta, threshold=threshold_val))
         # The network structure is now [Linear, LIF, Linear, LIF, ..., Linear, LIF] and saved in a PyTorch ModuleList
         self.layers = nn.ModuleList(layers)
@@ -50,18 +52,23 @@ class FCNetwork(BaseSNN):
         for layer in self.layers:
             if isinstance(layer, nn.Linear):
                 nn.init.xavier_uniform_(layer.weight)
-                #if (self.quant): layer.weight.data = fixed_point(layer.weight.data, FP_DEC, BW)
-
+                # if (self.quant): layer.weight.data = fixed_point(layer.weight.data, FP_DEC, BW)
     def forward(self, x: torch.Tensor):
         spk = x
         spk_rec, mem_rec = [], []
+        self._last_layer_inputs = []
+        self._last_layer_spks = []
+        self._last_layer_mems = []
         for fc, lif in zip(self.layers[0::2], self.layers[1::2]):
+            self._last_layer_inputs.append(spk)
             cur = fc(spk)
             spk, mem = lif(cur)
             if self.quant:
                 lif.mem.copy_(torch.trunc(lif.mem))
             spk_rec.append(spk)
             mem_rec.append(mem)
+            self._last_layer_spks.append(spk)
+            self._last_layer_mems.append(mem)
         return spk_rec, mem_rec
 
     @property

@@ -69,6 +69,10 @@ class TestConfig:
     def test_default_drtp_config(self):
         """Test DRTP config defaults."""
         config = Config()
+        assert config.drtp.loss == "mse"
+        assert config.drtp.output_mode == "mem"
+        assert config.drtp.surrogate_scale == 5.0
+        assert config.drtp.surrogate_type == "logistic"
         assert config.drtp.feedback_distribution == "kaiming_uniform"
         assert config.drtp.feedback_scale == 1.0
         assert config.drtp.fixed_feedback is True
@@ -172,6 +176,13 @@ class TestConfigValidation:
 
         issues = validate_config(config)
         assert any("dataset" in issue for issue in issues)
+
+    def test_invalid_drtp_output_mode(self):
+        config = Config()
+        config.drtp.output_mode = "logits"
+
+        issues = validate_config(config)
+        assert any("drtp.output_mode" in issue for issue in issues)
 
     def test_ostl_recurrent_requires_snu_type(self):
         """Test recurrent OSTL validation enforces snu/ssnu types."""

@@ -15,11 +15,11 @@ model:
     quantization: false
 
 training:
-    # this is the parameter from the paper
-    epochs: 20
-    batch_size: 256
-    learning_rate: 0.005
-    optimizer: null # null = manual DRTP updates; can be "adam"/"sgd"/"nag"/"rmsprop"
+    # Paper-aligned MNIST DRTP schedule.
+    epochs: 100
+    batch_size: 60
+    learning_rate: 1.5e-4 # FC2 reference baseline from paper table
+    optimizer: "adam"
     weight_decay: 0.0
     freeze_conv: false
 
@@ -30,7 +30,10 @@ trainer:
     seq_batch: 1
 
 drtp:
-    loss: "mse"
+    loss: "bce"
+    output_mode: "mem" # paper-aligned reference ("spike" kept for compatibility experiments)
+    surrogate_scale: 5.0
+    surrogate_type: "logistic"
     feedback_distribution: "kaiming_uniform"
     feedback_scale: 1.0
     fixed_feedback: true
