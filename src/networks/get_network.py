@@ -9,6 +9,7 @@ from typing import Any, Optional, Union
 import torch
 
 from networks.base_snn import BaseSNN
+from networks.benchmarking.fc_snn import FCSNN
 from networks.fc_network import FCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from networks.spiking_resnet18 import SpikingResNet18
@@ -153,6 +154,17 @@ def get_network(
             "Use 'fc', 'conv', 'local_classifier', 'recurrent', 'stllr', "
             "'vgg11', or 'resnet18'."
         )
+    # DRTP/OSTL use the newer single-step FC SNN baseline.
+    if algorithm_name in ("drtp", "ostl"):
+        return FCSNN(
+            in_shape=(int(layer_sizes[0]),),
+            num_classes=int(layer_sizes[-1]),
+            hidden_sizes=[int(v) for v in layer_sizes[1:-1]],
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+            spike_grad=kwargs.get("spike_grad"),
+        )
+
     return FCNetwork(
         layer_sizes=layer_sizes,
         beta=beta,

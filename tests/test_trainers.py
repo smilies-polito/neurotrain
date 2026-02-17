@@ -12,11 +12,13 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from LearningAlgorithms import LearningAlgorithms
+from networks.benchmarking.fc_snn import FCSNN
 from networks.conv_network import ConvFCNetwork
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
+from networks.reproducibility.drtp_conv import DRTPConvMNIST
 from trainers.base_trainer import BaseTrainer
 from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
@@ -614,13 +616,100 @@ class TestDRTPTrainer:
         loss_after = forward_loss()
         assert loss_after < loss_before
 
+    def test_trainer_with_fcsnn(self):
+        network = FCSNN(
+            in_shape=(2,),
+            hidden_sizes=(6,),
+            num_classes=2,
+            beta=0.9,
+            threshold=1.0,
+        )
+        trainer = DRTPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            loss_type="mse",
+            output_mode="spike",
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
+            use_optimizer=False,
+        )
+        data = torch.randn(3, 4, 2)
+        target = torch.randint(0, 2, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
+        assert pred.shape == (4, 1)
+
+    def test_trainer_with_fcsnn_multidim_input(self):
+        network = FCSNN(
+            in_shape=(1, 2, 2),
+            hidden_sizes=(6,),
+            num_classes=2,
+            beta=0.9,
+            threshold=1.0,
+        )
+        trainer = DRTPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=4,
+            loss_type="mse",
+            output_mode="mem",
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
+            use_optimizer=False,
+        )
+        data = torch.randn(3, 4, 1, 2, 2)
+        target = torch.randint(0, 2, (4,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
+        assert pred.shape == (4, 1)
+
+    def test_trainer_with_drtp_conv_mnist(self):
+        network = DRTPConvMNIST(
+            in_shape=(1, 28, 28),
+            num_classes=10,
+            conv_out_channels=8,
+            fc_hidden=16,
+            beta=0.9,
+            threshold=1.0,
+        )
+        trainer = DRTPTrainer(
+            network=network,
+            lr=0.01,
+            batch_size=2,
+            loss_type="bce",
+            output_mode="mem",
+            feedback_distribution="kaiming_uniform",
+            feedback_scale=0.1,
+            fixed_feedback=True,
+            surrogate_scale=5.0,
+            surrogate_type="logistic",
+            use_optimizer=False,
+        )
+        data = torch.randn(2, 2, 1, 28, 28)
+        target = torch.randint(0, 10, (2,))
+        loss, pred = trainer.train_sample(data, target)
+        assert loss.shape == ()
+        assert torch.isfinite(loss)
+        assert pred.shape == (2, 1)
+
 
 class TestOSTLTrainer:
     """OSTL trainer tests on synthetic temporal classification."""
 
     def _make_trainer(self, lr: float = 0.05, output_mode: str = "spike"):
-        network = FCNetwork(
-            layer_sizes=[4, 8, 2],
+        network = FCSNN(
+            in_shape=(4,),
+            hidden_sizes=(8,),
+            num_classes=2,
             beta=0.9,
             threshold=0.5,
         )
@@ -685,8 +774,10 @@ class TestOSTLTrainer:
         assert pred.max().item() <= 1
 
     def test_invalid_output_mode_raises(self):
-        network = FCNetwork(
-            layer_sizes=[4, 8, 2],
+        network = FCSNN(
+            in_shape=(4,),
+            hidden_sizes=(8,),
+            num_classes=2,
             beta=0.9,
             threshold=0.5,
         )

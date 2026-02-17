@@ -14,6 +14,7 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from trainers.base_trainer import BaseTrainer
 
@@ -161,6 +162,18 @@ class DRTPTrainer(BaseTrainer):
                 ]
             return layers, types
 
+        synapses = getattr(self.network, "synapses", None)
+        if synapses is not None:
+            layers = [
+                layer for layer in synapses if isinstance(layer, (nn.Linear, nn.Conv2d))
+            ]
+            if len(layers) > 0:
+                types = [
+                    "conv" if isinstance(layer, nn.Conv2d) else "linear"
+                    for layer in layers
+                ]
+                return layers, types
+
         layers = [
             layer
             for layer in getattr(self.network, "layers", [])
@@ -216,7 +229,68 @@ class DRTPTrainer(BaseTrainer):
             if len(thresholds) == self.num_layers:
                 return thresholds
 
+        raw_neurons = getattr(self.network, "neurons", None)
+        if raw_neurons is not None:
+            thresholds = [
+                self._to_float(getattr(layer, "threshold", 1.0))
+                for layer in raw_neurons
+            ]
+            if len(thresholds) == self.num_layers:
+                return thresholds
+
         return [1.0] * self.num_layers
+
+    @staticmethod
+    def _linear_pre_input(x_pre: torch.Tensor) -> torch.Tensor:
+        """Ensure linear updates receive [B, F] pre-synaptic activations."""
+        if x_pre.dim() > 2:
+            return x_pre.flatten(1)
+        return x_pre
+
+    @staticmethod
+    def _conv_out_spatial_shape(
+        x_pre: torch.Tensor, layer: nn.Conv2d
+    ) -> tuple[int, int]:
+        h_in, w_in = int(x_pre.shape[-2]), int(x_pre.shape[-1])
+        k_h, k_w = (
+            layer.kernel_size
+            if isinstance(layer.kernel_size, tuple)
+            else (layer.kernel_size, layer.kernel_size)
+        )
+        s_h, s_w = (
+            layer.stride
+            if isinstance(layer.stride, tuple)
+            else (layer.stride, layer.stride)
+        )
+        p_h, p_w = (
+            layer.padding
+            if isinstance(layer.padding, tuple)
+            else (layer.padding, layer.padding)
+        )
+        d_h, d_w = (
+            layer.dilation
+            if isinstance(layer.dilation, tuple)
+            else (layer.dilation, layer.dilation)
+        )
+        h_out = (h_in + 2 * p_h - d_h * (k_h - 1) - 1) // s_h + 1
+        w_out = (w_in + 2 * p_w - d_w * (k_w - 1) - 1) // s_w + 1
+        return h_out, w_out
+
+    def _align_conv_delta(
+        self,
+        delta: torch.Tensor,
+        x_pre: torch.Tensor,
+        layer: nn.Conv2d,
+    ) -> torch.Tensor:
+        """Align conv local error map to conv output spatial size when needed."""
+        expected_hw = self._conv_out_spatial_shape(x_pre, layer)
+        if tuple(delta.shape[-2:]) == expected_hw:
+            return delta
+        if delta.dim() != 4:
+            raise ValueError(
+                f"Conv DRTP update expects 4D delta, got shape {tuple(delta.shape)}."
+            )
+        return F.interpolate(delta, size=expected_hw, mode="nearest")
 
     def _surrogate_derivative(
         self, membrane: torch.Tensor, threshold: float
@@ -384,6 +458,7 @@ class DRTPTrainer(BaseTrainer):
 
                 layer = self.trainable_layers[layer_idx]
                 if self.layer_types[layer_idx] == "conv":
+                    delta = self._align_conv_delta(delta, x_pre, layer)
                     grad_w = torch.nn.grad.conv2d_weight(
                         x_pre,
                         layer.weight.shape,
@@ -394,6 +469,7 @@ class DRTPTrainer(BaseTrainer):
                         groups=layer.groups,
                     )
                 else:
+                    x_pre = self._linear_pre_input(x_pre)
                     grad_w = torch.matmul(delta.transpose(0, 1), x_pre)
                 grad_w = grad_w / batch_size
                 self._apply_update(layer, grad_w)
@@ -405,6 +481,9 @@ class DRTPTrainer(BaseTrainer):
             else:
                 x_pre_out = layer_inputs[-1]
             if self.layer_types[-1] == "conv":
+                error = self._align_conv_delta(
+                    error, x_pre_out, self.trainable_layers[-1]
+                )
                 grad_out = torch.nn.grad.conv2d_weight(
                     x_pre_out,
                     self.trainable_layers[-1].weight.shape,
@@ -415,6 +494,7 @@ class DRTPTrainer(BaseTrainer):
                     groups=self.trainable_layers[-1].groups,
                 )
             else:
+                x_pre_out = self._linear_pre_input(x_pre_out)
                 grad_out = torch.matmul(error.transpose(0, 1), x_pre_out)
             grad_out = grad_out / batch_size
             self._apply_update(self.trainable_layers[-1], grad_out)

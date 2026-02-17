@@ -4,8 +4,8 @@ OSTL (Online Spatio-Temporal Learning) trainer for feed-forward SNNs.
 Implements the three-factor update decomposition from:
     Bohnstingl et al., "Online Spatio-Temporal Learning in Deep Neural Networks", 2020.
 
-This trainer targets the framework's snnTorch-based FCNetwork and follows
-the trainer API (train_sample/reset/to) used by the main training loop.
+This trainer targets feed-forward snnTorch models and follows the trainer API
+(train_sample/reset/to) used by the main training loop.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ class OSTLTrainer(BaseTrainer):
       Here we use an identity readout over the selected final-layer output
       (spikes or membrane) so OSTL fits the existing model interface without
       adding extra model parameters.
-    - The framework's FCNetwork has no trainable bias by default; this trainer
-      therefore applies OSTL updates to weights only.
+    - The framework models used here have no trainable bias by default; this
+      trainer therefore applies OSTL updates to weights only.
     - Recurrent weight matrices are intentionally unsupported in this trainer.
     """
 
@@ -66,39 +66,71 @@ class OSTLTrainer(BaseTrainer):
                 f"Invalid OSTL output_mode='{output_mode}'. Use 'spike' or 'mem'."
             )
 
-        if not hasattr(self.network, "layers"):
-            raise TypeError(
-                "OSTLTrainer expects network.layers with alternating "
-                "[nn.Linear, snn.Leaky] modules."
-            )
-        raw_layers = getattr(self.network, "layers")
-        if not isinstance(raw_layers, (nn.ModuleList, list, tuple)):
-            raise TypeError(
-                "OSTLTrainer expects network.layers to be a ModuleList/list/tuple."
-            )
-        if len(raw_layers) == 0 or len(raw_layers) % 2 != 0:
-            raise TypeError(
-                "OSTLTrainer expects an even-length alternating [nn.Linear, "
-                "snn.Leaky] structure in network.layers."
-            )
-
         self.linear_layers: List[nn.Linear] = []
         self.lif_layers: List[snn.Leaky] = []
-        for idx, layer in enumerate(raw_layers):
-            if idx % 2 == 0:
+
+        # New standard path: FCSNN-style containers.
+        synapses = getattr(self.network, "synapses", None)
+        neurons = getattr(self.network, "neurons", None)
+        if synapses is not None and neurons is not None:
+            if not isinstance(synapses, (nn.ModuleList, list, tuple)) or not isinstance(
+                neurons, (nn.ModuleList, list, tuple)
+            ):
+                raise TypeError(
+                    "OSTLTrainer expects network.synapses and network.neurons to be "
+                    "ModuleList/list/tuple containers."
+                )
+            if len(synapses) == 0 or len(synapses) != len(neurons):
+                raise TypeError(
+                    "OSTLTrainer expects network.synapses and network.neurons to have "
+                    "equal non-zero length."
+                )
+            for idx, (layer, neuron) in enumerate(zip(synapses, neurons)):
                 if not isinstance(layer, nn.Linear):
                     raise TypeError(
-                        "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
-                        f"in network.layers; found {type(layer).__name__} at index {idx}."
+                        "OSTLTrainer expects nn.Linear layers in network.synapses; "
+                        f"found {type(layer).__name__} at index {idx}."
+                    )
+                if not isinstance(neuron, snn.Leaky):
+                    raise TypeError(
+                        "OSTLTrainer expects snn.Leaky layers in network.neurons; "
+                        f"found {type(neuron).__name__} at index {idx}."
                     )
                 self.linear_layers.append(layer)
-            else:
-                if not isinstance(layer, snn.Leaky):
-                    raise TypeError(
-                        "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
-                        f"in network.layers; found {type(layer).__name__} at index {idx}."
-                    )
-                self.lif_layers.append(layer)
+                self.lif_layers.append(neuron)
+        else:
+            # Backward compatibility path: alternating [Linear, Leaky] in network.layers.
+            if not hasattr(self.network, "layers"):
+                raise TypeError(
+                    "OSTLTrainer expects either (network.synapses, network.neurons) or "
+                    "network.layers with alternating [nn.Linear, snn.Leaky] modules."
+                )
+            raw_layers = getattr(self.network, "layers")
+            if not isinstance(raw_layers, (nn.ModuleList, list, tuple)):
+                raise TypeError(
+                    "OSTLTrainer expects network.layers to be a ModuleList/list/tuple."
+                )
+            if len(raw_layers) == 0 or len(raw_layers) % 2 != 0:
+                raise TypeError(
+                    "OSTLTrainer expects an even-length alternating [nn.Linear, "
+                    "snn.Leaky] structure in network.layers."
+                )
+
+            for idx, layer in enumerate(raw_layers):
+                if idx % 2 == 0:
+                    if not isinstance(layer, nn.Linear):
+                        raise TypeError(
+                            "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
+                            f"in network.layers; found {type(layer).__name__} at index {idx}."
+                        )
+                    self.linear_layers.append(layer)
+                else:
+                    if not isinstance(layer, snn.Leaky):
+                        raise TypeError(
+                            "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] "
+                            f"in network.layers; found {type(layer).__name__} at index {idx}."
+                        )
+                    self.lif_layers.append(layer)
 
         recurrent_layers = getattr(self.network, "recurrent_layers", None)
         if recurrent_layers is not None and len(recurrent_layers) > 0:
@@ -166,10 +198,16 @@ class OSTLTrainer(BaseTrainer):
         Train on one batch.
 
         Args:
-            data: [T, B, F]
+            data: [T, B, ...]
             target: [B]
         """
-        num_timesteps, batch_size, _ = data.shape
+        if data.dim() < 3:
+            raise ValueError(
+                "OSTLTrainer expects input data with shape [T, B, ...], "
+                f"got {tuple(data.shape)}."
+            )
+        num_timesteps = int(data.shape[0])
+        batch_size = int(data.shape[1])
         device = data.device
 
         if len(self.linear_layers) != len(self.lif_layers):
@@ -239,6 +277,8 @@ class OSTLTrainer(BaseTrainer):
             for layer_idx in range(self.num_layers):
                 mem_t = mem_rec[layer_idx]
                 pre_t = data[t] if layer_idx == 0 else spk_rec[layer_idx - 1]
+                if pre_t.dim() > 2:
+                    pre_t = pre_t.flatten(1)
 
                 h_prime_t = self._surrogate_derivative(
                     mem_t - self.layer_threshold[layer_idx]

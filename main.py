@@ -26,6 +26,7 @@ from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.conv_network import ConvFCNetwork
 from networks.get_network import get_network
+from networks.reproducibility.drtp_conv import DRTPConvMNIST
 from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer
 from trainers.decolle_trainer import DECOLLETrainer
@@ -157,14 +158,44 @@ def trainable(
                 "Conv architecture currently supports MNIST and CIFAR10 only."
             )
 
-        network = ConvFCNetwork(
-            input_shape=input_shape,
-            conv_layers=config.model.conv_layers,
-            layer_sizes=config.model.layer_sizes,
-            beta=config.model.beta,
-            threshold=config.model.threshold,
-            quant=config.model.quantization,
-        )
+        if config.trainer.name == "drtp":
+            if config.data.dataset != "MNIST":
+                raise ValueError(
+                    "DRTP conv mode currently supports dataset='MNIST' only."
+                )
+            if len(config.model.conv_layers) != 1:
+                raise ValueError(
+                    "DRTP conv mode expects exactly one conv block in model.conv_layers."
+                )
+            if len(config.model.layer_sizes) != 2:
+                raise ValueError(
+                    "DRTP conv mode expects model.layer_sizes=[fc_hidden, num_classes]."
+                )
+
+            conv_cfg = config.model.conv_layers[0]
+            network = DRTPConvMNIST(
+                in_shape=input_shape,
+                num_classes=int(config.model.layer_sizes[-1]),
+                conv_out_channels=int(conv_cfg.get("out_channels", 32)),
+                conv_kernel_size=int(conv_cfg.get("kernel_size", 5)),
+                conv_stride=int(conv_cfg.get("stride", 1)),
+                conv_padding=int(conv_cfg.get("padding", 2)),
+                pool_kernel=int(conv_cfg.get("pool_kernel", 2)),
+                pool_stride=int(conv_cfg.get("pool_stride", 2)),
+                fc_hidden=int(config.model.layer_sizes[0]),
+                beta=float(config.model.beta),
+                threshold=float(config.model.threshold),
+                quant=bool(config.model.quantization),
+            )
+        else:
+            network = ConvFCNetwork(
+                input_shape=input_shape,
+                conv_layers=config.model.conv_layers,
+                layer_sizes=config.model.layer_sizes,
+                beta=config.model.beta,
+                threshold=config.model.threshold,
+                quant=config.model.quantization,
+            )
     else:
         network = get_network(
             algorithm_name=config.trainer.name,

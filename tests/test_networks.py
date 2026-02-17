@@ -9,7 +9,9 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from networks.base_snn import BaseSNN
+from networks.benchmarking.fc_snn import FCSNN
 from networks.fc_network import FCNetwork
+from networks.get_network import get_network
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_srnn import RecurrentSRNN
 from networks.stllr_network import STLLRNetwork
@@ -177,6 +179,16 @@ class TestFCNetwork:
             # Should produce valid outputs
             assert not torch.isnan(spk[-1]).any()
             assert not torch.isnan(mem[-1]).any()
+
+    def test_get_network_ostl_uses_fcsnn(self):
+        network = get_network(
+            algorithm_name="ostl",
+            model_architecture="fc",
+            layer_sizes=[784, 64, 10],
+            beta=0.9,
+            threshold=1.0,
+        )
+        assert isinstance(network, FCSNN)
 
 
 class TestRecurrentSRNN:
