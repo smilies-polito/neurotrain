@@ -68,6 +68,8 @@ class DRTPConfig:
 
     loss: str = "mse"  # "mse", "bce"
     output_mode: str = "mem"  # "mem", "spike"
+    # If true, enforce paper-specific topology checks (e.g., MNIST conv setup).
+    paper_reproduction: bool = False
     surrogate_scale: float = 5.0
     surrogate_type: str = "logistic"
     feedback_distribution: str = (

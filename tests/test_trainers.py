@@ -11,14 +11,15 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from LearningAlgorithms import LearningAlgorithms
-from networks.benchmarking.fc_snn import FCSNN
 from networks.conv_network import ConvFCNetwork
 from networks.fc_network import FCNetwork
 from networks.local_classifier_network import LocalClassifierNetwork
 from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
-from networks.reproducibility.drtp_conv import DRTPConvMNIST
+
+from LearningAlgorithms import LearningAlgorithms
+from networks.benchmarking.fc_snn import FCSNN
+from networks.reproducibility.DRTP_convolutional_network import DRTPConvMNIST
 from trainers.base_trainer import BaseTrainer
 from trainers.bell_trainer import BELLTrainer
 from trainers.bptt_trainer import BPTTTrainer

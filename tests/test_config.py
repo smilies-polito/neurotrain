@@ -71,6 +71,7 @@ class TestConfig:
         config = Config()
         assert config.drtp.loss == "mse"
         assert config.drtp.output_mode == "mem"
+        assert config.drtp.paper_reproduction is False
         assert config.drtp.surrogate_scale == 5.0
         assert config.drtp.surrogate_type == "logistic"
         assert config.drtp.feedback_distribution == "kaiming_uniform"

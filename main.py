@@ -26,7 +26,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.get_network import get_network
-from networks.reproducibility.drtp_conv import DRTPConvMNIST
+from networks.reproducibility.DRTP_convolutional_network import DRTPConvMNIST
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
@@ -112,11 +112,6 @@ def trainable(
 
     # Create the network (conv uses dedicated class; others go through network factory)
     if config.model.architecture == "recurrent":
-        if config.trainer.name == "ostl":
-            raise ValueError(
-                "OSTLTrainer is feed-forward only. Set model.architecture='fc'."
-            )
-
         recurrent_type = str(config.model.recurrent_type).lower()
         from networks.recurrent_srnn import RecurrentSRNN
 
@@ -150,8 +145,6 @@ def trainable(
         # Attach for compatibility with trainer code paths that read hidden_size.
         network.hidden_size = [n_rec]
     elif config.model.architecture == "conv":
-        from networks.conv_network import ConvFCNetwork
-
         if config.data.dataset == "MNIST":
             input_shape = (1, 28, 28)
         elif config.data.dataset == "CIFAR10":
@@ -162,18 +155,32 @@ def trainable(
             )
 
         if config.trainer.name == "drtp":
-            if config.data.dataset != "MNIST":
-                raise ValueError(
-                    "DRTP conv mode currently supports dataset='MNIST' only."
-                )
-            if len(config.model.conv_layers) != 1:
-                raise ValueError(
-                    "DRTP conv mode expects exactly one conv block in model.conv_layers."
-                )
-            if len(config.model.layer_sizes) != 2:
-                raise ValueError(
-                    "DRTP conv mode expects model.layer_sizes=[fc_hidden, num_classes]."
-                )
+            paper_repro = bool(getattr(config.drtp, "paper_reproduction", False))
+            if paper_repro:
+                if config.data.dataset != "MNIST":
+                    raise ValueError(
+                        "DRTP paper_reproduction requires dataset='MNIST'."
+                    )
+                if len(config.model.conv_layers) != 1:
+                    raise ValueError(
+                        "DRTP paper_reproduction expects exactly one conv block "
+                        "in model.conv_layers."
+                    )
+                if len(config.model.layer_sizes) != 2:
+                    raise ValueError(
+                        "DRTP paper_reproduction expects "
+                        "model.layer_sizes=[fc_hidden, num_classes]."
+                    )
+            else:
+                if len(config.model.conv_layers) < 1:
+                    raise ValueError(
+                        "DRTP conv mode requires at least one entry in model.conv_layers."
+                    )
+                if len(config.model.layer_sizes) < 2:
+                    raise ValueError(
+                        "DRTP conv mode requires model.layer_sizes with at least "
+                        "[fc_hidden, num_classes]."
+                    )
 
             conv_cfg = config.model.conv_layers[0]
             network = DRTPConvMNIST(
@@ -191,6 +198,8 @@ def trainable(
                 quant=bool(config.model.quantization),
             )
         else:
+            from networks.benchmarking.conv_snn import ConvFCNetwork
+
             network = ConvFCNetwork(
                 input_shape=input_shape,
                 conv_layers=config.model.conv_layers,

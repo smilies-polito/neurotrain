@@ -32,6 +32,7 @@ trainer:
 drtp:
     loss: "bce"
     output_mode: "mem" # paper-aligned reference ("spike" kept for compatibility experiments)
+    paper_reproduction: true
     surrogate_scale: 5.0
     surrogate_type: "logistic"
     feedback_distribution: "kaiming_uniform"
