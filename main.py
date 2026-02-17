@@ -27,21 +27,6 @@ from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
 from networks.get_network import get_network
 from networks.reproducibility.drtp_conv import DRTPConvMNIST
-from trainers.bell_trainer import BELLTrainer
-from trainers.bptt_trainer import BPTTTrainer
-from trainers.decolle_trainer import DECOLLETrainer
-from trainers.drtp_trainer import DRTPTrainer
-from trainers.ell_trainer import ELLTrainer
-from trainers.eprop_trainer import EpropTrainer
-from trainers.esd_rtrl_trainer import ESDRTRLTrainer
-from trainers.etlp_trainer import ETLPTrainer
-from trainers.fell_trainer import FELLTrainer
-from trainers.ostl_trainer import OSTLTrainer
-from trainers.osttp_trainer import OSTTPTrainer
-from trainers.ottt_trainer import OTTTTrainer
-from trainers.stop_trainer import STOPTrainer
-from trainers.stsf_trainer import STSFTrainer
-from trainers.tp_trainer import TPTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
