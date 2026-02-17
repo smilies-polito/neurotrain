@@ -42,7 +42,7 @@ class OTTTTrainer(BaseTrainer):
         network: nn.Module,                     # SNN to be trained with OTTT
         lr: float,                              # Learning rate for optimizer updates
         batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
-        trace_decay: Optional[float] = None,    # Decay factor for synaptic traces
+        trace_decay: Optional[float] = None,    # Decay factor for synaptic traces (default: 0.5)
         online_updates: bool = True,
         optimizer: Optional[torch.optim.Optimizer] = None,
     ):
@@ -50,9 +50,8 @@ class OTTTTrainer(BaseTrainer):
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        self.trace_decay = (
-            float(trace_decay) if trace_decay is not None else self._infer_trace_decay()
-        )
+        # Keep decay explicit in this project: default to 0.5 unless user overrides.
+        self.trace_decay = float(0.5 if trace_decay is None else trace_decay)
         self.online_updates = bool(online_updates)
         self._external_optimizer = optimizer
         # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
@@ -62,12 +61,21 @@ class OTTTTrainer(BaseTrainer):
             else torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=0.9)
         )
 
-        # OTTT traces are defined on synaptic inputs; we support linear/conv synapses.
-        self.synapse_layers = [
-            module
-            for module in self.network.modules()
-            if isinstance(module, (nn.Linear, nn.Conv2d))
-        ]
+        # OTTT traces are defined on synaptic inputs; only plain Linear/Conv2d are supported.
+        self.synapse_layers = []
+        unsupported_synapse_types = set()
+        for module in self.network.modules():
+            if not isinstance(module, (nn.Linear, nn.Conv2d)):
+                continue
+            if type(module) in (nn.Linear, nn.Conv2d):
+                self.synapse_layers.append(module)
+            else:
+                unsupported_synapse_types.add(type(module).__name__)
+        if unsupported_synapse_types:
+            raise TypeError(
+                "OTTTTrainer supports only exact nn.Linear/nn.Conv2d synapses; "
+                f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
+            )
         if not self.synapse_layers:
             raise TypeError(
                 "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
@@ -76,19 +84,6 @@ class OTTTTrainer(BaseTrainer):
         self.trace_synapse_layers = self.synapse_layers[1:]
 
         self._trace_by_module: Dict[nn.Module, torch.Tensor] = {}
-
-    def _infer_trace_decay(self) -> float:
-        """Use neuron leak beta when available; fall back to 0.9."""
-        for module in self.network.modules():
-            beta = getattr(module, "beta", None)
-            if beta is None:
-                continue
-            try:
-                return float(beta)
-            except (TypeError, ValueError):
-                if isinstance(beta, torch.Tensor):
-                    return float(beta.detach().item())
-        return 0.9
 
     @staticmethod
     def _module_forward_with_input(module: nn.Module, x: torch.Tensor) -> torch.Tensor:
@@ -181,6 +176,7 @@ class OTTTTrainer(BaseTrainer):
                     # FORWARD PASS of the network at current timestep
                     spk_rec, mem_rec = self.network(data[t])
                     spk_out = spk_rec[-1]
+                    # Static-image OTTT path uses CE on last-layer membrane/logits readout.
                     logits = mem_rec[-1]
 
                     if spk_sum is None:
