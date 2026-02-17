@@ -1,51 +1,47 @@
-# MNIST OSTL Configuration (Feed-forward, paper-aligned)
-# Online Spatio-Temporal Learning on deep feed-forward SNN (256-256-10)
+# OSTL benchmark config: MNIST on fc_snn
 
 experiment:
-    name: "OSTL_MNIST_FF_256x2"
-    seed: 42
-    deterministic: true
-    log_dir: "./experiments"
+  name: "OSTL_MNIST_fc_snn"
+  seed: 42
+  deterministic: true
+  log_dir: "./experiments"
 
 model:
-    architecture: "fc"
-    # REMOVE any recurrence flags / recurrent_type
-    # recurrent_type: null
-
-    layer_sizes: [784, 256, 256, 10] # matches paper Fig. 4(a)
-    beta: 0.9 # paper uses d=0.9 for MNIST (decay) :contentReference[oaicite:2]{index=2}
-    threshold: 1.0
-    quantization: false
+  architecture: "fc_snn"
+  layer_sizes: [784, 256, 128, 10]
+  beta: 0.9
+  threshold: 1.0
+  quantization: false
 
 training:
-    epochs: 100 # paper trains 100 epochs for MNIST :contentReference[oaicite:3]{index=3}
-    batch_size: 128
-    learning_rate: 0.15 # paper used ~0.2 (SNU) / 0.15 (sSNU) under SGD :contentReference[oaicite:4]{index=4}
-    optimizer: null # manual OSTL update (paper used SGD-style)
+  epochs: 50
+  batch_size: 128
+  learning_rate: 0.01
+  optimizer: null
 
 trainer:
-    name: "ostl"
-    update_last: true # paper provides label only at last timestep for MNIST :contentReference[oaicite:5]{index=5}
-    update_every: 1
-    seq_batch: 1
+  name: "ostl"
+  update_last: true
+  update_every: 1
+  seq_batch: 1
 
 ostl:
-    surrogate_scale: 5.0
-    grad_clip: 0.0
-    output_mode: "spike" # NEW: "spike" or "mem"
+  surrogate_scale: 5.0
+  grad_clip: 0.0
+  output_mode: "spike"
 
 data:
-    dataset: "MNIST"
-    timesteps: 20 # paper rate-coding uses Ns=20 for training :contentReference[oaicite:6]{index=6}
-    data_dir: "./src/Data"
-    num_workers: 4
+  dataset: "MNIST"
+  timesteps: 25
+  data_dir: "./src/Data"
+  num_workers: 4
 
 hardware:
-    device: "auto"
-    mixed_precision: false
+  device: "auto"
+  mixed_precision: false
 
 checkpoint:
-    save_every: 0
-    save_best: true
-    save_latest: true
-    max_keep: 2
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2

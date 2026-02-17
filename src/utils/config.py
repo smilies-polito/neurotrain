@@ -548,8 +548,10 @@ def validate_config(config: Config) -> List[str]:
     if str(config.ostl.output_mode).lower() not in ("spike", "mem"):
         issues.append("ostl.output_mode must be one of ['spike', 'mem']")
     if config.trainer.name == "ostl":
-        if config.model.architecture != "fc":
-            issues.append("OSTL currently supports model.architecture == 'fc' only")
+        if config.model.architecture not in ("fc", "fc_snn"):
+            issues.append(
+                "OSTL currently supports model.architecture in {'fc', 'fc_snn'} only"
+            )
 
     # OSTTP validation
     valid_pseudo = ["tanh", "fast_sigmoid"]

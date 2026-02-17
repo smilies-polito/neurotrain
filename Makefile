@@ -130,7 +130,9 @@ drtp-all-datasets:
 
 # OSTL
 ostl-mnist:
-	$(PYTHON) main.py --config configs/mnist_ostl.yaml --epochs $(EPOCHS)
+	$(MAKE) ostl-mnist-fc
+ostl-mnist-fc:
+	$(PYTHON) main.py --config configs/benchmarking/ostl/ostl-mnist-fc_snn.yaml --epochs 1
 ostl-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ostl
 
