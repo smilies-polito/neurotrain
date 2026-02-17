@@ -39,14 +39,12 @@ class OTTTTrainer(BaseTrainer):
 
     def __init__(
         self,
-        network: nn.Module,                     # SNN to be trained with OTTT                   
-        lr: float,                              # Learning rate for synapse updates (ignored if use_optimizer=True and optimizer is provided)   
+        network: nn.Module,                     # SNN to be trained with OTTT
+        lr: float,                              # Learning rate for optimizer updates
         batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
         trace_decay: Optional[float] = None,    # Decay factor for synaptic traces
         online_updates: bool = True,
-        use_optimizer: bool = False,
-        optimizer=None,
-        **kwargs,
+        optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
         self.network = network
@@ -56,9 +54,13 @@ class OTTTTrainer(BaseTrainer):
             float(trace_decay) if trace_decay is not None else self._infer_trace_decay()
         )
         self.online_updates = bool(online_updates)
-        self.use_optimizer = bool(use_optimizer)
         self._external_optimizer = optimizer
-        self.optimizer = optimizer
+        # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
+        self.optimizer = (
+            optimizer
+            if optimizer is not None
+            else torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=0.9)
+        )
 
         # OTTT traces are defined on synaptic inputs; we support linear/conv synapses.
         self.synapse_layers = [
@@ -70,11 +72,10 @@ class OTTTTrainer(BaseTrainer):
             raise TypeError(
                 "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
             )
+        # Match official OTTT grad-with-rate behavior by excluding the first synapse.
+        self.trace_synapse_layers = self.synapse_layers[1:]
 
         self._trace_by_module: Dict[nn.Module, torch.Tensor] = {}
-
-        if self.use_optimizer and self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
 
     def _infer_trace_decay(self) -> float:
         """Use neuron leak beta when available; fall back to 0.9."""
@@ -133,7 +134,7 @@ class OTTTTrainer(BaseTrainer):
 
     def _register_trace_hooks(self):
         handles = []
-        for layer in self.synapse_layers:
+        for layer in self.trace_synapse_layers:
             handles.append(layer.register_forward_hook(self._make_trace_hook(layer)))
         return handles
 
@@ -148,23 +149,7 @@ class OTTTTrainer(BaseTrainer):
                     setattr(module, attr, value.detach())
 
     def _zero_all_grads(self) -> None:
-        if self.use_optimizer and self.optimizer is not None:
-            self.optimizer.zero_grad(set_to_none=True)
-            return
-        for param in self.network.parameters():
-            param.grad = None
-
-    def _manual_step(self) -> None:
-        with torch.no_grad():
-            for module in self.synapse_layers:
-                if module.weight.requires_grad and module.weight.grad is not None:
-                    module.weight -= self.lr * module.weight.grad
-                if (
-                    module.bias is not None
-                    and module.bias.requires_grad
-                    and module.bias.grad is not None
-                ):
-                    module.bias -= self.lr * module.bias.grad
+        self.optimizer.zero_grad(set_to_none=True)
 
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
@@ -203,22 +188,16 @@ class OTTTTrainer(BaseTrainer):
                     else:
                         spk_sum = spk_sum + spk_out.detach()
 
-                    # Paper Eq. (2): sequence loss is average of per-step losses.
+                    # Keep paper/repo semantics: each timestep contributes 1/T of sequence loss.
                     loss_t = F.cross_entropy(logits, target) / num_timesteps
                     total_loss = total_loss + loss_t.detach()
                     loss_t.backward()
 
                     if self.online_updates:
-                        if self.use_optimizer and self.optimizer is not None:
-                            self.optimizer.step()
-                        else:
-                            self._manual_step()
+                        self.optimizer.step()
 
                 if not self.online_updates:
-                    if self.use_optimizer and self.optimizer is not None:
-                        self.optimizer.step()
-                    else:
-                        self._manual_step()
+                    self.optimizer.step()
         finally:
             for handle in hooks:
                 handle.remove()
@@ -233,6 +212,8 @@ class OTTTTrainer(BaseTrainer):
 
     def to(self, device):
         super().to(device)
-        if self.use_optimizer and self._external_optimizer is None:
-            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        if self._external_optimizer is None:
+            self.optimizer = torch.optim.SGD(
+                self.network.parameters(), lr=self.lr, momentum=0.9
+            )
         return self

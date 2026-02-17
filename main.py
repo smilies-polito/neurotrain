@@ -239,6 +239,13 @@ def trainable(
         "optimizer": optimizer,
     }
     trainer_name = str(config.trainer.name).lower()
+    if trainer_name == "ottt":
+        trainer_kwargs = {
+            "network": network,
+            "lr": config.training.learning_rate,
+            "batch_size": config.training.batch_size,
+            "optimizer": optimizer,
+        }
 
     if trainer_name == "stsf":
         trainer_kwargs.update(
@@ -310,6 +317,7 @@ def trainable(
         )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
+    optimizer = optimizer if optimizer is not None else getattr(trainer, "optimizer", None)
 
     if resume_checkpoint is not None:
         trainer.network.load_state_dict(resume_checkpoint.model_state_dict)
