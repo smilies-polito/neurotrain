@@ -112,8 +112,19 @@ decolle-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms decolle
 
 # OTTT
+ottt-mnist-fc:
+	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-fc_snn.yaml --epochs 1
+ottt-mnist-conv:
+	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-conv_snn.yaml --epochs 1
+ottt-mnist-rsnn:
+	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-r_snn.yaml --epochs 1
+ottt-mnist-vgg11:
+	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-vg11_snn.yaml --epochs 1
 ottt-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms ottt
+	$(MAKE) ottt-mnist-fc
+	$(MAKE) ottt-mnist-conv
+	$(MAKE) ottt-mnist-rsnn
+	$(MAKE) ottt-mnist-vgg11
 ottt-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ottt
 
