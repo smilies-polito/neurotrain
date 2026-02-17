@@ -13,6 +13,7 @@ import os
 import statistics
 import sys
 from collections import deque
+from importlib import import_module
 from pathlib import Path
 
 import torch
@@ -24,23 +25,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 # Core imports
 from datasets.get_loader import get_loader
 from LearningAlgorithms import LearningAlgorithms
-from networks.conv_network import ConvFCNetwork
 from networks.get_network import get_network
-from trainers.bell_trainer import BELLTrainer
-from trainers.bptt_trainer import BPTTTrainer
-from trainers.decolle_trainer import DECOLLETrainer
-from trainers.drtp_trainer import DRTPTrainer
-from trainers.ell_trainer import ELLTrainer
-from trainers.eprop_trainer import EpropTrainer
-from trainers.esd_rtrl_trainer import ESDRTRLTrainer
-from trainers.etlp_trainer import ETLPTrainer
-from trainers.fell_trainer import FELLTrainer
-from trainers.ostl_trainer import OSTLTrainer
-from trainers.osttp_trainer import OSTTPTrainer
-from trainers.ottt_trainer import OTTTTrainer
-from trainers.stop_trainer import STOPTrainer
-from trainers.stsf_trainer import STSFTrainer
-from trainers.tp_trainer import TPTrainer
 from utils.checkpoint import CheckpointManager, set_rng_state
 from utils.config import (
     Config,
@@ -99,7 +84,13 @@ def trainable(
     print(f"Using device: {device}")
 
     # Get data loaders
-    flatten_inputs = config.model.architecture not in ("conv", "vgg11", "resnet18")
+    flatten_inputs = config.model.architecture not in (
+        "conv",
+        "conv_snn",
+        "vgg11",
+        "vg11_snn",
+        "resnet18",
+    )
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
@@ -107,6 +98,16 @@ def trainable(
         flatten=flatten_inputs,
         device=device,
     )
+
+    dataset_input_shapes = {
+        "MNIST": (1, 28, 28),
+        "FashionMNIST": (1, 28, 28),
+        "CIFAR10": (3, 32, 32),
+        "SVHN": (3, 32, 32),
+        "NMNIST": (1, 34, 34),
+        "DVSGesture": (1, 128, 128),
+    }
+    input_shape = dataset_input_shapes.get(config.data.dataset)
 
     # Create the network (conv uses dedicated class; others go through network factory)
     if config.model.architecture == "recurrent":
@@ -148,6 +149,8 @@ def trainable(
         # Attach for compatibility with trainer code paths that read hidden_size.
         network.hidden_size = [n_rec]
     elif config.model.architecture == "conv":
+        from networks.conv_network import ConvFCNetwork
+
         if config.data.dataset == "MNIST":
             input_shape = (1, 28, 28)
         elif config.data.dataset == "CIFAR10":
@@ -174,6 +177,8 @@ def trainable(
             tau=config.model.tau,
             quant=config.model.quantization,
             threshold=config.model.threshold,
+            input_shape=input_shape,
+            conv_layers=config.model.conv_layers,
         )
 
     if config.training.freeze_conv:
@@ -233,14 +238,15 @@ def trainable(
         "use_optimizer": config.training.optimizer is not None,
         "optimizer": optimizer,
     }
+    trainer_name = str(config.trainer.name).lower()
 
-    if issubclass(trainer_class, STSFTrainer):
+    if trainer_name == "stsf":
         trainer_kwargs.update(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
             seq_batch_size=config.trainer.seq_batch,
         )
-    if issubclass(trainer_class, DRTPTrainer):
+    if trainer_name == "drtp":
         trainer_kwargs.update(
             feedback_distribution=config.drtp.feedback_distribution,
             feedback_scale=config.drtp.feedback_scale,
@@ -253,7 +259,7 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
-    if issubclass(trainer_class, ETLPTrainer):
+    if trainer_name == "etlp":
         trainer_kwargs.update(
             trace_decay=config.etlp.trace_decay,
             surrogate_scale=config.etlp.surrogate_scale,
@@ -267,7 +273,7 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
-    if issubclass(trainer_class, OSTLTrainer):
+    if trainer_name == "ostl":
         trainer_kwargs.update(
             surrogate_scale=config.ostl.surrogate_scale,
             grad_clip=config.ostl.grad_clip,
@@ -275,7 +281,7 @@ def trainable(
             update_last=config.trainer.update_last,
             update_every=config.trainer.update_every,
         )
-    if issubclass(trainer_class, STOPTrainer):
+    if trainer_name == "stop":
         trainer_kwargs.update(
             loss_type=config.stop.loss,
             surrogate=config.stop.surrogate,
@@ -291,7 +297,7 @@ def trainable(
             cosine_t_max=config.stop.cosine_t_max,
             static_input_timesteps=config.stop.static_input_timesteps,
         )
-    if issubclass(trainer_class, OSTTPTrainer):
+    if trainer_name == "osttp":
         trainer_kwargs.update(
             pseudo_derivative=config.osttp.pseudo_derivative,
             output_loss=config.osttp.output_loss,
@@ -403,28 +409,31 @@ def trainable(
 # Trainer factory
 def get_trainer(trainer_name: str):
     """Get trainer class by name."""
+    trainer_name = str(trainer_name).lower()
     trainers = {
-        "stsf": STSFTrainer,
-        "bptt": BPTTTrainer,
-        "eprop": EpropTrainer,
-        "decolle": DECOLLETrainer,
-        "ostl": OSTLTrainer,
-        "osttp": OSTTPTrainer,
-        "ottt": OTTTTrainer,
-        "drtp": DRTPTrainer,
-        "etlp": ETLPTrainer,
-        "ell": ELLTrainer,
-        "fell": FELLTrainer,
-        "bell": BELLTrainer,
-        "esd_rtrl": ESDRTRLTrainer,
-        "tp": TPTrainer,
-        "stop": STOPTrainer,
+        "stsf": ("trainers.stsf_trainer", "STSFTrainer"),
+        "bptt": ("trainers.bptt_trainer", "BPTTTrainer"),
+        "eprop": ("trainers.eprop_trainer", "EpropTrainer"),
+        "decolle": ("trainers.decolle_trainer", "DECOLLETrainer"),
+        "ostl": ("trainers.ostl_trainer", "OSTLTrainer"),
+        "osttp": ("trainers.osttp_trainer", "OSTTPTrainer"),
+        "ottt": ("trainers.ottt_trainer", "OTTTTrainer"),
+        "drtp": ("trainers.drtp_trainer", "DRTPTrainer"),
+        "etlp": ("trainers.etlp_trainer", "ETLPTrainer"),
+        "ell": ("trainers.ell_trainer", "ELLTrainer"),
+        "fell": ("trainers.fell_trainer", "FELLTrainer"),
+        "bell": ("trainers.bell_trainer", "BELLTrainer"),
+        "esd_rtrl": ("trainers.esd_rtrl_trainer", "ESDRTRLTrainer"),
+        "tp": ("trainers.tp_trainer", "TPTrainer"),
+        "stop": ("trainers.stop_trainer", "STOPTrainer"),
     }
     if trainer_name not in trainers:
         raise ValueError(
             f"Unknown trainer: {trainer_name}. Available: {list(trainers.keys())}"
         )
-    return trainers[trainer_name]
+    module_name, class_name = trainers[trainer_name]
+    module = import_module(module_name)
+    return getattr(module, class_name)
 
 
 ########
@@ -459,7 +468,7 @@ def main(args=None):
             sys.exit(1)
 
     # Print configuration
-    print_config(config)
+    # print_config(config)
 
     # Setup experiment logger
     logger = ExperimentLogger(
@@ -475,7 +484,7 @@ def main(args=None):
     context = logger.setup(device)
 
     # Print experiment info
-    print_experiment_info(context)
+    # print_experiment_info(context)
 
     # Save experiment context
     logger.save_context()

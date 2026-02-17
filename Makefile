@@ -79,10 +79,19 @@ all-cifar10:
 # |__/  |__/|________/ \______/  \______/ |__/  |__/|______/   |__/   |__/  |__/|__/     |__/
 
 # BPTT
+bptt-mnist-fc:
+	$(PYTHON) main.py --config configs/benchmarking/bptt/bptt-mnist-fc_snn.yaml --epochs 1
+bptt-mnist-conv:
+	$(PYTHON) main.py --config configs/benchmarking/bptt/bptt-mnist-conv_snn.yaml --epochs 1
+bptt-mnist-rsnn:
+	$(PYTHON) main.py --config configs/benchmarking/bptt/bptt-mnist-r_snn.yaml --epochs 1
+bptt-mnist-vgg11:
+	$(PYTHON) main.py --config configs/benchmarking/bptt/bptt-mnist-vg11_snn.yaml --epochs 1
 bptt-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms bptt
-bptt-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms bptt
+	$(MAKE) bptt-mnist-fc
+	$(MAKE) bptt-mnist-conv
+	$(MAKE) bptt-mnist-rsnn
+	$(MAKE) bptt-mnist-vgg11
 
 # STSF
 stsf-mnist:
@@ -204,6 +213,13 @@ run-osttp-mnist:
 	$(PYTHON) main.py --config configs/mnist_osttp.yaml
 
 # Remove Python bytecode and caches
-clean:
-	find . -name "__pycache__" -type d -exec rm -rf {} +
-	find . -name "*.pyc" -delete
+clean-data:
+	rm -rf src/Data
+clean-experiments:
+	rm -rf experiments
+clean-results:
+	rm -rf benchmark_results
+clean-all:
+	$(MAKE) clean-experiments
+	$(MAKE) clean-results
+	
