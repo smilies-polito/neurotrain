@@ -9,6 +9,10 @@ from typing import Any, Optional, Union
 import torch
 
 from networks.base_snn import BaseSNN
+from networks.benchmarking.conv_snn import ConvSNN
+from networks.benchmarking.fc_snn import FCSNN
+from networks.benchmarking.r_snn import RSNN
+from networks.benchmarking.vg11_snn import VG11SNN
 from networks.fc_network import FCNetwork
 from networks.recurrent_fc_network import RecurrentFCNetwork
 from networks.recurrent_srnn import RecurrentSRNN
@@ -25,6 +29,22 @@ _ALGORITHM_MODEL_OVERRIDE = {
     "bell": "local_classifier",
     "stllr": "stllr",
 }
+
+
+def _infer_input_shape(input_size: int) -> tuple[int, int, int]:
+    """Infer canonical image-like shape from flattened input size."""
+    if int(input_size) == 784:
+        return (1, 28, 28)
+    if int(input_size) == 1156:
+        return (1, 34, 34)
+    if int(input_size) == 3072:
+        return (3, 32, 32)
+    if int(input_size) == 16384:
+        return (1, 128, 128)
+    raise ValueError(
+        f"Cannot infer input shape from input size {input_size}. "
+        "Provide input_shape explicitly."
+    )
 
 
 def get_network(
@@ -149,6 +169,103 @@ def get_network(
             surrogate=kwargs.get("surrogate", "exp"),
         )
 
+    if effective_arch == "vg11_snn":
+        if len(layer_sizes) < 2:
+            raise ValueError("vg11_snn requires layer_sizes=[n_in, hidden..., n_out].")
+        input_shape = kwargs.get("input_shape")
+        if input_shape is None:
+            input_shape = _infer_input_shape(int(layer_sizes[0]))
+        input_shape = tuple(int(v) for v in input_shape)
+        feature_cfg = kwargs.get("feature_cfg")
+        if feature_cfg is None:
+            # Keep pooling depth compatible with spatial size.
+            # 28x28 inputs cannot sustain 5 pools; use 4 pools there.
+            if min(input_shape[1], input_shape[2]) <= 28:
+                feature_cfg = [1, "M", 2, "M", 4, 4, "M", 8, 8, "M"]
+            else:
+                feature_cfg = [1, "M", 2, "M", 4, 4, "M", 8, 8, "M", 8, 8, "M"]
+        return VG11SNN(
+            in_shape=input_shape,
+            num_classes=int(layer_sizes[-1]),
+            feature_cfg=feature_cfg,
+            classifier_hidden_sizes=tuple(int(v) for v in layer_sizes[1:-1]),
+            base_channels=int(kwargs.get("base_channels", 16 if input_shape[0] == 3 else 10)),
+            use_batch_norm=bool(kwargs.get("use_batch_norm", True)),
+            pool_kernel=int(kwargs.get("pool_kernel", 2)),
+            pool_stride=int(kwargs.get("pool_stride", 2)),
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+
+    if effective_arch == "fc_snn":
+        if len(layer_sizes) < 2:
+            raise ValueError("fc_snn requires layer_sizes=[n_in, hidden..., n_out].")
+        return FCSNN(
+            in_shape=(int(layer_sizes[0]),),
+            num_classes=int(layer_sizes[-1]),
+            hidden_sizes=tuple(int(v) for v in layer_sizes[1:-1]),
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+
+    if effective_arch == "r_snn":
+        if len(layer_sizes) < 2:
+            raise ValueError("r_snn requires layer_sizes=[n_in, hidden..., n_out].")
+        return RSNN(
+            in_shape=(int(layer_sizes[0]),),
+            num_classes=int(layer_sizes[-1]),
+            hidden_sizes=tuple(int(v) for v in layer_sizes[1:-1]),
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+
+    if effective_arch == "conv_snn":
+        if len(layer_sizes) < 1:
+            raise ValueError(
+                "conv_snn requires layer_sizes=[classifier_hidden..., n_out]."
+            )
+        input_shape = kwargs.get("input_shape")
+        if input_shape is None:
+            input_shape = _infer_input_shape(int(layer_sizes[0]))
+        input_shape = tuple(int(v) for v in input_shape)
+
+        conv_layers = kwargs.get("conv_layers", [])
+        if conv_layers:
+            conv_channels = tuple(int(layer["out_channels"]) for layer in conv_layers)
+            pool_after = tuple(
+                bool(int(layer.get("pool_kernel", 0)) > 0) for layer in conv_layers
+            )
+            first = conv_layers[0]
+            conv_kernel_size = int(first.get("kernel_size", 3))
+            conv_stride = int(first.get("stride", 1))
+            conv_padding = int(first.get("padding", 1))
+            pool_kernel = int(first.get("pool_kernel", 2))
+            pool_stride = int(first.get("pool_stride", 2))
+        else:
+            conv_channels = (32, 64)
+            pool_after = (True, True)
+            conv_kernel_size = 3
+            conv_stride = 1
+            conv_padding = 1
+            pool_kernel = 2
+            pool_stride = 2
+
+        return ConvSNN(
+            in_shape=input_shape,
+            num_classes=int(layer_sizes[-1]),
+            conv_channels=conv_channels,
+            fc_hidden_sizes=tuple(int(v) for v in layer_sizes[:-1]),
+            use_batch_norm=bool(kwargs.get("use_batch_norm", True)),
+            pool_after=pool_after,
+            pool_kernel=pool_kernel,
+            pool_stride=pool_stride,
+            conv_kernel_size=conv_kernel_size,
+            conv_stride=conv_stride,
+            conv_padding=conv_padding,
+            beta=beta,
+            threshold=kwargs.get("threshold", 1.0),
+        )
+
     if effective_arch == "resnet18":
         return SpikingResNet18(
             input_channels=kwargs.get("input_channels", 3),
@@ -164,7 +281,7 @@ def get_network(
         raise ValueError(
             f"Unknown model architecture '{effective_arch}'. "
             "Use 'fc', 'conv', 'local_classifier', 'recurrent', 'stllr', "
-            "'vgg11', or 'resnet18'."
+            "'vgg11', 'resnet18', 'fc_snn', 'r_snn', 'conv_snn', or 'vg11_snn'."
         )
     return FCNetwork(
         layer_sizes=layer_sizes,

@@ -99,7 +99,13 @@ def trainable(
     print(f"Using device: {device}")
 
     # Get data loaders
-    flatten_inputs = config.model.architecture not in ("conv", "vgg11", "resnet18")
+    flatten_inputs = config.model.architecture not in (
+        "conv",
+        "conv_snn",
+        "vgg11",
+        "vg11_snn",
+        "resnet18",
+    )
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
@@ -107,6 +113,16 @@ def trainable(
         flatten=flatten_inputs,
         device=device,
     )
+
+    dataset_input_shapes = {
+        "MNIST": (1, 28, 28),
+        "FashionMNIST": (1, 28, 28),
+        "CIFAR10": (3, 32, 32),
+        "SVHN": (3, 32, 32),
+        "NMNIST": (1, 34, 34),
+        "DVSGesture": (1, 128, 128),
+    }
+    input_shape = dataset_input_shapes.get(config.data.dataset)
 
     # Create the network (conv uses dedicated class; others go through network factory)
     if config.model.architecture == "recurrent":
@@ -187,6 +203,8 @@ def trainable(
             tau=config.model.tau,
             quant=config.model.quantization,
             threshold=config.model.threshold,
+            input_shape=input_shape,
+            conv_layers=config.model.conv_layers,
         )
 
     if config.training.freeze_conv:
@@ -468,7 +486,7 @@ def main(args=None):
             sys.exit(1)
 
     # Print configuration
-    print_config(config)
+    # print_config(config)
 
     # Setup experiment logger
     logger = ExperimentLogger(
@@ -484,7 +502,7 @@ def main(args=None):
     context = logger.setup(device)
 
     # Print experiment info
-    print_experiment_info(context)
+    # print_experiment_info(context)
 
     # Save experiment context
     logger.save_context()
