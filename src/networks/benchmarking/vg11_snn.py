@@ -109,9 +109,16 @@ class VG11SNN(BaseSNN):
             in_channels = out_channels
 
         with torch.no_grad():
+            # Use batch size 2 to avoid BatchNorm error "Expected more than 1 value per channel"
             dummy = torch.zeros(2, *self.in_shape)
-            for conv, norm, pool in zip(self.conv_layers, self.conv_norms, self.pool_layers):
-                dummy = pool(norm(conv(dummy)))
+            for i, (conv, norm) in enumerate(zip(self.conv_layers, self.conv_norms)):
+                 # pool layers might be shorter or mapped differently if M was handled oddly
+                 # But looking at above loop:
+                 #   self.pool_layers.append(nn.Identity())
+                 # and if "M", self.pool_layers[-1] = MaxPool...
+                 # So pool_layers leads conv_layers 1:1.
+                 pool = self.pool_layers[i]
+                 dummy = pool(norm(conv(dummy)))
             flat_features = int(dummy.flatten(1).shape[1])
 
         classifier_sizes = [*self.classifier_hidden_sizes, self._n_classes]

@@ -1,5 +1,22 @@
 import argparse
-from ray import tune    # type: ignore
+try:
+    from ray import tune  # type: ignore
+except ModuleNotFoundError:
+    # Keep argument parsing usable when Ray Tune is not installed.
+    class _TuneStub:
+        @staticmethod
+        def choice(values):
+            return values[0]
+
+        @staticmethod
+        def loguniform(low, _high):
+            return low
+
+        @staticmethod
+        def randint(low, _high):
+            return low
+
+    tune = _TuneStub()
 
 ##########################
 # Exploration Parameters #

@@ -3,7 +3,11 @@
 Run SNN learning algorithm benchmarks across all available datasets.
 
 Usage:
-    python run_all_benchmarks.py [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf,eprop]
+    python run_all_benchmarks.py [--mode B|R] [--epochs 50] [--device cuda] [--datasets MNIST,CIFAR10] [--algorithms bptt,stsf,eprop]
+
+Modes:
+    B (benchmarking): Uses networks from src/networks/benchmarking/ (FCSNN, RSNN, etc.)
+    R (reproducibility): Uses networks from flat structure (FCNetwork, LocalClassifier, etc.)
 """
 
 import argparse
@@ -251,6 +255,7 @@ def run_all_benchmarks(
     datasets: list = None,
     algorithms: list = None,
     seed: int = 42,
+    network_mode: str = "reproducibility",
 ):
     """Run benchmarks for all algorithms on all datasets."""
     
@@ -294,10 +299,18 @@ def run_all_benchmarks(
                 f"Unknown algorithm(s): {', '.join(unknown)}. Available: {', '.join(ALGORITHMS.keys())}"
             )
         selected_algorithms = {name: ALGORITHMS[name] for name in resolved}
+
+    # In benchmarking mode, ell/fell/bell/stllr have no benchmarking network equivalent
+    if network_mode == "benchmarking":
+        unsupported = [a for a in selected_algorithms if a in ("ell", "fell", "bell", "stllr")]
+        if unsupported:
+            selected_algorithms = {k: v for k, v in selected_algorithms.items() if k not in unsupported}
+            print(f"Note: In B mode, skipping {unsupported} (no benchmarking network equivalent).")
     
     print("\n" + "=" * 80)
     print("FULL BENCHMARK SUITE: " + " vs ".join(name.upper() for name in selected_algorithms.keys()))
     print("=" * 80)
+    print(f"Mode: {network_mode} ({'benchmarking (networks/benchmarking/)' if network_mode == 'benchmarking' else 'reproducibility (flat structure)'})")
     print(f"Algorithms: {list(selected_algorithms.keys())}")
     if datasets:
         print(f"Datasets: {list(selected_datasets.keys())}")
@@ -359,6 +372,7 @@ def run_all_benchmarks(
                     beta=beta,
                     tau=tau,
                     seed=seed,
+                    network_mode=network_mode,
                 )
                 dataset_results[algo_name] = result
             except Exception as e:
@@ -536,6 +550,13 @@ def main():
         default=42,
         help="Random seed for reproducibility (default: 42)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["B", "R"],
+        default="R",
+        help="B=benchmarking (networks/benchmarking/), R=reproducibility (flat structure). Default: R",
+    )
 
     args = parser.parse_args()
 
@@ -550,6 +571,7 @@ def main():
     )
     print(env_line)
 
+    network_mode = "benchmarking" if args.mode == "B" else "reproducibility"
     try:
         run_all_benchmarks(
             epochs=args.epochs,
@@ -560,7 +582,8 @@ def main():
             datasets=_parse_csv_list(args.datasets),
             algorithms=_parse_csv_list(args.algorithms),
             seed=args.seed,
-            checkpoint_epochs = list(range(1, args.epochs + 1))
+            network_mode=network_mode,
+            checkpoint_epochs=list(range(1, args.epochs + 1)),
         )
     except ValueError as e:
         parser.error(str(e))

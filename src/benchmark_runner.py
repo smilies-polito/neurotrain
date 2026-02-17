@@ -306,6 +306,7 @@ def benchmark_algorithm(
     beta: float = 0.9,
     tau: Optional[float] = None,
     seed: Optional[int] = None,
+    network_mode: str = "reproducibility",
 ) -> BenchmarkResult:
     """
     Run benchmark for a single algorithm.
@@ -372,6 +373,7 @@ def benchmark_algorithm(
         layer_sizes=layer_sizes,
         beta=beta,
         tau=tau,
+        network_mode=network_mode,
     )
     if use_raw_loader:
         network.uses_raw_input = True
@@ -692,6 +694,7 @@ def run_comparison(
             device=config["device"],
             beta=config.get("beta", 0.9),
             tau=config.get("tau"),
+            network_mode=config.get("network_mode", "reproducibility"),
         )
         results[algo_name] = result
 
@@ -776,11 +779,20 @@ def main():
         default=None,
         help="Output directory (overrides config)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["B", "R"],
+        default=None,
+        help="B=benchmarking (networks/benchmarking/), R=reproducibility (flat structure). Overrides config.",
+    )
 
     args = parser.parse_args()
 
     # Load configuration
     config = load_config(args.config)
+    if args.mode is not None:
+        config["network_mode"] = "benchmarking" if args.mode == "B" else "reproducibility"
 
     # Determine output directory
     output_dir = Path(
@@ -789,11 +801,14 @@ def main():
         else config.get("output_dir", "./benchmark_results")
     )
 
+    network_mode = config.get("network_mode", "reproducibility")
+
     print("\n" + "=" * 60)
     print("SNN LEARNING ALGORITHM BENCHMARK")
     print("=" * 60)
     print(f"Config: {args.config}")
     print(f"Output: {output_dir}")
+    print(f"Mode: {network_mode} ({'B' if network_mode == 'benchmarking' else 'R'})")
     print(f"Algorithms: {config['algorithms']}")
     print(f"Dataset: {config['dataset']}")
     print(f"Architecture: {config['layer_sizes']}")
