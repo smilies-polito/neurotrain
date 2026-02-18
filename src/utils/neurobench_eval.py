@@ -22,24 +22,47 @@ from neurobench.metrics.workload import (
 )
 
 
-def spike_to_prediction(preds: torch.Tensor) -> torch.Tensor:
+def spike_to_prediction(
+    preds: torch.Tensor,
+    expected_timesteps: Optional[int] = None,
+) -> torch.Tensor:
     """
     Postprocessor to convert spike outputs to class predictions.
     
     NeuroBench's ClassificationAccuracy expects predictions of shape [batch]
-    matching label shape. This converts spike outputs [batch, timesteps, classes]
-    to class predictions [batch] by summing over time and taking argmax.
+    matching label shape. Depending on NeuroBench/custom wrapper internals, spike
+    tensors can arrive as either [batch, timesteps, classes] or
+    [timesteps, batch, classes]. This function handles both layouts.
     
     Note: Returns predictions on CPU to match labels from DataLoader.
     
     Args:
-        preds: Spike output tensor of shape [batch, timesteps, classes]
+        preds: Spike output tensor
+        expected_timesteps: Optional expected timestep count used to disambiguate
+            layout when possible
         
     Returns:
         Class predictions of shape [batch] on CPU
     """
-    # Sum spikes over time: [batch, timesteps, classes] -> [batch, classes]
-    spike_sum = preds.sum(dim=1)
+    if preds.dim() == 3:
+        if expected_timesteps is not None:
+            if preds.shape[1] == expected_timesteps:
+                # [batch, timesteps, classes]
+                spike_sum = preds.sum(dim=1)
+            elif preds.shape[0] == expected_timesteps:
+                # [timesteps, batch, classes]
+                spike_sum = preds.sum(dim=0)
+            else:
+                # Fall back to batch-major convention used by this wrapper.
+                spike_sum = preds.sum(dim=1)
+        else:
+            # Fall back to batch-major convention used by this wrapper.
+            spike_sum = preds.sum(dim=1)
+    elif preds.dim() == 2:
+        # Already aggregated to [batch, classes].
+        spike_sum = preds
+    else:
+        raise ValueError(f"Unsupported prediction shape for NeuroBench: {tuple(preds.shape)}")
     # Get predicted class: [batch, classes] -> [batch]
     # Move to CPU to match labels from DataLoader
     return spike_sum.argmax(dim=1).cpu()
@@ -50,6 +73,7 @@ def run_neurobench(
     test_loader: DataLoader,
     device: str = "cpu",
     num_timesteps: Optional[int] = None,
+    include_synaptic_operations: bool = False,
 ) -> Dict[str, Any]:
     """
     Run NeuroBench evaluation using their built-in harness.
@@ -62,6 +86,9 @@ def run_neurobench(
         test_loader: DataLoader for test dataset
         device: Device to run evaluation on ("cpu", "cuda")
         num_timesteps: Number of timesteps for inference (if not inferrable)
+        include_synaptic_operations: Whether to include SynapticOperations.
+            Disabled by default because some model stacks trigger repeated
+            deepcopy errors in current NeuroBench/PyTorch combinations.
         
     Returns:
         Dictionary containing all NeuroBench metrics:
@@ -96,10 +123,11 @@ def run_neurobench(
     workload_metrics = [
         ActivationSparsity,         # Overall spike sparsity
         ActivationSparsityByLayer,  # Per-layer spike sparsity breakdown
-        SynapticOperations,         # Number of synaptic operations (MACs)
         MembraneUpdates,            # Number of membrane potential updates
         ClassificationAccuracy,     # Classification accuracy
     ]
+    if include_synaptic_operations:
+        workload_metrics.insert(2, SynapticOperations)  # Effective/Dense MAC statistics
     
     # Create and run benchmark
     # NeuroBench v2.x uses metric_list=[static_metrics, workload_metrics]
@@ -108,7 +136,9 @@ def run_neurobench(
         model=nb_model,
         dataloader=test_loader,
         preprocessors=[],
-        postprocessors=[spike_to_prediction],
+        postprocessors=[
+            lambda preds: spike_to_prediction(preds, expected_timesteps=num_timesteps)
+        ],
         metric_list=[static_metrics, workload_metrics],
     )
     
@@ -138,6 +168,23 @@ class NeuroBenchWrapper(torch.nn.Module):
         self.network = network
         self.num_timesteps = num_timesteps
         self.device = device
+
+    def _to_time_major(self, x: torch.Tensor) -> tuple[torch.Tensor, int]:
+        """Normalize batch/time layout to [timesteps, batch, ...]."""
+        if x.dim() < 2:
+            return x.unsqueeze(0), 1
+
+        if self.num_timesteps is not None:
+            if x.shape[0] == self.num_timesteps:
+                return x, int(x.shape[0])
+            if x.shape[1] == self.num_timesteps:
+                return x.transpose(0, 1), int(x.shape[1])
+
+        # Fallback heuristic: if first dim is likely batch and second dim likely
+        # timesteps, transpose; otherwise keep as-is.
+        if x.shape[0] > x.shape[1]:
+            return x.transpose(0, 1), int(x.shape[1])
+        return x, int(x.shape[0])
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -153,29 +200,8 @@ class NeuroBenchWrapper(torch.nn.Module):
         # Move input to the same device as the network
         x = x.to(self.device)
         
-        # Handle different input formats
-        if x.dim() == 3:
-            # Determine input format using num_timesteps if available
-            # Our convention is [timesteps, batch, features]
-            if self.num_timesteps is not None:
-                # Use known timesteps to determine format
-                if x.shape[0] == self.num_timesteps:
-                    # Already [timesteps, batch, features]
-                    num_timesteps = x.shape[0]
-                elif x.shape[1] == self.num_timesteps:
-                    # Input is [batch, timesteps, features], transpose
-                    x = x.transpose(0, 1)
-                    num_timesteps = x.shape[0]
-                else:
-                    # Neither dimension matches, assume first dim is timesteps
-                    num_timesteps = x.shape[0]
-            else:
-                # No num_timesteps provided - assume input follows our convention
-                # [timesteps, batch, features] where timesteps is typically small (10-100)
-                # This is a fallback; prefer providing num_timesteps explicitly
-                num_timesteps = x.shape[0]
-        else:
-            num_timesteps = self.num_timesteps or 1
+        # Handle both vector/image layouts and both [B, T, ...] / [T, B, ...].
+        x, num_timesteps = self._to_time_major(x)
         
         # Reset network state
         self.network.reset()
@@ -185,14 +211,27 @@ class NeuroBenchWrapper(torch.nn.Module):
         
         for t in range(num_timesteps):
             out = self.network(x[t])
-            # Handle networks returning 2 values (spk, mem) or 3 values (spk, mem, traces)
-            spks = out[0]
-            all_spikes.append(spks[-1])  # Output layer spikes
+
+            # Handle different network return styles:
+            # - (spk_rec, mem_rec)
+            # - tensor readout
+            # - [layer_outputs, ...]
+            if isinstance(out, (tuple, list)):
+                first = out[0]
+                if isinstance(first, (tuple, list)) and len(first) > 0:
+                    readout = first[-1]
+                else:
+                    readout = first
+            else:
+                readout = out
+
+            if isinstance(readout, torch.Tensor) and readout.dim() == 1:
+                readout = readout.unsqueeze(0)
+
+            all_spikes.append(readout)
         
-        # Stack spikes: [timesteps, batch, classes]
-        # NeuroBench with custom_forward=True expects this format
-        # (it will transpose to [batch, timesteps, classes] internally)
-        spk_out = torch.stack(all_spikes, dim=0)
+        # Stack spikes as [batch, timesteps, classes].
+        spk_out = torch.stack(all_spikes, dim=1)
         
         return spk_out
     
@@ -230,4 +269,3 @@ def compute_static_metrics(network: torch.nn.Module) -> Dict[str, Any]:
             results[metric_name] = f"Error: {e}"
     
     return results
-

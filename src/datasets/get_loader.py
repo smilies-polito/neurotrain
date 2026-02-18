@@ -102,10 +102,22 @@ def get_loader(
     elif name == "SVHN":
         return SVHNLoader(batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed)
     elif name == "DVSGesture":
-        return DVSGestureLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return DVSGestureLoader(
+            batch_size,
+            T,
+            flatten=flatten,
+            pin_memory=pin_memory,
+            seed=seed,
+        )
     # Event-based neuromorphic datasets
     elif name == "NMNIST":
-        return NMNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return NMNISTLoader(
+            batch_size,
+            T,
+            flatten=flatten,
+            pin_memory=pin_memory,
+            seed=seed,
+        )
     # NeuroBench official benchmarks (classification)
     elif name == "SpeechCommands":
         return SpeechCommandsLoader(batch_size, T, pin_memory=pin_memory, seed=seed)

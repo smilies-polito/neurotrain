@@ -38,6 +38,12 @@ OTTT_REPRO_TIMESTEPS ?= 6
 OTTT_REPRO_LR ?= 0.1
 OTTT_REPRO_SEED ?= 2022
 
+REPRO_TEST_EPOCHS ?= 5
+REPRO_TEST_BATCH_SIZE ?= 32
+REPRO_TEST_TIMESTEPS ?= 6
+REPRO_TEST_LR ?=
+REPRO_TEST_DEVICE ?= auto
+
 
 
 #  /$$$$$$$  /$$$$$$$$ /$$   /$$  /$$$$$$  /$$   /$$ /$$      /$$  /$$$$$$  /$$$$$$$  /$$   /$$ /$$$$$$ /$$   /$$  /$$$$$$ 
@@ -51,10 +57,15 @@ OTTT_REPRO_SEED ?= 2022
 
 # Full test suite
 bench-short:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --run-neurobench
+# Reproducibility suite (paper configs under configs/reproducibility)
+reproducibility-test:
+	$(PYTHON) reproducibility.py --configs-dir configs/reproducibility --epochs $(REPRO_TEST_EPOCHS) --batch-size $(REPRO_TEST_BATCH_SIZE) --timesteps $(REPRO_TEST_TIMESTEPS) --device $(REPRO_TEST_DEVICE) $(if $(REPRO_TEST_LR),--lr $(REPRO_TEST_LR),) $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
+repro-test:
+	$(MAKE) reproducibility-test
 # Only BPTT test suite
 bptt:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt --run-neurobench --datasets MNIST
 # Only OTTT test suite
 ottt:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ottt $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
@@ -154,7 +165,7 @@ ottt-mnist:
 ottt-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ottt
 ottt-repro:
-	$(PYTHON) main.py --config configs/cifar10_ottt_repro.yaml --epochs $(OTTT_REPRO_EPOCHS) --batch-size $(OTTT_REPRO_BATCH_SIZE) --T $(OTTT_REPRO_TIMESTEPS) --lr $(OTTT_REPRO_LR) --seed $(OTTT_REPRO_SEED)
+	$(PYTHON) main.py --config configs/reproducibility/cifar10_ottt_repro.yaml --epochs $(OTTT_REPRO_EPOCHS) --batch-size $(OTTT_REPRO_BATCH_SIZE) --T $(OTTT_REPRO_TIMESTEPS) --lr $(OTTT_REPRO_LR) --seed $(OTTT_REPRO_SEED)
 
 # DRTP
 drtp-mnist-fc:

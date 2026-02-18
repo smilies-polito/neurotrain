@@ -22,7 +22,7 @@ except ImportError:
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def DVSGestureLoader(batch_size, T, pin_memory: bool = False, seed=None):
+def DVSGestureLoader(batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for IBM's DVS Gesture dataset.
 
@@ -73,8 +73,12 @@ def DVSGestureLoader(batch_size, T, pin_memory: bool = False, seed=None):
             else:
                 frame = events
 
-            # Flatten spatial: [T, 128, 128] -> [T, 16384]
-            frame = frame.reshape(T, -1)
+            if flatten:
+                # Flatten spatial: [T, 128, 128] -> [T, 16384]
+                frame = frame.reshape(T, -1)
+            else:
+                # Convolutional models expect channel-first frames.
+                frame = frame.reshape(T, 1, 128, 128)
 
             # Normalize to [0, 1] (events are counts)
             frame = np.clip(frame, 0, 1).astype(np.float32)

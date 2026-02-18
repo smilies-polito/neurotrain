@@ -396,6 +396,8 @@ def trainable(
     rolling_acc = deque(maxlen=5)
     prev_test = None
     best_accuracy = 0.0
+    final_training_loss = None
+    final_testing_accuracy = None
 
     # Training loop
     for epoch in range(start_epoch, config.training.epochs):
@@ -405,6 +407,7 @@ def trainable(
         )
         training_loss = training_metrics["loss"]
         training_accuracy = training_metrics["accuracy"]
+        final_training_loss = float(training_loss)
         if lr_scheduler is not None:
             lr_scheduler.step()
 
@@ -413,6 +416,7 @@ def trainable(
             network, testloader, device=device, print_every=1000
         )
         testing_accuracy = testing_metrics["accuracy"]
+        final_testing_accuracy = float(testing_accuracy)
 
         # Compute stability metrics
         rolling_acc.append(testing_accuracy)
@@ -470,7 +474,11 @@ def trainable(
     logger.close()
 
     print(f"\nTraining complete! Best accuracy: {best_accuracy:.4f}")
-    return best_accuracy
+    return {
+        "best_accuracy": float(best_accuracy),
+        "final_accuracy": final_testing_accuracy,
+        "final_loss": final_training_loss,
+    }
 
 
 # Trainer factory

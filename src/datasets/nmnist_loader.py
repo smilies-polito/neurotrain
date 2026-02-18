@@ -26,7 +26,7 @@ except ImportError:
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
 
-def NMNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
+def NMNISTLoader(batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for N-MNIST (Neuromorphic MNIST) dataset.
 
@@ -77,8 +77,12 @@ def NMNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
             else:
                 frame = events
 
-            # Flatten spatial: [T, 34, 34] -> [T, 1156]
-            frame = frame.reshape(T, -1)
+            if flatten:
+                # Flatten spatial: [T, 34, 34] -> [T, 1156]
+                frame = frame.reshape(T, -1)
+            else:
+                # Convolutional models expect channel-first frames.
+                frame = frame.reshape(T, 1, 34, 34)
 
             # Normalize to [0, 1] (events are counts)
             frame = np.clip(frame, 0, 1).astype(np.float32)

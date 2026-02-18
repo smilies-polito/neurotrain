@@ -56,6 +56,8 @@ except Exception:  # pragma: no cover - depends on local env
     plt = None
     _HAS_MATPLOTLIB = False
 
+# Allow running this file as a script without installing the package.
+# We add `./src` to the import path so imports like `from trainers...` work.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from datasets.get_loader import get_loader
@@ -69,6 +71,9 @@ from utils.neurobench_eval import run_neurobench
 
 # ============================================================================
 # Core registry/constants
+#
+# Benchmarking networks are selected by a short architecture name in YAML.
+# This registry maps that name to the concrete BaseSNN subclass to instantiate.
 # ============================================================================
 _BASE_TAGS = ("fully_connected", "convolutional", "recurrent", "single_layer", "vgg")
 _NETWORK_FACTORY = {
@@ -79,11 +84,20 @@ _NETWORK_FACTORY = {
 }
 
 
+# ============================================================================
+# Data models (what we schedule vs what we record)
+# ============================================================================
 @dataclass
 class ExperimentSpec:
-    """One fully materialized experiment to execute."""
+    """One fully materialized experiment to execute.
 
-    experiment_id: str
+    This is produced during the planning/scheduling phase from:
+    - global benchmark config (trainers + execution),
+    - a network blueprint YAML (with per-dataset overrides applied),
+    - dataset defaults (input shapes/classes/timesteps).
+    """
+
+    experiment_id: str                 
     trainer_name: str
     trainer_module: str
     trainer_class_name: str
@@ -91,14 +105,18 @@ class ExperimentSpec:
     network_architecture: str
     dataset: str
     tags: list[str]
-    trainer_config: dict[str, Any]
-    network_config: dict[str, Any]
-    dataset_config: dict[str, Any]
+    trainer_config: dict[str, Any]  # The full payload from the benchmark YAML.
+    network_config: dict[str, Any]  # The full payload from the network YAML after applying dataset overrides.
+    dataset_config: dict[str, Any]  # Configs for the dataset for this experiment (e.g. input shape, num classes, timesteps)
 
 
 @dataclass
 class ExperimentResult:
-    """Normalized result payload for one experiment run."""
+    """Normalized result payload for one experiment run.
+
+    The goal is to keep one shape regardless of trainer/network differences so
+    we can render summaries and write CSV/JSON consistently.
+    """
 
     experiment_id: str
     trainer_name: str
@@ -115,8 +133,15 @@ class ExperimentResult:
     neurobench: dict[str, Any]
 
 
+# ============================================================================
+# Small helpers (CLI parsing, config merging, metric normalization)
+# ============================================================================
 def _parse_csv_list(value: str | None) -> list[str] | None:
-    """Parse a comma-separated CLI option into a clean list."""
+    """Parse a comma-separated CLI option into a clean list.
+
+    Used for filters like `--datasets MNIST,CIFAR10`.
+    Returns `None` when the user did not provide a value.
+    """
 
     if value is None:
         return None
@@ -126,7 +151,12 @@ def _parse_csv_list(value: str | None) -> list[str] | None:
 
 
 def _deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge two dictionaries, preserving nested keys."""
+    """Recursively merge two dictionaries, preserving nested keys.
+
+    This is used to apply per-dataset overrides onto a base network blueprint:
+    - keys in `extra` overwrite keys in `base`,
+    - nested dicts are merged recursively.
+    """
 
     out = deepcopy(base)
     for key, value in extra.items():
@@ -138,7 +168,11 @@ def _deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 
 def _to_plain_number(value: Any) -> float | None:
-    """Convert tensors/scalars into plain Python float when possible."""
+    """Convert tensors/scalars into plain Python float when possible.
+
+    Trainers sometimes return tensors or numpy-like scalars; summaries and CSV
+    output prefer plain Python floats.
+    """
 
     if value is None:
         return None
@@ -153,7 +187,15 @@ def _to_plain_number(value: Any) -> float | None:
 
 
 def _extract_prediction(pred: Any) -> torch.Tensor:
-    """Normalize trainer predictions to a 1D class-index tensor."""
+    """Normalize trainer predictions to a 1D class-index tensor.
+
+    Different trainers expose predictions with different shapes:
+    - class indices: [B] or [B, 1]
+    - logits/probabilities: [B, C] (or higher-D variants)
+
+    This helper converts them into `[B]` integer class labels so accuracy can be
+    computed in a trainer-agnostic way.
+    """
 
     if isinstance(pred, torch.Tensor):
         tensor = pred.detach()
@@ -172,24 +214,13 @@ def _extract_prediction(pred: Any) -> torch.Tensor:
     return tensor.long()
 
 
-def _format_metric(value: float | None, decimals: int = 4) -> str:
-    """Format numeric metric for tables, handling missing values."""
-
-    if value is None:
-        return "N/A"
-    return f"{value:.{decimals}f}"
-
-
-def _format_seconds(value: float | None) -> str:
-    """Format seconds for summary tables."""
-
-    if value is None:
-        return "N/A"
-    return f"{value:.1f}s"
-
-
 def _resolve_device(device_name: str) -> torch.device:
-    """Resolve user device string to an available torch device."""
+    """Resolve user device string to an available torch device.
+
+    Supports:
+    - `auto`: prefer CUDA, then MPS (if available), otherwise CPU
+    - `cuda`, `cuda:0`, etc: falls back to CPU if CUDA is unavailable
+    """
 
     requested = str(device_name).lower()
     if requested == "auto":
@@ -205,7 +236,12 @@ def _resolve_device(device_name: str) -> torch.device:
 
 
 def _optimizer_from_name(name: str | None, params, lr: float):
-    """Build optimizer by short name from configuration."""
+    """Build optimizer by short name from configuration.
+
+    Trainers can opt into using a standard torch optimizer. This keeps the YAML
+    surface area small (use `adam`, `sgd`, etc.) while still allowing
+    algorithm-specific trainers to ignore optimizers entirely.
+    """
 
     if name is None:
         return None
@@ -222,7 +258,12 @@ def _optimizer_from_name(name: str | None, params, lr: float):
 
 
 def _network_tags(network: BaseSNN) -> set[str]:
-    """Extract active semantic tags from BaseSNN boolean properties."""
+    """Extract active semantic tags from BaseSNN boolean properties.
+
+    These tags drive compatibility rules in the trainer YAML, e.g.:
+    - "requires_all_tags: [fully_connected]"
+    - "excludes_any_tags: [recurrent]"
+    """
 
     tags: set[str] = set()
     for tag in _BASE_TAGS:
@@ -231,6 +272,19 @@ def _network_tags(network: BaseSNN) -> set[str]:
     return tags
 
 
+
+# ▗▄▄▄▖▗▖  ▗▖▗▄▄▖ ▗▄▄▄▖▗▄▄▖ ▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖     ▗▄▄▖▗▖    ▗▄▖  ▗▄▄▖ ▗▄▄▖
+# ▐▌    ▝▚▞▘ ▐▌ ▐▌▐▌   ▐▌ ▐▌  █  ▐▛▚▞▜▌▐▌   ▐▛▚▖▐▌  █      ▐▌   ▐▌   ▐▌ ▐▌▐▌   ▐▌   
+# ▐▛▀▀▘  ▐▌  ▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖  █  ▐▌  ▐▌▐▛▀▀▘▐▌ ▝▜▌  █      ▐▌   ▐▌   ▐▛▀▜▌ ▝▀▚▖ ▝▀▚▖
+# ▐▙▄▄▖▗▞▘▝▚▖▐▌   ▐▙▄▄▖▐▌ ▐▌▗▄█▄▖▐▌  ▐▌▐▙▄▄▖▐▌  ▐▌  █      ▝▚▄▄▖▐▙▄▄▖▐▌ ▐▌▗▄▄▞▘▗▄▄▞▘
+ 
+# ============================================================================
+# BenchmarkingSuite
+#
+# This class provides a clear two-phase workflow:
+# 1) initialize(): read configs and build an experiment schedule.
+# 2) run(): execute scheduled experiments and write reports/artifacts.
+# ============================================================================
 class BenchmarkingSuite:
     """Orchestrates discovery, scheduling, execution, and reporting."""
 
@@ -251,11 +305,14 @@ class BenchmarkingSuite:
         max_test_batches_override: int | None = None,
         run_neurobench: bool = False,
     ) -> None:
+        # CONFIG FILES
         self.benchmark_config_path = benchmark_config_path
         self.networks_dir = networks_dir
+        # OPTIONAL FILTERS
         self.datasets_filter = {d.lower() for d in datasets} if datasets else None
         self.trainers_filter = {t.lower() for t in trainers} if trainers else None
         self.networks_filter = {n.lower() for n in networks} if networks else None
+        # TRAINING PARAMETERS OVERRIDE
         self.epochs_override = epochs_override
         self.batch_size_override = batch_size_override
         self.lr_override = lr_override
@@ -266,15 +323,36 @@ class BenchmarkingSuite:
         self.max_test_batches_override = max_test_batches_override
         self.run_neurobench_override = run_neurobench
 
+        # INITIALIZATION OF DATA STRUCTURES
+        # Runtime state populated by `initialize()`.
         self.config: dict[str, Any] = {}
         self.network_files: list[Path] = []
         self.dataset_defaults: dict[str, Any] = {}
+        # trainer_name -> (trainer_class | None, status | None)
+        # status is a human-readable reason when trainer_class is None.
         self.available_trainers: dict[str, tuple[type | None, str | None]] = {}
+        # Planned schedule: the concrete experiments we will execute.
         self.valid_experiments: list[ExperimentSpec] = []
+        # Explicit list of rejected combos with reasons (for transparency/reporting).
         self.skipped_experiments: list[dict[str, Any]] = []
 
+
+
+    # ▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▄▄▄▄▖ ▗▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖
+    #   █  ▐▛▚▖▐▌  █    █    █  ▐▌ ▐▌▐▌     █     ▗▞▘▐▌ ▐▌ █    █  ▐▌ ▐▌▐▛▚▖▐▌
+    #   █  ▐▌ ▝▜▌  █    █    █  ▐▛▀▜▌▐▌     █   ▗▞▘  ▐▛▀▜▌ █    █  ▐▌ ▐▌▐▌ ▝▜▌
+    # ▗▄█▄▖▐▌  ▐▌▗▄█▄▖  █  ▗▄█▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▙▄▄▄▖▐▌ ▐▌ █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌
+
     def initialize(self) -> None:
-        """Load all inputs and precompute valid/invalid experiment sets."""
+        """Load all inputs and precompute valid/invalid experiment sets.
+
+        This is the planning phase:
+        - read the benchmark YAML (and apply CLI overrides),
+        - discover network blueprints,
+        - resolve trainer imports,
+        - expand the full (dataset x network x trainer) matrix into
+          `valid_experiments` and `skipped_experiments`.
+        """
 
         self._load_config()
         self._load_network_files()
@@ -282,15 +360,18 @@ class BenchmarkingSuite:
         self._build_experiment_dictionary()
 
     def _load_config(self) -> None:
-        """Load benchmark YAML and apply CLI overrides in one place."""
+        """Read the benchmarking YAML and write its content in self.config, eventually overriding with CLI arguments"""
 
+        # Read the file and pass it's pointer (handle) to a reader that extracts the informations and put them into self.config dictionary
         with open(self.benchmark_config_path, "r", encoding="utf-8") as handle:
             self.config = yaml.safe_load(handle) or {}
 
+        # Extract the different thematic sections of the config to later override if needed
         execution_cfg = self.config.setdefault("execution", {})
         experiment_cfg = self.config.setdefault("experiment", {})
         data_cfg = self.config.setdefault("data", {})
 
+        # Override the configs with CLI values if provided
         if self.epochs_override is not None:
             execution_cfg["epochs"] = int(self.epochs_override)
         if self.batch_size_override is not None:
@@ -315,10 +396,11 @@ class BenchmarkingSuite:
             if self.dataset_defaults:
                 data_cfg["datasets"] = list(self.dataset_defaults.keys())
             else:
+                # Keep a sensible default for minimal configs.
                 data_cfg["datasets"] = ["MNIST"]
 
     def _load_network_files(self) -> None:
-        """Collect all network config files under `configs/networks`."""
+        """Collect all network config files under `configs/networks` that is where are collected the network blueprints for the benchmarking"""
 
         if not self.networks_dir.exists():
             raise FileNotFoundError(f"Network config directory not found: {self.networks_dir}")
@@ -331,10 +413,11 @@ class BenchmarkingSuite:
         )
 
     def _resolve_trainers(self) -> None:
-        """Import trainer classes declared in YAML and cache failures."""
+        """Read the desired trainers from config and import them"""
 
         trainer_cfg = self.config.get("trainers", {})
         for trainer_name, spec in trainer_cfg.items():
+            # Trainers can be disabled in config or filtered out via CLI.
             if not bool(spec.get("enabled", True)):
                 self.available_trainers[trainer_name] = (None, "disabled")
                 continue
@@ -352,6 +435,8 @@ class BenchmarkingSuite:
                 continue
 
             try:
+                # Import is deferred to runtime so the suite can run even if some
+                # trainers are not available in a given environment.
                 module = import_module(module_name)
                 trainer_class = getattr(module, class_name)
                 self.available_trainers[trainer_name] = (trainer_class, None)
@@ -361,14 +446,6 @@ class BenchmarkingSuite:
                     f"import error: {type(exc).__name__}: {exc}",
                 )
 
-    def _selected_datasets(self) -> list[str]:
-        """Return dataset list after optional CLI filtering."""
-
-        datasets = self.config.get("data", {}).get("datasets", ["MNIST"])
-        if self.datasets_filter:
-            datasets = [d for d in datasets if d.lower() in self.datasets_filter]
-        return datasets
-
     def _network_payload_for_dataset(
         self, network_cfg: dict[str, Any], dataset_name: str
     ) -> dict[str, Any]:
@@ -377,11 +454,14 @@ class BenchmarkingSuite:
         payload = deepcopy(network_cfg)
         overrides = payload.get("dataset_overrides", {}).get(dataset_name, {})
 
+        # Merge per-dataset overrides onto the base blueprint.
         payload["model"] = _deep_merge(payload.get("model", {}), overrides.get("model", {}))
         payload["network_kwargs"] = _deep_merge(
             payload.get("network_kwargs", {}), overrides.get("network_kwargs", {})
         )
 
+        # Apply dataset defaults (input shape/classes) so the same blueprint can
+        # target multiple datasets without duplicating configuration.
         ds_defaults = self.dataset_defaults.get(dataset_name, {})
         architecture = payload.get("model", {}).get("architecture")
 
@@ -393,9 +473,14 @@ class BenchmarkingSuite:
             layer_sizes[-1] = int(ds_defaults["num_classes"])
         model_cfg["layer_sizes"] = layer_sizes
 
-        if "num_classes" in ds_defaults and "num_classes" not in payload["network_kwargs"]:
+        if "num_classes" in ds_defaults:
             payload["network_kwargs"]["num_classes"] = int(ds_defaults["num_classes"])
-        if "input_shape" in ds_defaults and "in_shape" not in payload["network_kwargs"]:
+
+        if architecture in ("fc_snn", "r_snn") and "input_size" in ds_defaults:
+            payload["network_kwargs"]["in_shape"] = [int(ds_defaults["input_size"])]
+        elif architecture in ("conv_snn", "vg11_snn") and "input_shape" in ds_defaults:
+            payload["network_kwargs"]["in_shape"] = list(ds_defaults["input_shape"])
+        elif "input_shape" in ds_defaults and "in_shape" not in payload["network_kwargs"]:
             payload["network_kwargs"]["in_shape"] = list(ds_defaults["input_shape"])
 
         return payload
@@ -409,8 +494,11 @@ class BenchmarkingSuite:
                 f"Unsupported benchmarking architecture '{architecture}'. "
                 f"Expected one of {sorted(_NETWORK_FACTORY.keys())}"
             )
+        # Extract the class of the network
         cls = _NETWORK_FACTORY[architecture]
+        # Generate the network parameters
         kwargs = deepcopy(network_payload.get("network_kwargs", {}))
+        # Return the created network object
         return cls(**kwargs)
 
     def _compatibility_reasons(
@@ -425,6 +513,7 @@ class BenchmarkingSuite:
 
         reasons: list[str] = []
 
+        # Tag-based checks (semantic properties on BaseSNN).
         required_tags = set(trainer_spec.get("requires_all_tags", []))
         missing_tags = sorted(required_tags - tags)
         if missing_tags:
@@ -435,12 +524,14 @@ class BenchmarkingSuite:
         if violating:
             reasons.append(f"contains excluded tags: {violating}")
 
+        # Architecture allow-list (based on YAML "model.architecture").
         allowed_architectures = trainer_spec.get("allowed_architectures", [])
         if allowed_architectures and architecture not in allowed_architectures:
             reasons.append(
                 f"architecture '{architecture}' not allowed ({allowed_architectures})"
             )
 
+        # Attribute checks (some trainers require network fields/methods).
         missing_attrs = [
             name
             for name in trainer_spec.get("requires_network_attrs", [])
@@ -464,25 +555,31 @@ class BenchmarkingSuite:
         - test every trainer against compatibility rules.
         """
 
-        datasets = self._selected_datasets()
+        # Extract the list of datasets and trainers from config, applying CLI filters if provided.
+        datasets = self.config.get("data", {}).get("datasets", ["MNIST"])
+        if self.datasets_filter:
+            datasets = [d for d in datasets if d.lower() in self.datasets_filter]
         trainer_cfgs: dict[str, Any] = self.config.get("trainers", {})
 
-        # Outer loop: network configs define model blueprints.
+        # Loop over all the networks models
         for network_file in self.network_files:
+        
+            # Read the YAML of the current network in raw_network_cfg
             with open(network_file, "r", encoding="utf-8") as handle:
                 raw_network_cfg = yaml.safe_load(handle) or {}
-
+            # Check if the net is either disabled or filtered out by CLI arguments
             network_name = raw_network_cfg.get("name", network_file.stem)
             if not bool(raw_network_cfg.get("enabled", True)):
                 continue
             if self.networks_filter and network_name.lower() not in self.networks_filter:
                 continue
 
-            # Middle loop: materialize each blueprint on each target dataset.
+            # Loop over datasets
             for dataset_name in datasets:
+                # Extract the network informations for the current dataset
                 payload = self._network_payload_for_dataset(raw_network_cfg, dataset_name)
                 try:
-                    # Probe network once so we can inspect tags/attrs before scheduling.
+                    # Actually create the network object to probe its tags and attributes for compatibility checks.
                     probe_network = self._instantiate_network(payload)
                 except Exception as exc:
                     self.skipped_experiments.append(
@@ -495,10 +592,11 @@ class BenchmarkingSuite:
                     )
                     continue
 
+                # Extract the BaseSNN tags and architecture for compatibility checks.
                 tags = _network_tags(probe_network)
                 architecture = payload.get("model", {}).get("architecture", "unknown")
 
-                # Inner loop: test every trainer against this probed network.
+                # Loop over trainers
                 for trainer_name, trainer_spec in trainer_cfgs.items():
                     trainer_class, trainer_status = self.available_trainers.get(
                         trainer_name, (None, "missing")
@@ -515,6 +613,7 @@ class BenchmarkingSuite:
                             )
                         continue
 
+                    # Check compatibility of trainer with current network
                     reasons = self._compatibility_reasons(
                         trainer_name=trainer_name,
                         trainer_spec=trainer_spec,
@@ -535,6 +634,7 @@ class BenchmarkingSuite:
                         continue
 
                     # All checks passed: register concrete runnable experiment.
+                    # experiment_id is stable and is used in summaries/exports.
                     experiment_id = f"{dataset_name}__{trainer_name}__{network_name}"
                     self.valid_experiments.append(
                         ExperimentSpec(
@@ -559,7 +659,6 @@ class BenchmarkingSuite:
         timesteps: int,
         device: torch.device,
         flatten_inputs: bool,
-        use_raw_loader: bool,
         seed: int,
     ):
         """Build dataset loaders with optional single-process fallback.
@@ -575,32 +674,31 @@ class BenchmarkingSuite:
             flatten=flatten_inputs,
             device=device,
             seed=seed,
-            raw_for_local_classifier=use_raw_loader,
         )
 
         if bool(self.config.get("execution", {}).get("single_process_data_loading", True)):
-            train_loader = self._clone_loader_single_worker(train_loader, shuffle=True)
-            test_loader = self._clone_loader_single_worker(test_loader, shuffle=False)
+            # Some environments (CI/HPC) have issues with multiprocessing queues.
+            # This recreates the loaders with `num_workers=0` while preserving the
+            # important settings from the original loader.
+            def force_single_worker(loader: DataLoader, shuffle: bool) -> DataLoader:
+                kwargs: dict[str, Any] = {
+                    "dataset": loader.dataset,
+                    "batch_size": loader.batch_size,
+                    "shuffle": shuffle,
+                    "num_workers": 0,
+                    "pin_memory": bool(getattr(loader, "pin_memory", False)),
+                    "drop_last": bool(getattr(loader, "drop_last", False)),
+                    "collate_fn": loader.collate_fn,
+                }
+                generator = getattr(loader, "generator", None)
+                if generator is not None and shuffle:
+                    kwargs["generator"] = generator
+                return DataLoader(**kwargs)
+
+            train_loader = force_single_worker(train_loader, shuffle=True)
+            test_loader = force_single_worker(test_loader, shuffle=False)
 
         return train_loader, test_loader
-
-    @staticmethod
-    def _clone_loader_single_worker(loader: DataLoader, shuffle: bool) -> DataLoader:
-        """Recreate a DataLoader with `num_workers=0` preserving key settings."""
-
-        kwargs: dict[str, Any] = {
-            "dataset": loader.dataset,
-            "batch_size": loader.batch_size,
-            "shuffle": shuffle,
-            "num_workers": 0,
-            "pin_memory": bool(getattr(loader, "pin_memory", False)),
-            "drop_last": bool(getattr(loader, "drop_last", False)),
-            "collate_fn": loader.collate_fn,
-        }
-        generator = getattr(loader, "generator", None)
-        if generator is not None and shuffle:
-            kwargs["generator"] = generator
-        return DataLoader(**kwargs)
 
     @staticmethod
     def _train_one_epoch(
@@ -633,6 +731,8 @@ class BenchmarkingSuite:
             target = target.to(device, non_blocking=non_blocking)
             batch_size = int(data.shape[1])
 
+            # Many trainers/network implementations keep internal state (spikes,
+            # membrane potentials) across timesteps, so we reset per sample/batch.
             trainer.reset()
             loss, pred = trainer.train_sample(data, target)
 
@@ -745,6 +845,9 @@ class BenchmarkingSuite:
         }
         candidate_kwargs.update(trainer_spec.get("params", {}))
 
+        # Not all trainers accept the same kwargs. We filter using the actual
+        # constructor signature so the YAML can contain shared keys without
+        # forcing every trainer to accept them.
         init_sig = signature(trainer_class.__init__)
         accepts_var_kwargs = any(
             p.kind.name == "VAR_KEYWORD" for p in init_sig.parameters.values()
@@ -760,8 +863,18 @@ class BenchmarkingSuite:
         return filtered
 
     def _run_single_experiment(self, spec: ExperimentSpec, device: torch.device) -> ExperimentResult:
-        """Execute one scheduled experiment end-to-end."""
+        """Execute one scheduled experiment end-to-end.
 
+        Steps:
+        - read execution settings from config,
+        - seed RNG for comparability,
+        - instantiate network + trainer,
+        - train for N epochs and evaluate,
+        - optionally run NeuroBench metrics,
+        - return a structured ExperimentResult (ok/failed/skipped).
+        """
+
+        # Extract various parameters and handles things
         trainer_class, trainer_status = self.available_trainers.get(spec.trainer_name, (None, None))
         if trainer_class is None:
             return ExperimentResult(
@@ -797,49 +910,70 @@ class BenchmarkingSuite:
         )
         max_test_batches = int(max_test_batches) if max_test_batches is not None else None
 
-        # Keep comparability across trainers by resetting RNG before each run.
-        set_all_seeds(seed, deterministic=bool(experiment_cfg.get("deterministic", True)))
-
-        network = self._instantiate_network(spec.network_config)
-        network = network.to(device)
-
-        flatten_inputs = not bool(getattr(network, "convolutional", False))
-        use_raw_loader = spec.trainer_name in ("ell", "fell", "bell") and spec.dataset == "MNIST"
-
-        train_loader, test_loader = self._build_data_loaders(
-            dataset_name=spec.dataset,
-            batch_size=batch_size,
-            timesteps=timesteps,
-            device=device,
-            flatten_inputs=flatten_inputs,
-            use_raw_loader=use_raw_loader,
-            seed=seed,
-        )
-
-        trainer_kwargs = self._trainer_kwargs(
-            trainer_class=trainer_class,
-            trainer_spec=spec.trainer_config,
-            network=network,
-            lr=lr,
-            batch_size=batch_size,
-            quantization=bool(spec.network_config.get("model", {}).get("quantization", False)),
-        )
-
-        # Trainer is built only after filtered kwargs are known.
-        trainer = trainer_class(**trainer_kwargs).to(device)
-
-        requires_grad = bool(
-            spec.trainer_config.get("training", {}).get("requires_grad", False)
-        )
-
         epoch_times_ms: list[float] = []
         final_loss: float | None = None
         final_acc: float | None = None
-        run_neurobench = bool(execution_cfg.get("run_neurobench", False))
+        run_neurobench_enabled = bool(execution_cfg.get("run_neurobench", False))
         neurobench_payload: dict[str, Any] = {}
+
+        # Keep comparability across trainers by resetting RNG before each run.
+        set_all_seeds(seed, deterministic=bool(experiment_cfg.get("deterministic", True)))
 
         start_time = time.perf_counter()
         try:
+            # Network is created fresh per experiment so each run starts from a clean
+            # initialization (and does not share state across experiments).
+            network = self._instantiate_network(spec.network_config)
+            network = network.to(device)
+
+            # Loader shape depends on whether the network is convolutional (expects
+            # images) or fully-connected/recurrent (expects flattened vectors).
+            flatten_inputs = not bool(getattr(network, "convolutional", False))
+            try:
+                train_loader, test_loader = self._build_data_loaders(
+                    dataset_name=spec.dataset,
+                    batch_size=batch_size,
+                    timesteps=timesteps,
+                    device=device,
+                    flatten_inputs=flatten_inputs,
+                    seed=seed,
+                )
+            except Exception as dataset_exc:
+                return ExperimentResult(
+                    experiment_id=spec.experiment_id,
+                    trainer_name=spec.trainer_name,
+                    network_name=spec.network_name,
+                    network_architecture=spec.network_architecture,
+                    dataset=spec.dataset,
+                    status="skipped",
+                    final_accuracy=None,
+                    final_loss=None,
+                    epochs=0,
+                    total_wall_time_s=time.perf_counter() - start_time,
+                    avg_epoch_time_ms=None,
+                    error=f"dataset setup failed: {type(dataset_exc).__name__}: {dataset_exc}",
+                    neurobench={},
+                )
+
+            trainer_kwargs = self._trainer_kwargs(
+                trainer_class=trainer_class,
+                trainer_spec=spec.trainer_config,
+                network=network,
+                lr=lr,
+                batch_size=batch_size,
+                quantization=bool(
+                    spec.network_config.get("model", {}).get("quantization", False)
+                ),
+            )
+
+            # Trainer is built only after filtered kwargs are known.
+            trainer = trainer_class(**trainer_kwargs).to(device)
+
+            requires_grad = bool(
+                spec.trainer_config.get("training", {}).get("requires_grad", False)
+            )
+
+            # Some algorithms are gradient-free; we avoid grad overhead unless required.
             with torch.set_grad_enabled(requires_grad):
                 for epoch_idx in range(epochs):
                     use_live_progress = show_epoch_progress and sys.stdout.isatty()
@@ -869,6 +1003,7 @@ class BenchmarkingSuite:
                         print("\r" + line, end="", flush=True)
 
                     if device.type == "cuda":
+                        # Synchronize so epoch timing reflects actual device work.
                         torch.cuda.synchronize()
                     epoch_start = time.perf_counter()
 
@@ -895,6 +1030,7 @@ class BenchmarkingSuite:
                     epoch_end = time.perf_counter()
                     epoch_times_ms.append((epoch_end - epoch_start) * 1000.0)
 
+                    # Evaluate after each epoch (common baseline behavior across trainers).
                     final_loss = float(metrics["loss"])
                     final_acc = float(
                         self._evaluate(
@@ -911,7 +1047,7 @@ class BenchmarkingSuite:
                         f"loss={final_loss:.4f}"
                     )
 
-            if run_neurobench:
+            if run_neurobench_enabled:
                 try:
                     # NeuroBench is optional and does not block core benchmark output.
                     nb = run_neurobench(
@@ -919,6 +1055,9 @@ class BenchmarkingSuite:
                         test_loader=test_loader,
                         device=str(device),
                         num_timesteps=timesteps,
+                        include_synaptic_operations=bool(
+                            execution_cfg.get("neurobench_include_synaptic_operations", False)
+                        ),
                     )
                     neurobench_payload = self._jsonify(nb)
                 except Exception as nb_exc:  # pragma: no cover - optional path
@@ -965,7 +1104,10 @@ class BenchmarkingSuite:
 
     @staticmethod
     def _jsonify(value: Any) -> Any:
-        """Recursively convert tensors/custom objects into JSON-safe values."""
+        """Recursively convert tensors/custom objects into JSON-safe values.
+
+        This is mainly used to serialize optional NeuroBench outputs.
+        """
 
         if isinstance(value, dict):
             return {k: BenchmarkingSuite._jsonify(v) for k, v in value.items()}
@@ -982,24 +1124,65 @@ class BenchmarkingSuite:
             return value
         return str(value)
 
-    @staticmethod
-    def _print_summary_table(results: list[ExperimentResult]) -> None:
-        """Render compact console table for quick run inspection."""
+    def _report_results(self, results: list[ExperimentResult], run_dir: Path) -> None:
+        """Render console summary and save CSV/Markdown reports.
 
-        rows = []
-        for result in results:
-            rows.append(
-                {
-                    "dataset": result.dataset,
-                    "trainer": result.trainer_name,
-                    "network": result.network_name,
-                    "status": result.status,
-                    "acc": _format_metric(result.final_accuracy, 4),
-                    "loss": _format_metric(result.final_loss, 4),
-                    "wall": _format_seconds(result.total_wall_time_s),
-                    "epoch": _format_metric(result.avg_epoch_time_ms, 1),
-                }
-            )
+        `results.json` is written by `run()`; this method focuses on:
+        - human-readable console summary
+        - flat `results.csv` for downstream analysis
+        - `summary.md` for quick sharing (includes skipped reasons)
+        """
+
+        def format_metric(value: float | None, decimals: int = 4, suffix: str = "") -> str:
+            if value is None:
+                return "N/A"
+            return f"{value:.{decimals}f}{suffix}"
+
+        def format_count(value: Any) -> str:
+            plain = _to_plain_number(value)
+            if plain is None:
+                return "N/A"
+            return f"{int(round(plain)):,}"
+
+        def format_footprint(value: Any) -> str:
+            plain = _to_plain_number(value)
+            if plain is None:
+                return "N/A"
+            if plain >= 1024 * 1024:
+                return f"{plain / (1024 * 1024):.2f} MB"
+            if plain >= 1024:
+                return f"{plain / 1024:.1f} KB"
+            return f"{int(round(plain))} B"
+
+        def first_numeric(value: Any) -> float | None:
+            plain = _to_plain_number(value)
+            if plain is not None:
+                return plain
+            if isinstance(value, dict):
+                for child in value.values():
+                    child_plain = first_numeric(child)
+                    if child_plain is not None:
+                        return child_plain
+            if isinstance(value, (list, tuple)):
+                for child in value:
+                    child_plain = first_numeric(child)
+                    if child_plain is not None:
+                        return child_plain
+            return None
+
+        rows = [
+            {
+                "dataset": result.dataset,
+                "trainer": result.trainer_name,
+                "network": result.network_name,
+                "status": result.status,
+                "acc": format_metric(result.final_accuracy, 4),
+                "loss": format_metric(result.final_loss, 4),
+                "wall": format_metric(result.total_wall_time_s, 1, "s"),
+                "epoch": format_metric(result.avg_epoch_time_ms, 1),
+            }
+            for result in results
+        ]
 
         headers = {
             "dataset": "Dataset",
@@ -1011,28 +1194,132 @@ class BenchmarkingSuite:
             "wall": "Wall",
             "epoch": "Epoch ms",
         }
-        cols = ["dataset", "trainer", "network", "status", "acc", "loss", "wall", "epoch"]
+        columns = ["dataset", "trainer", "network", "status", "acc", "loss", "wall", "epoch"]
         widths = {
-            col: max(len(headers[col]), *(len(str(row[col])) for row in rows)) if rows else len(headers[col])
-            for col in cols
+            col: max(len(headers[col]), *(len(str(row[col])) for row in rows))
+            if rows
+            else len(headers[col])
+            for col in columns
         }
 
         print("\n" + "=" * 120)
         print("BENCHMARK SUMMARY")
         print("=" * 120)
-        header = " | ".join(headers[col].ljust(widths[col]) for col in cols)
-        print(header)
-        print("-" * len(header))
+        header_line = " | ".join(headers[col].ljust(widths[col]) for col in columns)
+        print(header_line)
+        print("-" * len(header_line))
         for row in rows:
-            print(" | ".join(str(row[col]).ljust(widths[col]) for col in cols))
+            print(" | ".join(str(row[col]).ljust(widths[col]) for col in columns))
         print("=" * 120)
 
-    @staticmethod
-    def _save_csv(results: list[ExperimentResult], path: Path) -> None:
-        """Write flat CSV export for downstream analysis."""
+        run_neurobench_enabled = bool(
+            self.config.get("execution", {}).get("run_neurobench", False)
+        )
+        neuro_rows: list[dict[str, str]] = []
+        neurobench_errors: list[str] = []
+        if run_neurobench_enabled:
+            for result in results:
+                nb = result.neurobench if isinstance(result.neurobench, dict) else {}
+                if not nb:
+                    continue
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", newline="", encoding="utf-8") as handle:
+                nb_error = nb.get("error")
+                if not isinstance(nb_error, str):
+                    trace = nb.get("traceback")
+                    if isinstance(trace, str):
+                        nb_error = "traceback captured (see results.json)"
+                if isinstance(nb_error, str):
+                    error_preview = nb_error.strip()
+                    if len(error_preview) > 160:
+                        error_preview = error_preview[:157] + "..."
+                    neurobench_errors.append(
+                        f"{result.dataset}/{result.trainer_name}/{result.network_name}: {error_preview}"
+                    )
+
+                synops = nb.get("SynapticOperations")
+                eff_macs = None
+                dense_macs = None
+                if isinstance(synops, dict):
+                    eff_macs = _to_plain_number(synops.get("Effective_MACs"))
+                    if eff_macs is None:
+                        eff_macs = _to_plain_number(synops.get("Effective_ACs"))
+                    dense_macs = _to_plain_number(synops.get("Dense"))
+                else:
+                    eff_macs = _to_plain_number(synops)
+
+                savings = None
+                if eff_macs is not None and dense_macs is not None and dense_macs > 0:
+                    savings = (1.0 - (eff_macs / dense_macs)) * 100.0
+
+                neuro_rows.append(
+                    {
+                        "dataset": result.dataset,
+                        "trainer": result.trainer_name,
+                        "network": result.network_name,
+                        "params": format_count(nb.get("ParameterCount")),
+                        "footprint": format_footprint(nb.get("Footprint")),
+                        "act_sparsity": format_metric(
+                            _to_plain_number(nb.get("ActivationSparsity")), 4
+                        ),
+                        "eff_macs": format_count(eff_macs),
+                        "dense_macs": format_count(dense_macs),
+                        "savings": format_metric(savings, 1, "%"),
+                        "mem_updates": format_count(first_numeric(nb.get("MembraneUpdates"))),
+                    }
+                )
+
+        if neuro_rows:
+            nb_headers = {
+                "dataset": "Dataset",
+                "trainer": "Trainer",
+                "network": "Network",
+                "params": "Params",
+                "footprint": "Footprint",
+                "act_sparsity": "ActSpars",
+                "eff_macs": "Eff MACs",
+                "dense_macs": "Dense MACs",
+                "savings": "Savings",
+                "mem_updates": "MemUpdates",
+            }
+            nb_columns = [
+                "dataset",
+                "trainer",
+                "network",
+                "params",
+                "footprint",
+                "act_sparsity",
+                "eff_macs",
+                "dense_macs",
+                "savings",
+                "mem_updates",
+            ]
+            nb_widths = {
+                col: max(len(nb_headers[col]), *(len(str(row[col])) for row in neuro_rows))
+                if neuro_rows
+                else len(nb_headers[col])
+                for col in nb_columns
+            }
+
+            nb_header_line = " | ".join(
+                nb_headers[col].ljust(nb_widths[col]) for col in nb_columns
+            )
+            print("\n" + "=" * max(120, len(nb_header_line)))
+            print("NEUROBENCH SUMMARY")
+            print("=" * max(120, len(nb_header_line)))
+            print(nb_header_line)
+            print("-" * len(nb_header_line))
+            for row in neuro_rows:
+                print(" | ".join(str(row[col]).ljust(nb_widths[col]) for col in nb_columns))
+            print("=" * max(120, len(nb_header_line)))
+
+            if neurobench_errors:
+                print("NeuroBench errors:")
+                for error in neurobench_errors:
+                    print(f"  - {error}")
+
+        csv_path = run_dir / "results.csv"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(csv_path, "w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 [
@@ -1068,21 +1355,14 @@ class BenchmarkingSuite:
                     ]
                 )
 
-    @staticmethod
-    def _save_markdown(
-        results: list[ExperimentResult],
-        skipped: list[dict[str, Any]],
-        path: Path,
-    ) -> None:
-        """Write human-readable Markdown summary with skipped reasons."""
-
-        lines = []
-        lines.append("# Benchmark Summary")
-        lines.append("")
-        lines.append("## Results")
-        lines.append("")
-        lines.append("| Dataset | Trainer | Network | Status | Accuracy | Loss | Wall Time |")
-        lines.append("|---|---|---|---|---:|---:|---:|")
+        lines = [
+            "# Benchmark Summary",
+            "",
+            "## Results",
+            "",
+            "| Dataset | Trainer | Network | Status | Accuracy | Loss | Wall Time |",
+            "|---|---|---|---|---:|---:|---:|",
+        ]
         for result in results:
             lines.append(
                 "| "
@@ -1092,21 +1372,53 @@ class BenchmarkingSuite:
                         result.trainer_name,
                         result.network_name,
                         result.status,
-                        _format_metric(result.final_accuracy, 4),
-                        _format_metric(result.final_loss, 4),
-                        _format_seconds(result.total_wall_time_s),
+                        format_metric(result.final_accuracy, 4),
+                        format_metric(result.final_loss, 4),
+                        format_metric(result.total_wall_time_s, 1, "s"),
                     ]
                 )
                 + " |"
             )
 
-        lines.append("")
-        lines.append("## Skipped Combinations")
-        lines.append("")
-        if skipped:
+        if neuro_rows:
+            lines.extend(
+                [
+                    "",
+                    "## NeuroBench Metrics",
+                    "",
+                    "| Dataset | Trainer | Network | Params | Footprint | ActSpars | Eff MACs | Dense MACs | Savings | MemUpdates |",
+                    "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            for row in neuro_rows:
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            row["dataset"],
+                            row["trainer"],
+                            row["network"],
+                            row["params"],
+                            row["footprint"],
+                            row["act_sparsity"],
+                            row["eff_macs"],
+                            row["dense_macs"],
+                            row["savings"],
+                            row["mem_updates"],
+                        ]
+                    )
+                    + " |"
+                )
+            if neurobench_errors:
+                lines.extend(["", "### NeuroBench Errors", ""])
+                for error in neurobench_errors:
+                    lines.append(f"- {error}")
+
+        lines.extend(["", "## Skipped Combinations", ""])
+        if self.skipped_experiments:
             lines.append("| Trainer | Network | Dataset | Reason |")
             lines.append("|---|---|---|---|")
-            for item in skipped:
+            for item in self.skipped_experiments:
                 lines.append(
                     f"| {item.get('trainer', '')} | {item.get('network', '')} | "
                     f"{item.get('dataset', '')} | {item.get('reason', '')} |"
@@ -1114,8 +1426,7 @@ class BenchmarkingSuite:
         else:
             lines.append("No combinations were skipped.")
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (run_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     @staticmethod
     def _save_plots(results: list[ExperimentResult], output_dir: Path) -> None:
@@ -1180,10 +1491,25 @@ class BenchmarkingSuite:
             fig.tight_layout()
             fig.savefig(output_dir / f"accuracy_heatmap_{dataset}.png", dpi=180)
             plt.close(fig)
+            
+            
+
+    # ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▖  ▗▖    ▗▄▄▖ ▗▖ ▗▖▗▖  ▗▖    ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖
+    # ▐▛▚▞▜▌▐▌ ▐▌  █  ▐▛▚▖▐▌    ▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌    ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌
+    # ▐▌  ▐▌▐▛▀▜▌  █  ▐▌ ▝▜▌    ▐▛▀▚▖▐▌ ▐▌▐▌ ▝▜▌    ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌
+    # ▐▌  ▐▌▐▌ ▐▌▗▄█▄▖▐▌  ▐▌    ▐▌ ▐▌▝▚▄▞▘▐▌  ▐▌    ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌
 
     def run(self, dry_run: bool = False) -> int:
-        """Run the complete benchmark suite and persist all artifacts."""
+        """Run the complete benchmark suite and persist all artifacts.
 
+        This is the execution phase (after `initialize()`):
+        - create a timestamped output directory,
+        - write an experiment manifest (planned schedule),
+        - execute experiments sequentially,
+        - write results + reports + optional plots.
+        """
+
+        # Extract execution settings with defaults for convenience.
         execution_cfg = self.config.get("execution", {})
         experiment_cfg = self.config.get("experiment", {})
 
@@ -1216,7 +1542,7 @@ class BenchmarkingSuite:
         results: list[ExperimentResult] = []
         continue_on_error = bool(execution_cfg.get("continue_on_error", True))
 
-        # Execute experiments sequentially in deterministic order.
+        # LOOP OVER EXPERIMENTS
         for idx, spec in enumerate(self.valid_experiments, start=1):
             print(
                 f"[{idx}/{len(self.valid_experiments)}] "
@@ -1232,9 +1558,11 @@ class BenchmarkingSuite:
                 print(f"Stopping early due to failure in {result.experiment_id}")
                 break
 
+        # SAVE THE RESULTS
         # Console summary first, then persistent artifacts.
-        self._print_summary_table(results)
+        self._report_results(results, run_dir)
 
+        # Machine-readable export (includes all metrics + skip reasons).
         results_payload = {
             "metadata": {
                 "timestamp": run_stamp,
@@ -1250,13 +1578,17 @@ class BenchmarkingSuite:
             json.dumps(results_payload, indent=2), encoding="utf-8"
         )
 
-        self._save_csv(results, run_dir / "results.csv")
-        self._save_markdown(results, self.skipped_experiments, run_dir / "summary.md")
         self._save_plots(results, run_dir)
 
         print(f"Results saved to: {run_dir}")
         return 0
 
+
+
+# ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▖  ▗▖
+# ▐▛▚▞▜▌▐▌ ▐▌  █  ▐▛▚▖▐▌
+# ▐▌  ▐▌▐▛▀▜▌  █  ▐▌ ▝▜▌
+# ▐▌  ▐▌▐▌ ▐▌▗▄█▄▖▐▌  ▐▌
 
 def main() -> int:
     """CLI entrypoint."""
@@ -1284,12 +1616,15 @@ def main() -> int:
     args = parser.parse_args()
 
     suite = BenchmarkingSuite(
-        benchmark_config_path=Path(args.config),
-        networks_dir=Path(args.networks_dir),
-        datasets=_parse_csv_list(args.datasets),
-        trainers=_parse_csv_list(args.algorithms),
-        networks=_parse_csv_list(args.networks),
-        epochs_override=args.epochs,
+        # CONFIG FILES
+        benchmark_config_path=Path(args.config),    # YAML with training informations
+        networks_dir=Path(args.networks_dir),       # YAMLs with network architectures
+        # OPTIONAL FILTERS
+        datasets=_parse_csv_list(args.datasets),    # Optional filter: comma-separated list of dataset names to include (default: all)
+        trainers=_parse_csv_list(args.algorithms),  # Optional filter: comma-separated list of trainer/algorithm names to include (default: all)
+        networks=_parse_csv_list(args.networks),    # Optional filter: comma-separated list of network names to include (default: all)
+        # TRAINING ALGORITHMS OVERRIDES
+        epochs_override=args.epochs,                            
         batch_size_override=args.batch_size,
         lr_override=args.lr,
         timesteps_override=args.timesteps,
@@ -1301,6 +1636,7 @@ def main() -> int:
     )
 
     suite.initialize()
+    
     return suite.run(dry_run=args.dry_run)
 
 
