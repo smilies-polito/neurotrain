@@ -19,6 +19,7 @@ class RecurrentSRNN(BaseSNN):
     - The recurrent neuron uses `reset_delay=False` (no one-step spike delay).
     - Recurrent self-connections are masked to zero (diagonal of `w_rec`).
     """
+    net_tags = frozenset({"fully_connected", "recurrent", "single_layer"})
 
     def __init__(
         self,

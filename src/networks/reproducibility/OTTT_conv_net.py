@@ -195,6 +195,7 @@ class OTTTConvNet(BaseSNN):
     - OnlineLIF neurons with per-layer rate tracking
     - wrapped synapses for grad-with-rate (except the first conv)
     """
+    net_tags = frozenset({"convolutional"})
 
     def __init__(
         self,

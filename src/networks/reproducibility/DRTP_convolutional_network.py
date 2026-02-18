@@ -34,6 +34,8 @@ except Exception:
 
 
 class DRTPConvMNIST(BaseSNN):
+    net_tags = frozenset({"convolutional"})
+
     def __init__(
         self,
         in_shape: Tuple[int, int, int] = (1, 28, 28),

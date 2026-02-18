@@ -16,6 +16,7 @@ class SpikingVGG11(BaseSNN):
 
     Single-step forward returns (spk_rec, mem_rec) over all spiking layers.
     """
+    net_tags = frozenset({"convolutional", "vgg"})
 
     def __init__(
         self,

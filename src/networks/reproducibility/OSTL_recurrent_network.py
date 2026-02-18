@@ -18,6 +18,7 @@ class RecurrentFCNetwork(BaseSNN):
     For `recurrent_type == "ssnu"`, outputs are smooth activations derived from
     membrane state (sigmoid), matching a soft-SNU-style variant.
     """
+    net_tags = frozenset({"fully_connected", "recurrent"})
 
     def __init__(
         self,

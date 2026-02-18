@@ -19,6 +19,7 @@ class FCSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, *in_shape)` input.
     State reset is external via `reset()`.
     """
+    net_tags = frozenset({"fully_connected"})
 
     def __init__(
         self,

@@ -19,6 +19,7 @@ class RSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, *in_shape)` input.
     State reset is external via `reset()`.
     """
+    net_tags = frozenset({"fully_connected", "recurrent"})
 
     def __init__(
         self,

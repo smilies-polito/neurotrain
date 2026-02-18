@@ -18,6 +18,7 @@ class ConvSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, C, H, W)` input.
     State reset is external via `reset()`.
     """
+    net_tags = frozenset({"convolutional"})
 
     def __init__(
         self,

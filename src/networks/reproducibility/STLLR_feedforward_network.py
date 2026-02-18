@@ -19,6 +19,7 @@ class STLLRNetwork(BaseSNN):
 
     Pattern analogous to FCNetwork's nn.Linear + snn.Leaky blocks.
     """
+    net_tags = frozenset({"fully_connected"})
 
     class LinearSTLLR(nn.Linear):
         """
