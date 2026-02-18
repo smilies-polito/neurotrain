@@ -1,3 +1,0 @@
-data/SHD/** filter=lfs diff=lfs merge=lfs -text
-train_data.npy filter=lfs diff=lfs merge=lfs -text
-test_data.npy filter=lfs diff=lfs merge=lfs -text
