@@ -7,16 +7,20 @@ from datasets.rate import Rate
 
 DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
-def FashionMNISTLoader(batch_size, T, pin_memory: bool = False, seed=None):
+def FashionMNISTLoader(
+    batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None
+):
     """
     Returns DataLoaders for FashionMNIST, with rate-coded spikes over T timesteps.
     """
-    transform = Compose([
+    transforms = [
         ToTensor(),
         Normalize((0.2860,), (0.3530,)),
-        Rate(T),
-        Lambda(lambda x: torch.flatten(x, start_dim=1))
-    ])
+        Rate(T, flatten=flatten),
+    ]
+    if flatten:
+        transforms.append(Lambda(lambda x: torch.flatten(x, start_dim=1)))
+    transform = Compose(transforms)
     train_kw = dict(batch_size=batch_size, num_workers=4, shuffle=True, pin_memory=pin_memory)
     if seed is not None:
         train_kw["generator"] = torch.Generator().manual_seed(seed)

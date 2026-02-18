@@ -19,6 +19,7 @@ class FCSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, *in_shape)` input.
     State reset is external via `reset()`.
     """
+    net_tags = frozenset({"fully_connected"})
 
     def __init__(
         self,
@@ -46,6 +47,8 @@ class FCSNN(BaseSNN):
         if any(v <= 0 for v in self.hidden_size):
             raise ValueError("All hidden layer sizes must be positive integers.")
         self._n_classes = int(num_classes)
+        self.beta = float(beta)
+        self.threshold = float(threshold)
 
         if spike_grad is None:
             spike_grad = surrogate.fast_sigmoid(slope=25)
@@ -58,13 +61,20 @@ class FCSNN(BaseSNN):
             self.synapses.append(nn.Linear(int(n_in), int(n_out), bias=False))
             self.neurons.append(
                 snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
+                    beta=self.beta,
+                    threshold=self.threshold,
                     spike_grad=spike_grad,
                     init_hidden=True,
                     output=True,
                 )
             )
+
+        # Legacy compatibility path for trainers that expect alternating
+        # [Linear, Leaky, ...] layout on `network.layers`.
+        self.layers = nn.ModuleList()
+        for syn, neu in zip(self.synapses, self.neurons):
+            self.layers.append(syn)
+            self.layers.append(neu)
 
         # Expose DRTP-friendly layer metadata in forward order.
         self.trainable_layers = list(self.synapses)

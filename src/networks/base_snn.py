@@ -17,6 +17,22 @@ class BaseSNN(nn.Module, ABC):
 
     All networks must implement forward(x), reset(), and n_classes.
     """
+    net_tags: frozenset[str] = frozenset()
+
+    @property
+    def fully_connected(self) -> bool: return "fully_connected" in self.net_tags
+
+    @property
+    def convolutional(self) -> bool: return "convolutional" in self.net_tags
+
+    @property
+    def recurrent(self) -> bool: return "recurrent" in self.net_tags
+
+    @property
+    def single_layer(self) -> bool: return "single_layer" in self.net_tags
+
+    @property
+    def vgg(self) -> bool: return "vgg" in self.net_tags
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:

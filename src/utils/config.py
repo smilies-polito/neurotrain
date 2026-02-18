@@ -28,7 +28,7 @@ class ExperimentConfig:
 class ModelConfig:
     """Neural network architecture configuration."""
 
-    architecture: str = "fc"  # "fc", "fc_snn", "r_snn", "conv_snn", "vg11_snn", "local_classifier", "recurrent"
+    architecture: str = "fc"  # "fc", "fc_snn", "r_snn", "conv_snn", "vg11_snn", "local_classifier", "recurrent", "ottt_conv_net"
     layer_sizes: List[int] = field(default_factory=lambda: [784, 200, 10])
     conv_layers: List[Dict[str, int]] = field(default_factory=list)
     beta: float = 0.9375
@@ -458,6 +458,7 @@ def validate_config(config: Config) -> List[str]:
         "vgg11",
         "vg11_snn",
         "resnet18",
+        "ottt_conv_net",
     ]
     if config.model.architecture not in valid_architectures:
         issues.append(f"model.architecture must be one of {valid_architectures}")

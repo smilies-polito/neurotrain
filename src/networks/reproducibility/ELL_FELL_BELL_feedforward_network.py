@@ -26,6 +26,7 @@ class LocalClassifierNetwork(BaseSNN):
     When tau is set, decay = exp(-1/tau) (paper-identical); else decay = beta.
     constant_input_per_timestep = True so evaluation uses same input every step (paper logic).
     """
+    net_tags = frozenset({"fully_connected"})
 
     class LocalClassifierBlock(nn.Module):
         """

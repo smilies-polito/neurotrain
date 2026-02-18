@@ -91,6 +91,11 @@ def trainable(
         "vgg11",
         "vg11_snn",
         "resnet18",
+        "ottt_conv_net",
+    )
+    use_ottt_static_cifar = (
+        config.model.architecture == "ottt_conv_net"
+        and str(config.data.dataset).upper() == "CIFAR10"
     )
     trainloader, testloader = get_loader(
         config.data.dataset,
@@ -98,6 +103,9 @@ def trainable(
         config.data.timesteps,
         flatten=flatten_inputs,
         device=device,
+        static_input=use_ottt_static_cifar,
+        cifar_use_augmentation=use_ottt_static_cifar,
+        cifar_use_normalization=use_ottt_static_cifar,
     )
 
     dataset_input_shapes = {
@@ -279,6 +287,13 @@ def trainable(
         "optimizer": optimizer,
     }
     trainer_name = str(config.trainer.name).lower()
+    if trainer_name == "ottt":
+        trainer_kwargs = {
+            "network": network,
+            "lr": config.training.learning_rate,
+            "batch_size": config.training.batch_size,
+            "optimizer": optimizer,
+        }
 
     if trainer_name == "stsf":
         trainer_kwargs.update(
@@ -350,6 +365,16 @@ def trainable(
         )
 
     trainer = trainer_class(**trainer_kwargs).to(device)
+    optimizer = optimizer if optimizer is not None else getattr(trainer, "optimizer", None)
+    lr_scheduler = None
+    if (
+        optimizer is not None
+        and trainer_name == "ottt"
+        and config.model.architecture == "ottt_conv_net"
+    ):
+        lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config.training.epochs
+        )
 
     if resume_checkpoint is not None:
         trainer.network.load_state_dict(resume_checkpoint.model_state_dict)
@@ -380,6 +405,8 @@ def trainable(
         )
         training_loss = training_metrics["loss"]
         training_accuracy = training_metrics["accuracy"]
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
         # TESTING STEP
         testing_metrics = LearningAlgorithms.evaluate(

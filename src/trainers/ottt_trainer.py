@@ -1,13 +1,13 @@
 """
 OTTT (Online Training Through Time) trainer.
-
-Implements a forward-in-time three-factor learning rule with eligibility
-traces, without modifying the network's forward pass. Gradients are computed
-per time-step using presynaptic traces and surrogate derivatives of the
-postsynaptic membrane potential.
+Key idea used here:
+- spatial credit: exact per-timestep backprop (current-time computational graph)
+- temporal credit: presynaptic trace substitution in synapse gradients
 """
 
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -16,220 +16,230 @@ import torch.nn.functional as F
 from trainers.base_trainer import BaseTrainer
 
 
-class OTTTTrainer(BaseTrainer):
+class _ReplaceForGrad(torch.autograd.Function):
     """
-    Trainer implementing the Online Training Through Time rule with eligibility traces.
+    Forward uses the second argument; backward routes gradients to both.
 
-    Args:
-        network: FCNetwork to train (forward pass left untouched)
-        lr: Learning rate for manual updates
-        batch_size: Training batch size
-        trace_decay: Eligibility trace decay (lambda); defaults to neuron leak if None
-        surrogate_slope: Slope for sigmoid surrogate derivative
-        online_updates: If True apply updates every timestep (online) and step the
-            optimizer each step when enabled, otherwise accumulate over the sequence
-        quant: Kept for interface compatibility (unused)
-        use_optimizer: If True, populate .grad and call optimizer.step()
-        optimizer: Optional optimizer instance
+    This mirrors the OTTT reference trick:
+    - keep forward values unchanged
+    - make gradients behave as if traces were used
     """
+
+    @staticmethod
+    def forward(ctx, x_for_backward: torch.Tensor, x_for_forward: torch.Tensor):
+        return x_for_forward
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        return grad_output, grad_output
+
+
+class OTTTTrainer(BaseTrainer):
+    """Online Training Through Time trainer with trace-based synapse gradients."""
 
     def __init__(
         self,
-        network: nn.Module,
-        lr: float,
-        batch_size: int,
-        trace_decay: Optional[float] = None,
-        surrogate_slope: float = 10.0,
+        network: nn.Module,                     # SNN to be trained with OTTT
+        lr: float,                              # Learning rate for optimizer updates
+        batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
+        trace_decay: Optional[float] = None,    # Decay factor for synaptic traces (default: 0.5)
         online_updates: bool = False,
-        quant: bool = False,
-        use_optimizer: bool = False,
-        optimizer=None,
-        **kwargs,
+        loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
+        optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
         self.network = network
-        self.lr = lr
-        self.batch_size = batch_size
-        self.trace_decay = trace_decay
-        self.surrogate_slope = surrogate_slope
-        self.online_updates = online_updates
-        self.quant = quant
-        self.use_optimizer = use_optimizer
+        self.lr = float(lr)
+        self.batch_size = int(batch_size)
+        self._use_internal_ottt_grad = bool(
+            getattr(self.network, "uses_internal_ottt_grad", False)
+        )
+        # Match OTTT default: decay = 1 - 1/tau for LIF traces.
+        if trace_decay is None:
+            tau = float(getattr(self.network, "tau", 2.0))
+            trace_decay = 1.0 - 1.0 / tau
+        self.trace_decay = float(trace_decay)
+        self.online_updates = bool(online_updates)
+        if loss_lambda is None:
+            loss_lambda = (
+                0.05 if getattr(self.network, "constant_input_per_timestep", False) else 0.0
+            )
+        self.loss_lambda = float(loss_lambda)
         self._external_optimizer = optimizer
-        self.optimizer = optimizer
-        self.threshold = 1.0
+        # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
+        self.optimizer = (
+            optimizer
+            if optimizer is not None
+            else torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=0.9)
+        )
 
-        # Linear layers for weight access (network forward left untouched)
-        self.linear_layers: List[nn.Linear] = [
-            layer
-            for layer in getattr(self.network, "layers", [])
-            if isinstance(layer, nn.Linear)
-        ]
-        self.num_layers = len(self.linear_layers)
-
-        if self.trace_decay is None:
-            self.trace_decay = self._infer_trace_decay()
-
-        if self.use_optimizer and self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
-
-    def surrogate_derivative(self, membrane: torch.Tensor) -> torch.Tensor:
-        """Sigmoid surrogate derivative around the firing threshold."""
-        x = (membrane - self.threshold) * self.surrogate_slope
-        sig = torch.sigmoid(x)
-        return self.surrogate_slope * sig * (1 - sig)
-
-    def _infer_trace_decay(self) -> float:
-        """Default trace decay to the network leak (beta) when available."""
-        for layer in getattr(self.network, "layers", []):
-            beta = getattr(layer, "beta", None)
-            if beta is None:
-                continue
-            try:
-                return float(beta)
-            except (TypeError, ValueError):
-                try:
-                    return float(beta.item())
-                except Exception:
+        # OTTT traces are defined on synaptic inputs.
+        # For networks that implement official grad-with-rate internally, hooks are not needed.
+        self.synapse_layers = []
+        self.trace_synapse_layers = []
+        if not self._use_internal_ottt_grad:
+            unsupported_synapse_types = set()
+            allowed_parametrized_types = {"ParametrizedLinear", "ParametrizedConv2d"}
+            for module in self.network.modules():
+                if not isinstance(module, (nn.Linear, nn.Conv2d)):
                     continue
-        return 0.9
-
-    def _apply_update(
-        self, layer: nn.Linear, grad_w: torch.Tensor, grad_b: Optional[torch.Tensor] = None
-    ) -> None:
-        """Apply or accumulate weight updates."""
-        if self.use_optimizer and self.optimizer is not None:
-            if layer.weight.grad is None:
-                layer.weight.grad = grad_w.clone()
-            else:
-                layer.weight.grad += grad_w
-            if grad_b is not None and layer.bias is not None:
-                if layer.bias.grad is None:
-                    layer.bias.grad = grad_b.clone()
+                if type(module) in (nn.Linear, nn.Conv2d) or type(module).__name__ in allowed_parametrized_types:
+                    self.synapse_layers.append(module)
                 else:
-                    layer.bias.grad += grad_b
-        else:
-            layer.weight.data -= self.lr * grad_w
-            if grad_b is not None and layer.bias is not None:
-                layer.bias.data -= self.lr * grad_b
+                    unsupported_synapse_types.add(type(module).__name__)
+            if unsupported_synapse_types:
+                raise TypeError(
+                    "OTTTTrainer supports nn.Linear/nn.Conv2d and torch parametrized variants; "
+                    f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
+                )
+            if not self.synapse_layers:
+                raise TypeError(
+                    "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
+                )
+            # Match official OTTT grad-with-rate behavior by excluding the first synapse.
+            self.trace_synapse_layers = self.synapse_layers[1:]
+
+        self._trace_by_module: Dict[nn.Module, torch.Tensor] = {}
+
+    @staticmethod
+    def _module_forward_with_input(module: nn.Module, x: torch.Tensor) -> torch.Tensor:
+        """Functional forward for supported synapse modules."""
+        if isinstance(module, nn.Linear):
+            return F.linear(x, module.weight, module.bias)
+        if isinstance(module, nn.Conv2d):
+            return F.conv2d(
+                x,
+                module.weight,
+                module.bias,
+                stride=module.stride,
+                padding=module.padding,
+                dilation=module.dilation,
+                groups=module.groups,
+            )
+        raise TypeError(f"Unsupported synapse module type: {type(module).__name__}")
+
+    def _make_trace_hook(self, module: nn.Module):
+        """Per-synapse hook implementing OTTT trace substitution (Paper Eq. 4/5/7)."""
+
+        def hook(_module: nn.Module, inputs, output):
+            if not inputs:
+                return output
+            pre = inputs[0]
+            if not isinstance(pre, torch.Tensor):
+                return output
+
+            pre_detached = pre.detach()
+            prev_trace = self._trace_by_module.get(module)
+            if prev_trace is None or prev_trace.shape != pre_detached.shape:
+                prev_trace = torch.zeros_like(pre_detached)
+            trace = prev_trace * self.trace_decay + pre_detached
+            self._trace_by_module[module] = trace
+
+            # Forward uses real presynaptic activity.
+            # Backward acts as if presynaptic trace was used.
+            pre_for_grad = _ReplaceForGrad.apply(pre, trace)
+            out_for_grad = self._module_forward_with_input(module, pre_for_grad)
+            return _ReplaceForGrad.apply(out_for_grad, output.detach())
+
+        return hook
+
+    def _register_trace_hooks(self):
+        handles = []
+        for layer in self.trace_synapse_layers:
+            handles.append(layer.register_forward_hook(self._make_trace_hook(layer)))
+        return handles
+
+    def _detach_neuron_state(self) -> None:
+        """
+        Block temporal graph links between timesteps (OTTT does not use BPTT).
+        """
+        for module in self.network.modules():
+            for attr in ("mem", "spk", "syn"):
+                value = getattr(module, attr, None)
+                if isinstance(value, torch.Tensor):
+                    setattr(module, attr, value.detach())
+
+    def _zero_all_grads(self) -> None:
+        self.optimizer.zero_grad(set_to_none=True)
 
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
-        Train on a single batch using OTTT.
+        Train one sequence batch.
 
         Args:
-            data: [num_timesteps, batch, in_features]
-            target: [batch]
-
-        Returns:
-            loss: scalar tensor (no gradients attached)
-            pred: [batch, 1] predictions from summed spikes
+            data: [T, B, ...]
+            target: [B]
         """
-        num_timesteps, batch_size, _ = data.shape
+        num_timesteps = int(data.shape[0])
         device = data.device
-        num_classes = self.network.n_classes
 
-        # One-hot targets for instantaneous losses
-        target_one_hot = F.one_hot(target, num_classes=num_classes).float()
-
-        # Reset network state and traces
         self.network.reset()
-        if self.use_optimizer and self.optimizer is not None:
-            self.optimizer.zero_grad(set_to_none=True)
+        self._trace_by_module = {}
+        self._zero_all_grads()
 
-        traces = [
-            torch.zeros(batch_size, layer.in_features, device=device)
-            for layer in self.linear_layers
-        ]
-
-        # Accumulate gradients across time if not updating online
-        accum_grads_w = [
-            torch.zeros_like(layer.weight.data) for layer in self.linear_layers
-        ] if not self.online_updates else None
-        accum_grads_b = [
-            torch.zeros_like(layer.bias.data) if layer.bias is not None else None
-            for layer in self.linear_layers
-        ] if not self.online_updates else None
-
-        total_loss = torch.zeros(1, device=device)
+        hooks = [] if self._use_internal_ottt_grad else self._register_trace_hooks()
+        total_loss = torch.tensor(0.0, device=device)
         spk_sum = None
+        use_constant_input = bool(
+            getattr(self.network, "constant_input_per_timestep", False)
+        )
+        x_const = data.mean(dim=0) if use_constant_input else None
 
-        with torch.no_grad():
-            for t in range(num_timesteps):
-                spks, mems = self.network(data[t])
-                spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]
-
-                # Update eligibility traces with current presynaptic spikes
-                pre_acts = [data[t]] + spks[:-1]
-                for l in range(self.num_layers):
-                    traces[l].mul_(self.trace_decay).add_(pre_acts[l])
-
-                # Instantaneous loss on output membrane (scaled by T)
-                logits = mems[-1]
-                loss_t = (
-                    F.cross_entropy(logits, target, reduction="mean") / num_timesteps
-                )
-                total_loss += loss_t
-
-                # Output error signal and membrane gradient (scaled by 1/T)
-                probs = torch.softmax(logits, dim=1)
-                delta = (probs - target_one_hot) / num_timesteps
-
-                g_u = [torch.zeros_like(m) for m in mems]
-                g_u[-1] = delta
-
-                # Backpropagate error across layers (same timestep)
-                for l in reversed(range(self.num_layers - 1)):
-                    delta_prev = torch.matmul(
-                        g_u[l + 1], self.linear_layers[l + 1].weight
-                    )
-                    g_u[l] = delta_prev * self.surrogate_derivative(mems[l])
-
-                # Weight updates via eligibility traces
-                for l, layer in enumerate(self.linear_layers):
-                    grad_w = (
-                        torch.matmul(g_u[l].transpose(0, 1), traces[l]) / batch_size
-                    )
-                    grad_b = (
-                        g_u[l].sum(dim=0) / batch_size if layer.bias is not None else None
-                    )
+        try:
+            with torch.enable_grad():
+                # Loop on TIMESTEPS
+                for t in range(num_timesteps):
+                    if not self._use_internal_ottt_grad:
+                        self._detach_neuron_state()
                     if self.online_updates:
-                        self._apply_update(layer, grad_w, grad_b)
+                        self._zero_all_grads()
+
+                    # FORWARD PASS of the network at current timestep
+                    x_t = x_const if x_const is not None else data[t]
+                    spk_rec, mem_rec = self.network(x_t)
+                    spk_out = spk_rec[-1]
+                    # Static-image OTTT path uses CE on last-layer membrane/logits readout.
+                    logits = mem_rec[-1]
+
+                    if spk_sum is None:
+                        spk_sum = spk_out.detach()
                     else:
-                        accum_grads_w[l] += grad_w
-                        if accum_grads_b is not None and grad_b is not None:
-                            if accum_grads_b[l] is None:
-                                accum_grads_b[l] = grad_b.clone()
-                            else:
-                                accum_grads_b[l] += grad_b
+                        spk_sum = spk_sum + spk_out.detach()
 
-                if self.online_updates and self.use_optimizer and self.optimizer is not None:
+                    # Keep paper/repo semantics: each timestep contributes 1/T of sequence loss.
+                    if self.loss_lambda > 0.0:
+                        n_classes = int(getattr(self.network, "n_classes", logits.shape[1]))
+                        target_one_hot = F.one_hot(target, n_classes).float()
+                        loss_t = (
+                            (1.0 - self.loss_lambda) * F.cross_entropy(logits, target)
+                            + self.loss_lambda * F.mse_loss(logits, target_one_hot)
+                        ) / num_timesteps
+                    else:
+                        loss_t = F.cross_entropy(logits, target) / num_timesteps
+                    total_loss = total_loss + loss_t.detach()
+                    loss_t.backward()
+
+                    if self.online_updates:
+                        self.optimizer.step()
+
+                if not self.online_updates:
                     self.optimizer.step()
-                    self.optimizer.zero_grad(set_to_none=True)
+        finally:
+            for handle in hooks:
+                handle.remove()
+            self._zero_all_grads()
 
-        # Apply accumulated updates after sequence
-        if not self.online_updates and accum_grads_w is not None:
-            for layer, grad_w, grad_b in zip(self.linear_layers, accum_grads_w, accum_grads_b):
-                self._apply_update(layer, grad_w, grad_b)
-            if self.use_optimizer and self.optimizer is not None:
-                self.optimizer.step()
-                self.optimizer.zero_grad(set_to_none=True)
-
-        # Predictions from spike counts
         pred = spk_sum.argmax(dim=1, keepdim=True)
-        return total_loss.detach(), pred
+        return total_loss, pred
 
     def reset(self):
-        """Reset all LIF states and zero gradients if needed."""
         self.network.reset()
-        if self.use_optimizer and self.optimizer is not None:
-            self.optimizer.zero_grad(set_to_none=True)
+        self._zero_all_grads()
 
     def to(self, device):
-        """
-        Move trainer and network to device, recreating optimizer if owned by this trainer.
-        """
         super().to(device)
-        if self.use_optimizer and self._external_optimizer is None:
-            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        if self._external_optimizer is None:
+            self.optimizer = torch.optim.SGD(
+                self.network.parameters(), lr=self.lr, momentum=0.9
+            )
         return self

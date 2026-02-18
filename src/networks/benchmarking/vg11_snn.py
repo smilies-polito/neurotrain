@@ -18,6 +18,7 @@ class VG11SNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, C, H, W)` input.
     State reset is external via `reset()`.
     """
+    net_tags = frozenset({"convolutional", "vgg"})
 
     def __init__(
         self,
@@ -41,6 +42,8 @@ class VG11SNN(BaseSNN):
         self.in_shape = tuple(int(v) for v in in_shape)
         self._n_classes = int(num_classes)
         self.use_batch_norm = bool(use_batch_norm)
+        self.beta = float(beta)
+        self.threshold = float(threshold)
 
         if feature_cfg is None:
             feature_cfg = [1, "M", 2, "M", 4, 4, "M", 8, 8, "M", 8, 8, "M"]
@@ -98,8 +101,8 @@ class VG11SNN(BaseSNN):
                 self.conv_norms.append(nn.Identity())
             self.lif_layers.append(
                 snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
+                    beta=self.beta,
+                    threshold=self.threshold,
                     spike_grad=spike_grad,
                     init_hidden=True,
                     output=True,
@@ -111,6 +114,7 @@ class VG11SNN(BaseSNN):
         with torch.no_grad():
             # Use batch size 2 to avoid BatchNorm error "Expected more than 1 value per channel"
             dummy = torch.zeros(2, *self.in_shape)
+            self._layer_output_shapes = []
             for i, (conv, norm) in enumerate(zip(self.conv_layers, self.conv_norms)):
                  # pool layers might be shorter or mapped differently if M was handled oddly
                  # But looking at above loop:
@@ -119,6 +123,7 @@ class VG11SNN(BaseSNN):
                  # So pool_layers leads conv_layers 1:1.
                  pool = self.pool_layers[i]
                  dummy = pool(norm(conv(dummy)))
+                 self._layer_output_shapes.append(tuple(int(v) for v in dummy.shape[1:]))
             flat_features = int(dummy.flatten(1).shape[1])
 
         classifier_sizes = [*self.classifier_hidden_sizes, self._n_classes]
@@ -131,14 +136,56 @@ class VG11SNN(BaseSNN):
             )
             self.classifier_neurons.append(
                 snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
+                    beta=self.beta,
+                    threshold=self.threshold,
                     spike_grad=spike_grad,
                     init_hidden=True,
                     output=True,
                 )
             )
             prev_features = int(out_features)
+
+        self.trainable_layers = list(self.conv_layers) + list(self.classifier_layers)
+        self.trainable_types = ["conv"] * len(self.conv_layers) + ["linear"] * len(
+            self.classifier_layers
+        )
+
+        # Legacy compatibility path for trainers expecting alternating
+        # [synapse, neuron, ...] via network.layers.
+        self.layers = nn.ModuleList()
+        self.stop_layer_specs = []
+        for conv, lif, pool in zip(self.conv_layers, self.lif_layers, self.pool_layers):
+            self.layers.append(conv)
+            self.layers.append(lif)
+            self.stop_layer_specs.append(
+                {
+                    "synapse": conv,
+                    "neuron": lif,
+                    "layer_type": "conv",
+                    "pool": pool,
+                }
+            )
+        for fc, lif in zip(self.classifier_layers, self.classifier_neurons):
+            self.layers.append(fc)
+            self.layers.append(lif)
+            self.stop_layer_specs.append(
+                {
+                    "synapse": fc,
+                    "neuron": lif,
+                    "layer_type": "linear",
+                    "pool": None,
+                }
+            )
+
+        with torch.no_grad():
+            dummy = torch.zeros(2, *self.in_shape)
+            for i, (conv, norm) in enumerate(zip(self.conv_layers, self.conv_norms)):
+                pool = self.pool_layers[i]
+                dummy = pool(norm(conv(dummy)))
+            dummy = dummy.flatten(1)
+            for fc in self.classifier_layers:
+                dummy = fc(dummy)
+                self._layer_output_shapes.append((int(dummy.shape[1]),))
 
     def forward(self, x: torch.Tensor):
         if x.dim() != 4 or tuple(x.shape[1:]) != self.in_shape:
@@ -177,3 +224,6 @@ class VG11SNN(BaseSNN):
             lif.reset_mem()
         for lif in self.classifier_neurons:
             lif.reset_mem()
+
+    def layer_output_shapes(self) -> list[tuple[int, ...]]:
+        return list(self._layer_output_shapes)
