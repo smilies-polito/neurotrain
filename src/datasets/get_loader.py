@@ -79,7 +79,6 @@ def get_loader(
     if isinstance(device, str):
         pin_memory = device == "cuda"
 
-    print(name)
     # Standard image datasets
     if name == "MNIST":
         if raw_for_local_classifier:
@@ -97,7 +96,9 @@ def get_loader(
             use_normalization=cifar_use_normalization,
         )
     elif name == "FashionMNIST":
-        return FashionMNISTLoader(batch_size, T, pin_memory=pin_memory, seed=seed)
+        return FashionMNISTLoader(
+            batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed
+        )
     elif name == "SVHN":
         return SVHNLoader(batch_size, T, flatten=flatten, pin_memory=pin_memory, seed=seed)
     elif name == "DVSGesture":

@@ -44,6 +44,8 @@ class ConvSNN(BaseSNN):
         self.in_shape = tuple(int(v) for v in in_shape)
         self._n_classes = int(num_classes)
         self.use_batch_norm = bool(use_batch_norm)
+        self.beta = float(beta)
+        self.threshold = float(threshold)
 
         self.conv_channels = [int(v) for v in conv_channels]
         if not self.conv_channels:
@@ -99,8 +101,8 @@ class ConvSNN(BaseSNN):
                 self.conv_norms.append(nn.Identity())
             self.conv_neurons.append(
                 snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
+                    beta=self.beta,
+                    threshold=self.threshold,
                     spike_grad=spike_grad,
                     init_hidden=True,
                     output=True,
@@ -116,8 +118,10 @@ class ConvSNN(BaseSNN):
 
         with torch.no_grad():
             dummy = torch.zeros(1, *self.in_shape)
+            self._layer_output_shapes = []
             for conv, norm, pool in zip(self.conv_layers, self.conv_norms, self.pool_layers):
                 dummy = pool(norm(conv(dummy)))
+                self._layer_output_shapes.append(tuple(int(v) for v in dummy.shape[1:]))
             flat_features = int(dummy.flatten(1).shape[1])
 
         self.classifier_layers = nn.ModuleList()
@@ -129,14 +133,59 @@ class ConvSNN(BaseSNN):
             )
             self.classifier_neurons.append(
                 snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
+                    beta=self.beta,
+                    threshold=self.threshold,
                     spike_grad=spike_grad,
                     init_hidden=True,
                     output=True,
                 )
             )
             prev_features = int(out_features)
+
+        self.trainable_layers = list(self.conv_layers) + list(self.classifier_layers)
+        self.trainable_types = ["conv"] * len(self.conv_layers) + ["linear"] * len(
+            self.classifier_layers
+        )
+
+        # Legacy compatibility path for trainers expecting alternating
+        # [synapse, neuron, ...] via network.layers.
+        self.layers = nn.ModuleList()
+        self.stop_layer_specs = []
+        for conv, lif, pool in zip(
+            self.conv_layers, self.conv_neurons, self.pool_layers
+        ):
+            self.layers.append(conv)
+            self.layers.append(lif)
+            self.stop_layer_specs.append(
+                {
+                    "synapse": conv,
+                    "neuron": lif,
+                    "layer_type": "conv",
+                    "pool": pool,
+                }
+            )
+        for fc, lif in zip(self.classifier_layers, self.classifier_neurons):
+            self.layers.append(fc)
+            self.layers.append(lif)
+            self.stop_layer_specs.append(
+                {
+                    "synapse": fc,
+                    "neuron": lif,
+                    "layer_type": "linear",
+                    "pool": None,
+                }
+            )
+
+        with torch.no_grad():
+            dummy = torch.zeros(1, *self.in_shape)
+            for conv, norm, pool in zip(
+                self.conv_layers, self.conv_norms, self.pool_layers
+            ):
+                dummy = pool(norm(conv(dummy)))
+            dummy = dummy.flatten(1)
+            for fc in self.classifier_layers:
+                dummy = fc(dummy)
+                self._layer_output_shapes.append((int(dummy.shape[1]),))
 
     def forward(self, x: torch.Tensor):
         if x.dim() != 4 or tuple(x.shape[1:]) != self.in_shape:
@@ -176,3 +225,6 @@ class ConvSNN(BaseSNN):
             lif.reset_mem()
         for lif in self.classifier_neurons:
             lif.reset_mem()
+
+    def layer_output_shapes(self) -> list[tuple[int, ...]]:
+        return list(self._layer_output_shapes)

@@ -29,6 +29,7 @@ STOP_RESNET18_SVHN_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
 STOP_RESNET18_SVHN_BATCH_SIZE ?= 16
 STOP_RESNET18_SVHN_TIMESTEPS ?= 8
 STOP_RESNET18_SVHN_LR ?= 0.003
+RUN_NEUROBENCH ?=
 
 # OTTT reproducibility defaults (paper CIFAR-10 VGG(sWS) setup)
 OTTT_REPRO_EPOCHS ?= 300
@@ -39,22 +40,40 @@ OTTT_REPRO_SEED ?= 2022
 
 
 
-#  /$$$$$$$$ /$$   /$$ /$$       /$$             /$$$$$$$$ /$$$$$$$$  /$$$$$$  /$$$$$$$$ /$$$$$$
-# | $$_____/| $$  | $$| $$      | $$            |__  $$__/| $$_____/ /$$__  $$|__  $$__//$$__  $$
-# | $$      | $$  | $$| $$      | $$               | $$   | $$      | $$  \__/   | $$  | $$  \__/
-# | $$$$$   | $$  | $$| $$      | $$               | $$   | $$$$$   |  $$$$$$    | $$  |  $$$$$$
-# | $$__/   | $$  | $$| $$      | $$               | $$   | $$__/    \____  $$   | $$   \____  $$
-# | $$      | $$  | $$| $$      | $$               | $$   | $$       /$$  \ $$   | $$   /$$  \ $$
-# | $$      |  $$$$$$/| $$$$$$$$| $$$$$$$$         | $$   | $$$$$$$$|  $$$$$$/   | $$  |  $$$$$$/
-# |__/       \______/ |________/|________/         |__/   |________/ \______/    |__/   \______/
+#  /$$$$$$$  /$$$$$$$$ /$$   /$$  /$$$$$$  /$$   /$$ /$$      /$$  /$$$$$$  /$$$$$$$  /$$   /$$ /$$$$$$ /$$   /$$  /$$$$$$ 
+# | $$__  $$| $$_____/| $$$ | $$ /$$__  $$| $$  | $$| $$$    /$$$ /$$__  $$| $$__  $$| $$  /$$/|_  $$_/| $$$ | $$ /$$__  $$
+# | $$  \ $$| $$      | $$$$| $$| $$  \__/| $$  | $$| $$$$  /$$$$| $$  \ $$| $$  \ $$| $$ /$$/   | $$  | $$$$| $$| $$  \__/
+# | $$$$$$$ | $$$$$   | $$ $$ $$| $$      | $$$$$$$$| $$ $$/$$ $$| $$$$$$$$| $$$$$$$/| $$$$$/    | $$  | $$ $$ $$| $$ /$$$$
+# | $$__  $$| $$__/   | $$  $$$$| $$      | $$__  $$| $$  $$$| $$| $$__  $$| $$__  $$| $$  $$    | $$  | $$  $$$$| $$|_  $$
+# | $$  \ $$| $$      | $$\  $$$| $$    $$| $$  | $$| $$\  $ | $$| $$  | $$| $$  \ $$| $$\  $$   | $$  | $$\  $$$| $$  \ $$
+# | $$$$$$$/| $$$$$$$$| $$ \  $$|  $$$$$$/| $$  | $$| $$ \/  | $$| $$  | $$| $$  | $$| $$ \  $$ /$$$$$$| $$ \  $$|  $$$$$$/
+# |_______/ |________/|__/  \__/ \______/ |__/  |__/|__/     |__/|__/  |__/|__/  |__/|__/  \__/|______/|__/  \__/ \______/ 
 
 # Full test suite
-complete-test-long:
-	$(PYTHON) run_all_benchmarks.py --epochs 50 --device $(DEVICE)
-# Focused, faster subset of tests for quick feedback
-complete-test-short:
-	$(PYTHON) run_all_benchmarks.py --epochs 1 --device $(DEVICE)
-
+bench-short:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+# Only BPTT test suite
+bptt:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+# Only OTTT test suite
+ottt:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ottt $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+# Only DRTP test suite
+drtp:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms drtp $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+# Only OSTL test suite
+ostl:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ostl $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	
+# All algorithms on each MNIST network
+all-mnist-fc:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks fc_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+all-mnist-conv:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks conv_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+all-mnist-rsnn:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks r_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+all-mnist-vgg11:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks vg11_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
 
 
 #  /$$$$$$$   /$$$$$$  /$$$$$$$$ /$$$$$$   /$$$$$$  /$$$$$$$$ /$$$$$$$$

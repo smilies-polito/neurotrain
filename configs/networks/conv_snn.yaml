@@ -1,0 +1,113 @@
+name: conv_snn
+description: Two-block convolutional SNN with one hidden classifier layer.
+enabled: true
+
+model:
+  architecture: conv_snn
+  layer_sizes: [128, 10]
+  beta: 0.9
+  tau: null
+  threshold: 1.0
+  recurrent_type: standard
+  quantization: false
+  conv_layers:
+    - out_channels: 32
+      kernel_size: 3
+      stride: 1
+      padding: 1
+      pool_kernel: 2
+      pool_stride: 2
+    - out_channels: 64
+      kernel_size: 3
+      stride: 1
+      padding: 1
+      pool_kernel: 2
+      pool_stride: 2
+
+network_kwargs:
+  in_shape: [1, 28, 28]
+  num_classes: 10
+  conv_channels: [32, 64]
+  fc_hidden_sizes: [128]
+  use_batch_norm: true
+  pool_after: [true, true]
+  pool_kernel: 2
+  pool_stride: 2
+  conv_kernel_size: 3
+  conv_stride: 1
+  conv_padding: 1
+  beta: 0.9
+  threshold: 1.0
+  spike_grad: null
+
+dataset_overrides:
+  FashionMNIST:
+    model:
+      layer_sizes: [128, 10]
+    network_kwargs:
+      in_shape: [1, 28, 28]
+      num_classes: 10
+      conv_channels: [32, 64]
+      fc_hidden_sizes: [128]
+      pool_after: [true, true]
+  CIFAR10:
+    model:
+      layer_sizes: [256, 10]
+      conv_layers:
+        - out_channels: 32
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+        - out_channels: 64
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+        - out_channels: 128
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+    network_kwargs:
+      in_shape: [3, 32, 32]
+      num_classes: 10
+      conv_channels: [32, 64, 128]
+      fc_hidden_sizes: [256]
+      use_batch_norm: true
+      pool_after: [true, true, true]
+  SVHN:
+    model:
+      layer_sizes: [256, 10]
+      conv_layers:
+        - out_channels: 32
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+        - out_channels: 64
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+        - out_channels: 128
+          kernel_size: 3
+          stride: 1
+          padding: 1
+          pool_kernel: 2
+          pool_stride: 2
+    network_kwargs:
+      in_shape: [3, 32, 32]
+      num_classes: 10
+      conv_channels: [32, 64, 128]
+      fc_hidden_sizes: [256]
+      use_batch_norm: true
+      pool_after: [true, true, true]
+
+tags:
+  expected: [convolutional]

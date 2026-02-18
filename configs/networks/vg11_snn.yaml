@@ -1,0 +1,71 @@
+name: vg11_snn
+description: VGG11-style spiking backbone for benchmarking deeper conv stacks.
+enabled: true
+
+model:
+  architecture: vg11_snn
+  layer_sizes: [256, 10]
+  beta: 0.9
+  tau: null
+  threshold: 1.0
+  recurrent_type: standard
+  quantization: false
+  conv_layers: []
+
+network_kwargs:
+  in_shape: [1, 28, 28]
+  num_classes: 10
+  feature_cfg: [1, "M", 2, "M", 4, 4, "M", 8, 8, "M"]
+  classifier_hidden_sizes: [256]
+  base_channels: 10
+  cfg_scale_with_base_channels: true
+  use_batch_norm: true
+  pool_kernel: 2
+  pool_stride: 2
+  beta: 0.9
+  threshold: 1.0
+  spike_grad: null
+
+dataset_overrides:
+  FashionMNIST:
+    model:
+      layer_sizes: [256, 10]
+    network_kwargs:
+      in_shape: [1, 28, 28]
+      num_classes: 10
+      feature_cfg: [1, "M", 2, "M", 4, 4, "M", 8, 8, "M"]
+      classifier_hidden_sizes: [256]
+      base_channels: 10
+  CIFAR10:
+    model:
+      layer_sizes: [512, 10]
+    network_kwargs:
+      in_shape: [3, 32, 32]
+      num_classes: 10
+      feature_cfg: [1, "M", 2, "M", 4, 4, "M", 8, 8, "M", 8, 8, "M"]
+      classifier_hidden_sizes: [512]
+      base_channels: 16
+      cfg_scale_with_base_channels: true
+      use_batch_norm: true
+      pool_kernel: 2
+      pool_stride: 2
+      beta: 0.9
+      threshold: 1.0
+  SVHN:
+    model:
+      layer_sizes: [512, 10]
+    network_kwargs:
+      in_shape: [3, 32, 32]
+      num_classes: 10
+      feature_cfg: [1, "M", 2, "M", 4, 4, "M", 8, 8, "M", 8, 8, "M"]
+      classifier_hidden_sizes: [512]
+      base_channels: 16
+      cfg_scale_with_base_channels: true
+      use_batch_norm: true
+      pool_kernel: 2
+      pool_stride: 2
+      beta: 0.9
+      threshold: 1.0
+
+tags:
+  expected: [convolutional, vgg]
