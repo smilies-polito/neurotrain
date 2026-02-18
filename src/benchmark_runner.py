@@ -405,10 +405,7 @@ def benchmark_algorithm(
             lr=lr * 10.0,  # stronger updates than gradient baseline
             batch_size=batch_size,
             trace_decay=beta,
-            surrogate_slope=5.0,
             online_updates=True,
-            quant=False,
-            use_optimizer=False,
             optimizer=None,
         )
     elif algorithm_name == "decolle":
