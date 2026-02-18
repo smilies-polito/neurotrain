@@ -1,0 +1,48 @@
+# OTTT reproducibility config for CIFAR-10 (VGG(sWS), T=6).
+# Target rows from OTTT paper Table 1:
+#   OTTTA (ours) VGG (sWS) 93.52±0.06%
+#   OTTTO (ours) VGG (sWS) 93.49±0.17%
+
+experiment:
+  name: "OTTT_CIFAR10_REPRO"
+  seed: 2022
+  deterministic: true
+  log_dir: "./experiments"
+
+model:
+  architecture: "ottt_conv_net"
+  layer_sizes: [3072, 10]
+  beta: 0.5
+  tau: 2.0
+  threshold: 1.0
+  quantization: false
+
+training:
+  epochs: 300
+  batch_size: 128
+  learning_rate: 0.1
+  optimizer: "sgd"
+  weight_decay: 0.0
+  freeze_conv: false
+
+trainer:
+  name: "ottt"
+  update_last: false
+  update_every: 1
+  seq_batch: 1
+
+data:
+  dataset: "CIFAR10"
+  timesteps: 6
+  data_dir: "./src/Data"
+  num_workers: 4
+
+hardware:
+  device: "auto"
+  mixed_precision: false
+
+checkpoint:
+  save_every: 0
+  save_best: true
+  save_latest: true
+  max_keep: 2

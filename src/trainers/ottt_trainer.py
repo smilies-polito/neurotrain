@@ -43,16 +43,28 @@ class OTTTTrainer(BaseTrainer):
         lr: float,                              # Learning rate for optimizer updates
         batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
         trace_decay: Optional[float] = None,    # Decay factor for synaptic traces (default: 0.5)
-        online_updates: bool = True,
+        online_updates: bool = False,
+        loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
         optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        # Keep decay explicit in this project: default to 0.5 unless user overrides.
-        self.trace_decay = float(0.5 if trace_decay is None else trace_decay)
+        self._use_internal_ottt_grad = bool(
+            getattr(self.network, "uses_internal_ottt_grad", False)
+        )
+        # Match OTTT default: decay = 1 - 1/tau for LIF traces.
+        if trace_decay is None:
+            tau = float(getattr(self.network, "tau", 2.0))
+            trace_decay = 1.0 - 1.0 / tau
+        self.trace_decay = float(trace_decay)
         self.online_updates = bool(online_updates)
+        if loss_lambda is None:
+            loss_lambda = (
+                0.05 if getattr(self.network, "constant_input_per_timestep", False) else 0.0
+            )
+        self.loss_lambda = float(loss_lambda)
         self._external_optimizer = optimizer
         # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
         self.optimizer = (
@@ -61,27 +73,31 @@ class OTTTTrainer(BaseTrainer):
             else torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=0.9)
         )
 
-        # OTTT traces are defined on synaptic inputs; only plain Linear/Conv2d are supported.
+        # OTTT traces are defined on synaptic inputs.
+        # For networks that implement official grad-with-rate internally, hooks are not needed.
         self.synapse_layers = []
-        unsupported_synapse_types = set()
-        for module in self.network.modules():
-            if not isinstance(module, (nn.Linear, nn.Conv2d)):
-                continue
-            if type(module) in (nn.Linear, nn.Conv2d):
-                self.synapse_layers.append(module)
-            else:
-                unsupported_synapse_types.add(type(module).__name__)
-        if unsupported_synapse_types:
-            raise TypeError(
-                "OTTTTrainer supports only exact nn.Linear/nn.Conv2d synapses; "
-                f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
-            )
-        if not self.synapse_layers:
-            raise TypeError(
-                "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
-            )
-        # Match official OTTT grad-with-rate behavior by excluding the first synapse.
-        self.trace_synapse_layers = self.synapse_layers[1:]
+        self.trace_synapse_layers = []
+        if not self._use_internal_ottt_grad:
+            unsupported_synapse_types = set()
+            allowed_parametrized_types = {"ParametrizedLinear", "ParametrizedConv2d"}
+            for module in self.network.modules():
+                if not isinstance(module, (nn.Linear, nn.Conv2d)):
+                    continue
+                if type(module) in (nn.Linear, nn.Conv2d) or type(module).__name__ in allowed_parametrized_types:
+                    self.synapse_layers.append(module)
+                else:
+                    unsupported_synapse_types.add(type(module).__name__)
+            if unsupported_synapse_types:
+                raise TypeError(
+                    "OTTTTrainer supports nn.Linear/nn.Conv2d and torch parametrized variants; "
+                    f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
+                )
+            if not self.synapse_layers:
+                raise TypeError(
+                    "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
+                )
+            # Match official OTTT grad-with-rate behavior by excluding the first synapse.
+            self.trace_synapse_layers = self.synapse_layers[1:]
 
         self._trace_by_module: Dict[nn.Module, torch.Tensor] = {}
 
@@ -161,20 +177,26 @@ class OTTTTrainer(BaseTrainer):
         self._trace_by_module = {}
         self._zero_all_grads()
 
-        hooks = self._register_trace_hooks()
+        hooks = [] if self._use_internal_ottt_grad else self._register_trace_hooks()
         total_loss = torch.tensor(0.0, device=device)
         spk_sum = None
+        use_constant_input = bool(
+            getattr(self.network, "constant_input_per_timestep", False)
+        )
+        x_const = data.mean(dim=0) if use_constant_input else None
 
         try:
             with torch.enable_grad():
                 # Loop on TIMESTEPS
                 for t in range(num_timesteps):
-                    self._detach_neuron_state()
+                    if not self._use_internal_ottt_grad:
+                        self._detach_neuron_state()
                     if self.online_updates:
                         self._zero_all_grads()
 
                     # FORWARD PASS of the network at current timestep
-                    spk_rec, mem_rec = self.network(data[t])
+                    x_t = x_const if x_const is not None else data[t]
+                    spk_rec, mem_rec = self.network(x_t)
                     spk_out = spk_rec[-1]
                     # Static-image OTTT path uses CE on last-layer membrane/logits readout.
                     logits = mem_rec[-1]
@@ -185,7 +207,15 @@ class OTTTTrainer(BaseTrainer):
                         spk_sum = spk_sum + spk_out.detach()
 
                     # Keep paper/repo semantics: each timestep contributes 1/T of sequence loss.
-                    loss_t = F.cross_entropy(logits, target) / num_timesteps
+                    if self.loss_lambda > 0.0:
+                        n_classes = int(getattr(self.network, "n_classes", logits.shape[1]))
+                        target_one_hot = F.one_hot(target, n_classes).float()
+                        loss_t = (
+                            (1.0 - self.loss_lambda) * F.cross_entropy(logits, target)
+                            + self.loss_lambda * F.mse_loss(logits, target_one_hot)
+                        ) / num_timesteps
+                    else:
+                        loss_t = F.cross_entropy(logits, target) / num_timesteps
                     total_loss = total_loss + loss_t.detach()
                     loss_t.backward()
 

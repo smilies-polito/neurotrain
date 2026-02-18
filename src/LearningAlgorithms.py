@@ -91,6 +91,7 @@ class LearningAlgorithms:
 
         total_samples = 0
         total_correct = 0
+        use_constant_input = getattr(network, "constant_input_per_timestep", False)
 
         for batch_idx, (data, target) in enumerate(test_loader):
             # Move data to the device (non_blocking for faster CUDA transfer)
@@ -106,8 +107,10 @@ class LearningAlgorithms:
             # Reset network state and perform a forward pass
             network.reset()
             spk_sum = None
+            x_const = data.mean(dim=0) if use_constant_input else None
             for t in range(data.size(0)):  # Iterate over timesteps
-                out = network(data[t])
+                x_t = x_const if x_const is not None else data[t]
+                out = network(x_t)
                 # Support both (spk, mem) and (spk, mem, p) returns
                 spk = out[0] if isinstance(out, (tuple, list)) else out
                 spk_sum = spk[-1] if spk_sum is None else spk_sum + spk[-1]

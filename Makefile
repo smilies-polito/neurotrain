@@ -30,6 +30,13 @@ STOP_RESNET18_SVHN_BATCH_SIZE ?= 16
 STOP_RESNET18_SVHN_TIMESTEPS ?= 8
 STOP_RESNET18_SVHN_LR ?= 0.003
 
+# OTTT reproducibility defaults (paper CIFAR-10 VGG(sWS) setup)
+OTTT_REPRO_EPOCHS ?= 300
+OTTT_REPRO_BATCH_SIZE ?= 128
+OTTT_REPRO_TIMESTEPS ?= 6
+OTTT_REPRO_LR ?= 0.1
+OTTT_REPRO_SEED ?= 2022
+
 
 
 #  /$$$$$$$$ /$$   /$$ /$$       /$$             /$$$$$$$$ /$$$$$$$$  /$$$$$$  /$$$$$$$$ /$$$$$$ 
@@ -127,6 +134,8 @@ ottt-mnist:
 	$(MAKE) ottt-mnist-vgg11
 ottt-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ottt
+ottt-repro:
+	$(PYTHON) main.py --config configs/cifar10_ottt_repro.yaml --epochs $(OTTT_REPRO_EPOCHS) --batch-size $(OTTT_REPRO_BATCH_SIZE) --T $(OTTT_REPRO_TIMESTEPS) --lr $(OTTT_REPRO_LR) --seed $(OTTT_REPRO_SEED)
 
 # DRTP
 drtp-mnist:
