@@ -1,48 +1,6 @@
-# Tooling entry points (override on CLI if needed)
+
+# Default interpreter for all Python entrypoints.
 PYTHON ?= python3
-DEVICE ?= cuda
-EPOCHS ?= 50
-STOP_TEST_EPOCHS ?= 5
-STOP_MIN_GAIN ?= 0.0
-STOP_COMPLEX_EPOCHS ?= 10
-STOP_COMPLEX_BATCH_SIZE ?= 32
-STOP_COMPLEX_TIMESTEPS ?= 8
-STOP_COMPLEX_LR ?= 0.005
-
-# STOP complex backbones: per-target defaults (override from CLI if needed)
-STOP_VGG11_CIFAR10_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
-STOP_VGG11_CIFAR10_BATCH_SIZE ?= 32
-STOP_VGG11_CIFAR10_TIMESTEPS ?= 4
-STOP_VGG11_CIFAR10_LR ?= 0.001
-
-STOP_RESNET18_CIFAR10_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
-STOP_RESNET18_CIFAR10_BATCH_SIZE ?= 8
-STOP_RESNET18_CIFAR10_TIMESTEPS ?= 8
-STOP_RESNET18_CIFAR10_LR ?= 0.006
-
-STOP_VGG11_SVHN_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
-STOP_VGG11_SVHN_BATCH_SIZE ?= 32
-STOP_VGG11_SVHN_TIMESTEPS ?= 4
-STOP_VGG11_SVHN_LR ?= 0.001
-
-STOP_RESNET18_SVHN_EPOCHS ?= $(STOP_COMPLEX_EPOCHS)
-STOP_RESNET18_SVHN_BATCH_SIZE ?= 16
-STOP_RESNET18_SVHN_TIMESTEPS ?= 8
-STOP_RESNET18_SVHN_LR ?= 0.003
-RUN_NEUROBENCH ?=
-
-# OTTT reproducibility defaults (paper CIFAR-10 VGG(sWS) setup)
-OTTT_REPRO_EPOCHS ?= 300
-OTTT_REPRO_BATCH_SIZE ?= 128
-OTTT_REPRO_TIMESTEPS ?= 6
-OTTT_REPRO_LR ?= 0.1
-OTTT_REPRO_SEED ?= 2022
-
-REPRO_TEST_EPOCHS ?= 5
-REPRO_TEST_BATCH_SIZE ?= 32
-REPRO_TEST_TIMESTEPS ?= 6
-REPRO_TEST_LR ?=
-REPRO_TEST_DEVICE ?= auto
 
 
 
@@ -54,55 +12,70 @@ REPRO_TEST_DEVICE ?= auto
 # | $$  \ $$| $$      | $$\  $$$| $$    $$| $$  | $$| $$\  $ | $$| $$  | $$| $$  \ $$| $$\  $$   | $$  | $$\  $$$| $$  \ $$
 # | $$$$$$$/| $$$$$$$$| $$ \  $$|  $$$$$$/| $$  | $$| $$ \/  | $$| $$  | $$| $$  | $$| $$ \  $$ /$$$$$$| $$ \  $$|  $$$$$$/
 # |_______/ |________/|__/  \__/ \______/ |__/  |__/|__/     |__/|__/  |__/|__/  |__/|__/  \__/|______/|__/  \__/ \______/ 
+# ========================================================================================================================
+
+# The commands here uses the benchmarking.py script.
+# The arguments that can be used are divided in categories.
+# Config files:
+# --config: path to the benchmark config file with the trainer configurations (required) 
+# --networks-dir: path to the directory containing the network config files (required)
+# Filters:
+# --algorithms: list of algorithms to run (default: all)
+# --networks: list of networks to run (default: all)
+# --datasets: list of datasets to run (default: all)
+# Training parameters to override:
+# --epochs: number of epochs to train each network
+# -- bathch-size: batch size to use for training 
+# --lr: learning rate to use for training
+# --timesteps: number of timesteps to use for training
+# --device: device to use for training (default: cuda if available, else cpu)
+# --seed: random seed to use for training (default: 0)
+# --run-neurobench: whether to run the neurobench evaluation after training (default:
 
 # Full test suite
 bench-short:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --run-neurobench
-# Reproducibility suite (paper configs under configs/reproducibility)
-reproducibility-test:
-	$(PYTHON) reproducibility.py --configs-dir configs/reproducibility --epochs $(REPRO_TEST_EPOCHS) --batch-size $(REPRO_TEST_BATCH_SIZE) --timesteps $(REPRO_TEST_TIMESTEPS) --device $(REPRO_TEST_DEVICE) $(if $(REPRO_TEST_LR),--lr $(REPRO_TEST_LR),) $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
-repro-test:
-	$(MAKE) reproducibility-test
 # Only BPTT test suite
 bptt:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt --run-neurobench --datasets MNIST
 # Only OTTT test suite
 ottt:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ottt $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ottt
 # Only DRTP test suite
 drtp:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms drtp $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms drtp
 # Only OSTL test suite
 ostl:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ostl $(if $(NETWORKS),--networks $(NETWORKS),) $(if $(DATASETS),--datasets $(DATASETS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms ostl
 	
 # All algorithms on each MNIST network
 all-mnist-fc:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks fc_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks fc_snn --datasets MNIST 
 all-mnist-conv:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks conv_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks conv_snn --datasets MNIST 
 all-mnist-rsnn:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks r_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks r_snn --datasets MNIST 
 all-mnist-vgg11:
-	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks vg11_snn --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),) $(if $(RUN_NEUROBENCH),--run-neurobench,)
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --networks vg11_snn --datasets MNIST 
 
 
-#  /$$$$$$$   /$$$$$$  /$$$$$$$$ /$$$$$$   /$$$$$$  /$$$$$$$$ /$$$$$$$$
-# | $$__  $$ /$$__  $$|__  $$__//$$__  $$ /$$__  $$| $$_____/|__  $$__/
-# | $$  \ $$| $$  \ $$   | $$  | $$  \ $$| $$  \__/| $$         | $$
-# | $$  | $$| $$$$$$$$   | $$  | $$$$$$$$|  $$$$$$ | $$$$$      | $$
-# | $$  | $$| $$__  $$   | $$  | $$__  $$ \____  $$| $$__/      | $$
-# | $$  | $$| $$  | $$   | $$  | $$  | $$ /$$  \ $$| $$         | $$
-# | $$$$$$$/| $$  | $$   | $$  | $$  | $$|  $$$$$$/| $$$$$$$$   | $$
-# |_______/ |__/  |__/   |__/  |__/  |__/ \______/ |________/   |__/
 
-# Convenience target: run all algorithms on MNIST only
-all-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
+#  /$$$$$$$  /$$$$$$$$ /$$$$$$$  /$$$$$$$   /$$$$$$  /$$$$$$$  /$$   /$$  /$$$$$$  /$$$$$$ /$$$$$$$  /$$$$$$ /$$       /$$$$$$ /$$$$$$$$ /$$     /$$
+# | $$__  $$| $$_____/| $$__  $$| $$__  $$ /$$__  $$| $$__  $$| $$  | $$ /$$__  $$|_  $$_/| $$__  $$|_  $$_/| $$      |_  $$_/|__  $$__/|  $$   /$$/
+# | $$  \ $$| $$      | $$  \ $$| $$  \ $$| $$  \ $$| $$  \ $$| $$  | $$| $$  \__/  | $$  | $$  \ $$  | $$  | $$        | $$     | $$    \  $$ /$$/ 
+# | $$$$$$$/| $$$$$   | $$$$$$$/| $$$$$$$/| $$  | $$| $$  | $$| $$  | $$| $$        | $$  | $$$$$$$   | $$  | $$        | $$     | $$     \  $$$$/  
+# | $$__  $$| $$__/   | $$____/ | $$__  $$| $$  | $$| $$  | $$| $$  | $$| $$        | $$  | $$__  $$  | $$  | $$        | $$     | $$      \  $$/   
+# | $$  \ $$| $$      | $$      | $$  \ $$| $$  | $$| $$  | $$| $$  | $$| $$    $$  | $$  | $$  \ $$  | $$  | $$        | $$     | $$       | $$    
+# | $$  | $$| $$$$$$$$| $$      | $$  | $$|  $$$$$$/| $$$$$$$/|  $$$$$$/|  $$$$$$/ /$$$$$$| $$$$$$$/ /$$$$$$| $$$$$$$$ /$$$$$$   | $$       | $$    
+# |__/  |__/|________/|__/      |__/  |__/ \______/ |_______/  \______/  \______/ |______/|_______/ |______/|________/|______/   |__/       |__/   
+# ==================================================================================================================================================
+# Uses th reproducibility.py script to run the experiments for the reproducibility suite. The arguments that can be used are:
+# --configs-dir: path to the directory containing the configuration files for the reproducibility suite (required)
+# --epochs: number of epochs to train each network
 
-# Convenience target: run all algorithms on CIFAR10 only
-all-cifar10:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets CIFAR10 $(if $(ALGORITHMS),--algorithms $(ALGORITHMS),)
+# Reproducibility suite (paper configs under configs/reproducibility)
+repro:
+	$(PYTHON) reproducibility.py --configs-dir configs/reproducibility --epochs 1
 
 
 
@@ -114,6 +87,8 @@ all-cifar10:
 # | $$  | $$| $$      | $$  \ $$| $$  | $$| $$  \ $$  | $$     | $$   | $$  | $$| $$\  $ | $$
 # | $$  | $$| $$$$$$$$|  $$$$$$/|  $$$$$$/| $$  | $$ /$$$$$$   | $$   | $$  | $$| $$ \/  | $$
 # |__/  |__/|________/ \______/  \______/ |__/  |__/|______/   |__/   |__/  |__/|__/     |__/
+# ===========================================================================================
+# Sections that showcase how to directly use the main with a configuration file.
 
 # BPTT
 bptt-mnist-fc:
@@ -129,43 +104,6 @@ bptt-mnist:
 	$(MAKE) bptt-mnist-conv
 	$(MAKE) bptt-mnist-rsnn
 	$(MAKE) bptt-mnist-vgg11
-
-# STSF
-stsf-mnist:
-	$(PYTHON) main.py --config configs/mnist_default.yaml --epochs $(EPOCHS)
-stsf-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stsf
-
-# E-prop
-eprop-mnist:
-	$(PYTHON) main.py --config configs/mnist_eprop.yaml --epochs $(EPOCHS)
-eprop-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms eprop
-
-# DECOLLE
-decolle-mnist:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --datasets MNIST --algorithms decolle
-decolle-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms decolle
-
-# OTTT
-ottt-mnist-fc:
-	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-fc_snn.yaml --epochs 1
-ottt-mnist-conv:
-	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-conv_snn.yaml --epochs 1
-ottt-mnist-rsnn:
-	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-r_snn.yaml --epochs 1
-ottt-mnist-vgg11:
-	$(PYTHON) main.py --config configs/benchmarking/ottt/ottt-mnist-vg11_snn.yaml --epochs 1
-ottt-mnist:
-	$(MAKE) ottt-mnist-fc
-	$(MAKE) ottt-mnist-conv
-	$(MAKE) ottt-mnist-rsnn
-	$(MAKE) ottt-mnist-vgg11
-ottt-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ottt
-ottt-repro:
-	$(PYTHON) main.py --config configs/reproducibility/cifar10_ottt_repro.yaml --epochs $(OTTT_REPRO_EPOCHS) --batch-size $(OTTT_REPRO_BATCH_SIZE) --T $(OTTT_REPRO_TIMESTEPS) --lr $(OTTT_REPRO_LR) --seed $(OTTT_REPRO_SEED)
 
 # DRTP
 drtp-mnist-fc:
@@ -186,73 +124,6 @@ ostl-mnist-fc:
 ostl-all-datasets:
 	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ostl
 
-# ELL
-ell-mnist:
-	$(PYTHON) main.py --config configs/mnist_ell.yaml --epochs $(EPOCHS)
-ell-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms ell
-
-# FELL
-fell-mnist:
-	$(PYTHON) main.py --config configs/mnist_fell.yaml --epochs $(EPOCHS)
-fell-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms fell
-
-# BELL
-bell-mnist:
-	$(PYTHON) main.py --config configs/mnist_bell.yaml --epochs $(EPOCHS)
-bell-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms bell
-
-# STLLR
-stllr-mnist:
-	$(PYTHON) main.py --config configs/mnist_stllr.yaml --epochs $(EPOCHS)
-stllr-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stllr
-
-# STOP
-stop-mnist:
-	$(PYTHON) main.py --config configs/mnist_stop.yaml --epochs $(EPOCHS)
-stop-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms stop
-
-# ETLP
-etlp-mnist:
-	$(PYTHON) main.py --config configs/mnist_etlp.yaml --epochs $(EPOCHS)
-etlp-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms etlp
-
-# Trace Propagation (TP)
-tp-mnist:
-	$(PYTHON) main.py --config configs/mnist_tp.yaml --epochs $(EPOCHS)
-tp-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms tp
-
-# ES-D-RTRL
-esd-rtrl-mnist:
-	$(PYTHON) main.py --config configs/mnist_esd_rtrl.yaml --epochs $(EPOCHS)
-esd-rtrl-all-datasets:
-	$(PYTHON) run_all_benchmarks.py --epochs $(EPOCHS) --device $(DEVICE) --algorithms esd_rtrl
-
-
-# STOP on complex datasets (new backbones)
-stop-vgg11-cifar10:
-	$(PYTHON) main.py --config configs/cifar10_stop_vgg11.yaml --epochs $(STOP_VGG11_CIFAR10_EPOCHS) --batch-size $(STOP_VGG11_CIFAR10_BATCH_SIZE) --T $(STOP_VGG11_CIFAR10_TIMESTEPS) --lr $(STOP_VGG11_CIFAR10_LR)
-stop-resnet18-cifar10:
-	$(PYTHON) main.py --config configs/cifar10_stop_resnet18.yaml --epochs $(STOP_RESNET18_CIFAR10_EPOCHS) --batch-size $(STOP_RESNET18_CIFAR10_BATCH_SIZE) --T $(STOP_RESNET18_CIFAR10_TIMESTEPS) --lr $(STOP_RESNET18_CIFAR10_LR)
-stop-vgg11-svhn:
-	$(PYTHON) main.py --config configs/svhn_stop_vgg11.yaml --epochs $(STOP_VGG11_SVHN_EPOCHS) --batch-size $(STOP_VGG11_SVHN_BATCH_SIZE) --T $(STOP_VGG11_SVHN_TIMESTEPS) --lr $(STOP_VGG11_SVHN_LR)
-stop-resnet18-svhn:
-	$(PYTHON) main.py --config configs/svhn_stop_resnet18.yaml --epochs $(STOP_RESNET18_SVHN_EPOCHS) --batch-size $(STOP_RESNET18_SVHN_BATCH_SIZE) --T $(STOP_RESNET18_SVHN_TIMESTEPS) --lr $(STOP_RESNET18_SVHN_LR)
-stop-newnets-cifar10:
-	$(MAKE) stop-vgg11-cifar10
-	$(MAKE) stop-resnet18-cifar10
-stop-newnets-svhn:
-	$(MAKE) stop-vgg11-svhn
-	$(MAKE) stop-resnet18-svhn
-stop-newnets-all:
-	$(MAKE) stop-newnets-cifar10
-	$(MAKE) stop-newnets-svhn
 
 
 
@@ -265,13 +136,11 @@ stop-newnets-all:
 # |  $$$$$$/   | $$    /$$$$$$| $$$$$$$$|  $$$$$$/
 #  \______/    |__/   |______/|________/ \______/
 
-# OSTTP on MNIST
-run-osttp-mnist:
-	$(PYTHON) main.py --config configs/mnist_osttp.yaml
-
-# Remove Python bytecode and caches
+# Remove downloaded datasets
 clean-data:
 	rm -rf src/Data
+	
+# Remove experiments data
 clean-experiments:
 	rm -rf experiments
 clean-results:
