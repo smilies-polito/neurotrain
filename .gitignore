@@ -105,3 +105,6 @@ local_config.yaml
 .env.local
 .cursor
 .zed
+
+# HPC outputs
+hpc/slurm_outputs/*

@@ -145,6 +145,10 @@ ostl-all-datasets:
 clean-data:
 	rm -rf src/Data
 	
+# hpc
+clean-hpc:
+	rm -rf hpc/slurm_outputs/*
+	
 # Remove experiments data
 clean-experiments:
 	rm -rf experiments

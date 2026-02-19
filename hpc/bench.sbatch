@@ -1,8 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=snn-bench
+#SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
 #SBATCH --output=hpc/slurm_outputs/%x-%j.out
@@ -30,6 +32,11 @@ export PYTHONUNBUFFERED=1
 
 echo "[INFO] start=$(date -Iseconds) job_id=${SLURM_JOB_ID:-na} node=${SLURMD_NODENAME:-na}"
 echo "[INFO] target=${bench_target} cpus_per_task=${cpus} python=${python_bin}"
+echo "[INFO] cuda_visible_devices=${CUDA_VISIBLE_DEVICES:-unset}"
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi -L || true
+fi
 
 if [[ -n "${APPTAINER_IMAGE:-}" ]]; then
     if ! command -v apptainer >/dev/null 2>&1; then
@@ -38,7 +45,7 @@ if [[ -n "${APPTAINER_IMAGE:-}" ]]; then
     fi
 
     srun --cpu-bind=cores --hint=nomultithread \
-        apptainer exec --bind "${project_root}:${project_root}" "${APPTAINER_IMAGE}" \
+        apptainer exec --nv --bind "${project_root}:${project_root}" "${APPTAINER_IMAGE}" \
         bash -lc "cd '${project_root}' && make '${bench_target}' PYTHON='${python_bin}'"
 else
     srun --cpu-bind=cores --hint=nomultithread \
