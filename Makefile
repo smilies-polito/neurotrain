@@ -3,7 +3,6 @@
 PYTHON ?= python3
 
 
-
 #  /$$$$$$$  /$$$$$$$$ /$$   /$$  /$$$$$$  /$$   /$$ /$$      /$$  /$$$$$$  /$$$$$$$  /$$   /$$ /$$$$$$ /$$   /$$  /$$$$$$ 
 # | $$__  $$| $$_____/| $$$ | $$ /$$__  $$| $$  | $$| $$$    /$$$ /$$__  $$| $$__  $$| $$  /$$/|_  $$_/| $$$ | $$ /$$__  $$
 # | $$  \ $$| $$      | $$$$| $$| $$  \__/| $$  | $$| $$$$  /$$$$| $$  \ $$| $$  \ $$| $$ /$$/   | $$  | $$$$| $$| $$  \__/
@@ -33,8 +32,14 @@ PYTHON ?= python3
 # --run-neurobench: whether to run the neurobench evaluation after training (default:
 
 # Full test suite
+bench:
+	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 50 --run-neurobench
 bench-short:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --run-neurobench
+
+.PHONY: bench-hpc
+bench-hpc:
+	sbatch hpc/bench.sbatch
 # Only BPTT test suite
 bptt:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt --run-neurobench --datasets MNIST

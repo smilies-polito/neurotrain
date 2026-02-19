@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --job-name=snn-bench
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --output=hpc/slurm_outputs/%x-%j.out
+#SBATCH --error=hpc/slurm_outputs/%x-%j.err
+
+set -euo pipefail
+
+project_root="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
+bench_target="${BENCH_TARGET:-bench}"
+python_bin="${PYTHON_BIN:-python3}"
+
+cd "${project_root}"
+mkdir -p hpc/slurm_outputs benchmark_results src/Data
+
+cpus="${SLURM_CPUS_PER_TASK:-1}"
+export STSF_DATA="${STSF_DATA:-${project_root}/src/Data}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-${cpus}}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-${cpus}}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-${cpus}}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-${cpus}}"
+export NUMEXPR_MAX_THREADS="${NUMEXPR_MAX_THREADS:-${cpus}}"
+export OMP_PLACES="${OMP_PLACES:-cores}"
+export OMP_PROC_BIND="${OMP_PROC_BIND:-spread}"
+export PYTHONUNBUFFERED=1
+
+echo "[INFO] start=$(date -Iseconds) job_id=${SLURM_JOB_ID:-na} node=${SLURMD_NODENAME:-na}"
+echo "[INFO] target=${bench_target} cpus_per_task=${cpus} python=${python_bin}"
+
+if [[ -n "${APPTAINER_IMAGE:-}" ]]; then
+    if ! command -v apptainer >/dev/null 2>&1; then
+        echo "[ERROR] APPTAINER_IMAGE is set but apptainer is not available." >&2
+        exit 1
+    fi
+
+    srun --cpu-bind=cores --hint=nomultithread \
+        apptainer exec --bind "${project_root}:${project_root}" "${APPTAINER_IMAGE}" \
+        bash -lc "cd '${project_root}' && make '${bench_target}' PYTHON='${python_bin}'"
+else
+    srun --cpu-bind=cores --hint=nomultithread \
+        make "${bench_target}" PYTHON="${python_bin}"
+fi
+
+echo "[INFO] done=$(date -Iseconds)"
