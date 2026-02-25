@@ -323,8 +323,8 @@ def get_network(
             threshold=kwargs.get("threshold", 1.0),
         )
 
-    if effective_arch == "ottt_conv_net":
-        from networks.reproducibility.OTTT_conv_net import OTTTConvNet
+    if effective_arch == "ottt_repro":
+        from networks.reproducibility.ottt_vgg_sws_snntorch import OTTTVGGSWS_SNNtorch
 
         input_shape = kwargs.get("input_shape")
         if input_shape is None:
@@ -333,15 +333,17 @@ def get_network(
         tau = kwargs.get("tau")
         tau = 2.0 if tau is None else float(tau)
 
-        return OTTTConvNet(
+        return OTTTVGGSWS_SNNtorch(
             input_shape=input_shape,
             num_classes=int(kwargs.get("num_classes", layer_sizes[-1])),
             tau=tau,
             threshold=float(kwargs.get("threshold", 1.0)),
+            surrogate_slope=float(kwargs.get("ottt_surrogate_slope", 4.0)),
             scale=float(kwargs.get("ottt_scale", 2.74)),
             fc_hw=int(kwargs.get("fc_hw", 1)),
             weight_standardization=bool(kwargs.get("weight_standardization", True)),
             ws_eps=float(kwargs.get("ws_eps", 1e-4)),
+            ws_learnable_gain=bool(kwargs.get("ws_learnable_gain", True)),
             bias=bool(kwargs.get("bias", True)),
         )
 
@@ -363,7 +365,7 @@ def get_network(
             f"Unknown model architecture '{effective_arch}'. "
             "Use 'fc', 'conv', 'local_classifier', 'recurrent', 'stllr', "
             "'vgg11', 'resnet18', 'fc_snn', 'r_snn', 'conv_snn', 'vg11_snn', "
-            "or 'ottt_conv_net'."
+            "or 'ottt_repro'."
         )
     # DRTP/OSTL use the newer single-step FC SNN baseline.
     if algorithm_name in ("drtp", "ostl"):

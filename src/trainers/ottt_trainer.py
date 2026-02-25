@@ -43,17 +43,16 @@ class OTTTTrainer(BaseTrainer):
         lr: float,                              # Learning rate for optimizer updates
         batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
         trace_decay: Optional[float] = None,    # Decay factor for synaptic traces (default: 0.5)
-        online_updates: bool = False,
+        online_updates: bool = True,
         loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
+        grad_clip: Optional[float] = None,      # Element-wise gradient clip before optimizer step
+        sanitize_grads: Optional[bool] = None,  # Replace NaN/Inf grads with finite values before step
         optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        self._use_internal_ottt_grad = bool(
-            getattr(self.network, "uses_internal_ottt_grad", False)
-        )
         # Match OTTT default: decay = 1 - 1/tau for LIF traces.
         if trace_decay is None:
             tau = float(getattr(self.network, "tau", 2.0))
@@ -65,6 +64,17 @@ class OTTTTrainer(BaseTrainer):
                 0.05 if getattr(self.network, "constant_input_per_timestep", False) else 0.0
             )
         self.loss_lambda = float(loss_lambda)
+        static_input_recipe = bool(
+            getattr(self.network, "constant_input_per_timestep", False)
+        )
+        if grad_clip is None:
+            grad_clip = 0.2 if static_input_recipe else 0.0
+        self.grad_clip = float(grad_clip)
+        if self.grad_clip < 0.0:
+            raise ValueError("OTTTTrainer requires grad_clip >= 0.")
+        if sanitize_grads is None:
+            sanitize_grads = static_input_recipe
+        self.sanitize_grads = bool(sanitize_grads)
         self._external_optimizer = optimizer
         # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
         self.optimizer = (
@@ -74,30 +84,28 @@ class OTTTTrainer(BaseTrainer):
         )
 
         # OTTT traces are defined on synaptic inputs.
-        # For networks that implement official grad-with-rate internally, hooks are not needed.
         self.synapse_layers = []
         self.trace_synapse_layers = []
-        if not self._use_internal_ottt_grad:
-            unsupported_synapse_types = set()
-            allowed_parametrized_types = {"ParametrizedLinear", "ParametrizedConv2d"}
-            for module in self.network.modules():
-                if not isinstance(module, (nn.Linear, nn.Conv2d)):
-                    continue
-                if type(module) in (nn.Linear, nn.Conv2d) or type(module).__name__ in allowed_parametrized_types:
-                    self.synapse_layers.append(module)
-                else:
-                    unsupported_synapse_types.add(type(module).__name__)
-            if unsupported_synapse_types:
-                raise TypeError(
-                    "OTTTTrainer supports nn.Linear/nn.Conv2d and torch parametrized variants; "
-                    f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
-                )
-            if not self.synapse_layers:
-                raise TypeError(
-                    "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
-                )
-            # Match official OTTT grad-with-rate behavior by excluding the first synapse.
-            self.trace_synapse_layers = self.synapse_layers[1:]
+        unsupported_synapse_types = set()
+        allowed_parametrized_types = {"ParametrizedLinear", "ParametrizedConv2d"}
+        for module in self.network.modules():
+            if not isinstance(module, (nn.Linear, nn.Conv2d)):
+                continue
+            if type(module) in (nn.Linear, nn.Conv2d) or type(module).__name__ in allowed_parametrized_types:
+                self.synapse_layers.append(module)
+            else:
+                unsupported_synapse_types.add(type(module).__name__)
+        if unsupported_synapse_types:
+            raise TypeError(
+                "OTTTTrainer supports nn.Linear/nn.Conv2d and torch parametrized variants; "
+                f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
+            )
+        if not self.synapse_layers:
+            raise TypeError(
+                "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
+            )
+        # Match official OTTT grad-with-rate behavior by excluding the first synapse.
+        self.trace_synapse_layers = self.synapse_layers[1:]
 
         self._trace_by_module: Dict[nn.Module, torch.Tensor] = {}
 
@@ -119,33 +127,48 @@ class OTTTTrainer(BaseTrainer):
         raise TypeError(f"Unsupported synapse module type: {type(module).__name__}")
 
     def _make_trace_hook(self, module: nn.Module):
-        """Per-synapse hook implementing OTTT trace substitution (Paper Eq. 4/5/7)."""
+        """
+        This function is the hearth of the OTTT learning rule in the trainer, here is where:
+        - Trace computation happens
+        - Perform a gradient substitution so that during backward we habe multiplication of the gradient with the trace instead of the spikes
+        Per-synapse hook implementing OTTT trace substitution (Paper Eq. 4/5/7)
+        """
 
+        # Define the hook function
         def hook(_module: nn.Module, inputs, output):
+            # Safe-guard
             if not inputs:
                 return output
             pre = inputs[0]
             if not isinstance(pre, torch.Tensor):
                 return output
 
-            pre_detached = pre.detach()
-            prev_trace = self._trace_by_module.get(module)
+            # Easy to understand calculation of the trace in the hook
+            pre_detached = pre.detach()                                         # Important to detach the trace from the graph
+            prev_trace = self._trace_by_module.get(module)                      # Get previous trace or create a new one
             if prev_trace is None or prev_trace.shape != pre_detached.shape:
                 prev_trace = torch.zeros_like(pre_detached)
-            trace = prev_trace * self.trace_decay + pre_detached
-            self._trace_by_module[module] = trace
+            trace = prev_trace * self.trace_decay + pre_detached                # Trace calculation
+            self._trace_by_module[module] = trace                               # Trace storage
 
-            # Forward uses real presynaptic activity.
-            # Backward acts as if presynaptic trace was used.
+            # Build a proxy input whose *forward value* is the presynaptic trace,
+            # while still allowing the gradient to be routed to the original presynaptic tensor (spatial credit within the timestep).
             pre_for_grad = _ReplaceForGrad.apply(pre, trace)
+            
+            # Shadow forward used for gradient computation: behaves like module(trace) for autograd.
             out_for_grad = self._module_forward_with_input(module, pre_for_grad)
+            
+            # Return the real forward output (detached so it carries no gradients),
+            # but route gradients through out_for_grad so synapse weight grads use the trace.
             return _ReplaceForGrad.apply(out_for_grad, output.detach())
 
+        # Return the hook function
         return hook
 
     def _register_trace_hooks(self):
         handles = []
         for layer in self.trace_synapse_layers:
+            # HOOKS FOR FORWARD PASS: 
             handles.append(layer.register_forward_hook(self._make_trace_hook(layer)))
         return handles
 
@@ -162,6 +185,19 @@ class OTTTTrainer(BaseTrainer):
     def _zero_all_grads(self) -> None:
         self.optimizer.zero_grad(set_to_none=True)
 
+    def _stabilize_grads(self) -> None:
+        if not self.sanitize_grads and self.grad_clip <= 0.0:
+            return
+        limit = self.grad_clip if self.grad_clip > 0.0 else 0.0
+        for param in self.network.parameters():
+            grad = param.grad
+            if grad is None:
+                continue
+            if self.sanitize_grads:
+                grad.nan_to_num_(nan=0.0, posinf=limit, neginf=-limit)
+            if self.grad_clip > 0.0:
+                grad.clamp_(-self.grad_clip, self.grad_clip)
+
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
         Train one sequence batch.
@@ -170,6 +206,8 @@ class OTTTTrainer(BaseTrainer):
             data: [T, B, ...]
             target: [B]
         """
+        
+        # INITIALIZATIONS
         num_timesteps = int(data.shape[0])
         device = data.device
 
@@ -177,7 +215,7 @@ class OTTTTrainer(BaseTrainer):
         self._trace_by_module = {}
         self._zero_all_grads()
 
-        hooks = [] if self._use_internal_ottt_grad else self._register_trace_hooks()
+        hooks = self._register_trace_hooks()
         total_loss = torch.tensor(0.0, device=device)
         spk_sum = None
         use_constant_input = bool(
@@ -189,8 +227,7 @@ class OTTTTrainer(BaseTrainer):
             with torch.enable_grad():
                 # Loop on TIMESTEPS
                 for t in range(num_timesteps):
-                    if not self._use_internal_ottt_grad:
-                        self._detach_neuron_state()
+                    self._detach_neuron_state()
                     if self.online_updates:
                         self._zero_all_grads()
 
@@ -220,9 +257,11 @@ class OTTTTrainer(BaseTrainer):
                     loss_t.backward()
 
                     if self.online_updates:
+                        self._stabilize_grads()
                         self.optimizer.step()
 
                 if not self.online_updates:
+                    self._stabilize_grads()
                     self.optimizer.step()
         finally:
             for handle in hooks:

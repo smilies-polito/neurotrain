@@ -91,10 +91,10 @@ def trainable(
         "vgg11",
         "vg11_snn",
         "resnet18",
-        "ottt_conv_net",
+        "ottt_repro",
     )
     use_ottt_static_cifar = (
-        config.model.architecture == "ottt_conv_net"
+        config.model.architecture == "ottt_repro"
         and str(config.data.dataset).upper() == "CIFAR10"
     )
     trainloader, testloader = get_loader(
@@ -370,7 +370,7 @@ def trainable(
     if (
         optimizer is not None
         and trainer_name == "ottt"
-        and config.model.architecture == "ottt_conv_net"
+        and config.model.architecture == "ottt_repro"
     ):
         lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=config.training.epochs

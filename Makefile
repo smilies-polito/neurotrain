@@ -31,15 +31,16 @@ PYTHON ?= python3
 # --seed: random seed to use for training (default: 0)
 # --run-neurobench: whether to run the neurobench evaluation after training (default:
 
+
 # Full test suite
 bench:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 50 --run-neurobench
 bench-short:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --run-neurobench
-
-.PHONY: bench-hpc
 bench-hpc:
 	sbatch hpc/bench.sbatch
+	
+	
 # Only BPTT test suite
 bptt:
 	$(PYTHON) benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks --epochs 1 --algorithms bptt --run-neurobench --datasets MNIST
@@ -81,6 +82,9 @@ all-mnist-vgg11:
 # Reproducibility suite (paper configs under configs/reproducibility)
 repro:
 	$(PYTHON) reproducibility.py --configs-dir configs/reproducibility --epochs 1
+
+ottt-repro:
+	$(PYTHON) reproducibility.py --configs-dir configs/reproducibility --algorithms ottt 
 
 
 

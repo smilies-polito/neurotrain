@@ -96,7 +96,7 @@ These come from `validate_config()` in `src/utils/config.py` (reproducibility ru
   - `conv`, `conv_snn`
   - `local_classifier`, `recurrent`, `stllr`
   - `vgg11`, `vg11_snn`, `resnet18`
-  - `ottt_conv_net`
+  - `ottt_repro`
 - `trainer.name` must be one of:
   - `stsf`, `bptt`, `decolle`, `eprop`, `esd_rtrl`
   - `drtp`, `etlp`, `ostl`, `osttp`, `ottt`
