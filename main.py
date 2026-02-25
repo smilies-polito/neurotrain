@@ -93,19 +93,12 @@ def trainable(
         "resnet18",
         "ottt_repro",
     )
-    use_ottt_static_cifar = (
-        config.model.architecture == "ottt_repro"
-        and str(config.data.dataset).upper() == "CIFAR10"
-    )
     trainloader, testloader = get_loader(
         config.data.dataset,
         config.training.batch_size,
         config.data.timesteps,
         flatten=flatten_inputs,
         device=device,
-        static_input=use_ottt_static_cifar,
-        cifar_use_augmentation=use_ottt_static_cifar,
-        cifar_use_normalization=use_ottt_static_cifar,
     )
 
     dataset_input_shapes = {

@@ -100,6 +100,11 @@ class RSNN(BaseSNN):
             self.layers.append(syn)
             self.layers.append(neu)
 
+        print(
+            f"[Net][RSNN] in_shape={self.in_shape} "
+            f"recurrent_hidden={self.hidden_sizes} out={self._n_classes}"
+        )
+
     def forward(self, x: torch.Tensor):
         if x.dim() != len(self.in_shape) + 1 or tuple(x.shape[1:]) != self.in_shape:
             raise ValueError(

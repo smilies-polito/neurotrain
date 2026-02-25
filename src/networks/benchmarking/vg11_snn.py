@@ -187,6 +187,13 @@ class VG11SNN(BaseSNN):
                 dummy = fc(dummy)
                 self._layer_output_shapes.append((int(dummy.shape[1]),))
 
+        conv_channels = [int(conv.out_channels) for conv in self.conv_layers]
+        classifier_sizes = [int(fc.out_features) for fc in self.classifier_layers]
+        print(
+            f"[Net][VG11SNN] in_shape={self.in_shape} "
+            f"conv={conv_channels} classifier={classifier_sizes}"
+        )
+
     def forward(self, x: torch.Tensor):
         if x.dim() != 4 or tuple(x.shape[1:]) != self.in_shape:
             raise ValueError(

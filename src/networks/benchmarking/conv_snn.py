@@ -187,6 +187,12 @@ class ConvSNN(BaseSNN):
                 dummy = fc(dummy)
                 self._layer_output_shapes.append((int(dummy.shape[1]),))
 
+        print(
+            f"[Net][ConvSNN] in_shape={self.in_shape} "
+            f"conv={self.conv_channels} pool_after={self.pool_after} "
+            f"classifier={[*self.fc_hidden_sizes, self._n_classes]}"
+        )
+
     def forward(self, x: torch.Tensor):
         if x.dim() != 4 or tuple(x.shape[1:]) != self.in_shape:
             raise ValueError(

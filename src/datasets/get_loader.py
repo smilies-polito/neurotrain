@@ -52,9 +52,6 @@ def get_loader(
     device=None,
     seed=None,
     raw_for_local_classifier=False,
-    static_input: bool = False,
-    cifar_use_augmentation: bool = False,
-    cifar_use_normalization: bool = False,
 ):
     """
     Get train and test loaders for a dataset.
@@ -91,9 +88,6 @@ def get_loader(
             flatten=flatten,
             pin_memory=pin_memory,
             seed=seed,
-            static_input=static_input,
-            use_augmentation=cifar_use_augmentation,
-            use_normalization=cifar_use_normalization,
         )
     elif name == "FashionMNIST":
         return FashionMNISTLoader(

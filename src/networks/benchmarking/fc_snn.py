@@ -84,6 +84,11 @@ class FCSNN(BaseSNN):
         self._last_layer_inputs: List[torch.Tensor] = []
         self._last_layer_mems: List[torch.Tensor] = []
 
+        print(
+            f"[Net][FCSNN] in_shape={self.in_shape} "
+            f"layers={[int(v) for v in layer_sizes]}"
+        )
+
     def forward(self, x: torch.Tensor):
         if x.dim() != len(self.in_shape) + 1 or tuple(x.shape[1:]) != self.in_shape:
             raise ValueError(
