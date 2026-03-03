@@ -1,337 +1,364 @@
-# Config Files Guide (Benchmarking vs Reproducibility)
+# Configuration Guide (Main, Benchmarking, Reproducibility)
 
-This repo exposes two config-driven entrypoints:
+This guide explains:
 
-- `reproducibility.py`: run *one config file per experiment* (typically “per paper/per setting”).
-- `benchmarking.py`: run a *matrix benchmark* across **datasets x networks x trainers**.
+1. Which config files are used by each entrypoint.
+2. How config values flow into `src/networks`, `src/trainers`, and `src/datasets`.
+3. What is currently validated/handled correctly vs what is currently ignored.
 
-Both accept YAML (`.yaml`/`.yml`) and (for reproducibility) JSON (`.json`).
+Scope audited here:
+
+- `main.py`
+- `benchmarking.py`
+- `reproducibility.py`
+- `configs/benchmarking.yaml`
+- all files under `configs/benchmarking/`
+- all files under `configs/networks/`
+- all files under `configs/reproducibility/`
 
 ---
 
-## 1) Reproducibility mode (`reproducibility.py`)
+## 1) Quick Decision: Which Config Style Should I Use?
 
-### 1.1 Where configs live + how they are discovered
+- Use `main.py --config <file>` when you want **one specific experiment**.
+  - Example configs: `configs/benchmarking/bptt/...`, `configs/benchmarking/ottt/...`, `configs/reproducibility/...`, and legacy root configs in `configs/*.yaml`.
 
-- Default directory: `configs/reproducibility/` (override with `--configs-dir`).
-- The script recursively scans for `*.yaml`, `*.yml`, `*.json`.
-- Each file becomes one runnable experiment **only if** it contains:
-  - `trainer.name` (required; configs missing this are skipped)
-  - `data.dataset` (strongly recommended; used in reports/IDs; missing becomes `"unknown"` in the suite UI)
+- Use `benchmarking.py` when you want a **matrix benchmark**:
+  - datasets x network blueprints x trainers
+  - global suite config in `configs/benchmarking.yaml`
+  - network blueprints in `configs/networks/*.yaml`
 
-Naming note:
-- The file stem becomes `config_name` in the summary, and is part of the stable experiment id:
-  `"{trainer}__{dataset}__{config_stem}"`.
+- Use `reproducibility.py` when you want to run **multiple single-run configs** from a folder:
+  - default folder: `configs/reproducibility/`
+  - internally reuses the same training pipeline as `main.py`.
 
-Logging note:
-- `reproducibility.py` overrides `experiment.log_dir` at runtime so all artifacts land under its timestamped
-  `--output-dir` folder. You can still set `experiment.log_dir` in the config, but the suite will replace it.
+---
 
-### 1.2 Config schema (what keys are allowed)
+## 2) End-to-End Config Flow by Entrypoint
 
-Reproducibility configs are parsed by `src/utils/config.py` (`load_config()` -> `Config.from_dict()`).
-That means:
+## 2.1 `main.py` (single run)
 
-- The root must be a mapping (YAML dict / JSON object).
-- **Inside each section**, only the keys listed below are allowed. Unknown keys inside a section will raise an error.
+Config path:
 
-Sections and keys:
+- CLI parsed in `src/utils/parameters.py`
+- File loaded in `src/utils/config.py::load_config`
+- CLI overrides merged in `src/utils/config.py::merge_config_with_args`
+- Validated in `src/utils/config.py::validate_config`
+- Training executed in `main.py::trainable`
 
-- `experiment`:
-  - `name` (string)
-  - `seed` (int)
-  - `deterministic` (bool)
-  - `log_dir` (string path)
-- `model`:
-  - `architecture` (string; see “Allowed values”)
-  - `layer_sizes` (list of ints; `[input, hidden..., output]`)
-  - `conv_layers` (list of dicts; used by some conv architectures)
-  - `beta` (float)
-  - `tau` (float or null; used by ELL/FELL/BELL and some paper reproductions)
-  - `threshold` (float)
-  - `recurrent_type` (string; `standard|srnn|snu|ssnu`)
-  - `quantization` (bool)
-- `training`:
-  - `epochs` (int)
-  - `batch_size` (int)
-  - `learning_rate` (float)
-  - `optimizer` (string or null; see “Allowed values”)
-  - `weight_decay` (float)
-  - `freeze_conv` (bool)
-- `trainer`:
-  - `name` (string; see “Allowed values”)
-  - `update_last` (bool)
-  - `update_every` (int)
-  - `seq_batch` (int)
-- Trainer-specific sections (optional; keep values valid even if unused):
-  - `drtp`: `loss`, `output_mode`, `paper_reproduction`, `surrogate_scale`, `surrogate_type`, `feedback_distribution`, `feedback_scale`, `fixed_feedback`
-  - `etlp`: `trace_decay`, `surrogate_scale`, `voltage_reg`, `weight_l1`, `weight_l2`, `update_rate_hz`, `dt_ms`, `feedback_distribution`, `feedback_scale`
-  - `ostl`: `surrogate_scale`, `grad_clip`, `output_mode`
-  - `osttp`: `pseudo_derivative`, `output_loss`, `output_readout`, `feedback_scale`, `feedback_seed`, `target_dim`, `grad_clip`, `debug`
-  - `stop`: `loss`, `surrogate`, `learn_weights`, `learn_thresholds`, `learn_leakage`, `lr_weight`, `lr_threshold`, `lr_leakage`, `threshold_min`, `momentum`, `cosine_schedule`, `cosine_t_max`, `static_input_timesteps`
-- `data`:
-  - `dataset` (string; see “Allowed values”)
-  - `timesteps` (int)
-  - `data_dir` (string path)
-  - `num_workers` (int)
-- `hardware`:
-  - `device` (string; e.g. `auto|cuda|cuda:0|cpu|mps`)
-  - `mixed_precision` (bool)
-- `checkpoint`:
-  - `save_every` (int; `0` means only best/latest)
-  - `save_best` (bool)
-  - `save_latest` (bool)
-  - `max_keep` (int; `0` means keep all)
+Runtime wiring:
 
-### 1.3 Allowed values + important constraints
+- `trainer.name` -> trainer class import via `main.py::get_trainer` -> `src/trainers/*`.
+- `model.*` + `trainer.name` -> network creation through:
+  - custom branches in `main.py` for `recurrent`, `conv`, and DRTP paper conv mode
+  - otherwise `src/networks/get_network.py` -> `src/networks/*`.
+- `data.dataset`, `training.batch_size`, `data.timesteps`, architecture-dependent flattening -> `src/datasets/get_loader.py` -> `src/datasets/*`.
+- `training.optimizer`, `training.learning_rate`, `training.weight_decay` -> optimizer creation in `main.py`.
+- Trainer-specific sections (`drtp`, `etlp`, `ostl`, `stop`, `osttp`) -> explicit kwargs in `main.py`.
 
-These come from `validate_config()` in `src/utils/config.py` (reproducibility runs validate before training).
+---
 
-- `data.dataset` must be one of:
-  - `MNIST`, `CIFAR10`, `FashionMNIST`, `SVHN`
-  - `NMNIST`, `DVSGesture`
-  - `SpeechCommands`, `WISDM`, `PrimateReaching`, `MackeyGlass`
-- `model.architecture` must be one of:
-  - `fc`, `fc_snn`, `r_snn`
-  - `conv`, `conv_snn`
-  - `local_classifier`, `recurrent`, `stllr`
-  - `vgg11`, `vg11_snn`, `resnet18`
-  - `ottt_repro`
-- `trainer.name` must be one of:
-  - `stsf`, `bptt`, `decolle`, `eprop`, `esd_rtrl`
-  - `drtp`, `etlp`, `ostl`, `osttp`, `ottt`
-  - `ell`, `fell`, `bell`, `stllr`, `stop`, `tp`, `stdp`
-- `training.optimizer` must be `null` or one of: `adam`, `sgd`, `nag`, `rmsprop`.
+## 2.2 `benchmarking.py` (matrix run)
 
-Trainer/model coupling (common gotchas):
+Config surfaces:
 
-- `etlp` requires `model.architecture: fc`.
-- `osttp` requires `model.architecture: fc`.
-- `ostl` requires `model.architecture: fc` or `fc_snn`.
-- `stop` requires `model.architecture` in `fc|conv|vgg11|resnet18`.
-- `eprop` / `esd_rtrl` require `model.architecture: recurrent` and `model.recurrent_type` in `standard|srnn`.
+1. Global suite config: `configs/benchmarking.yaml`
+2. Network blueprints: `configs/networks/*.yaml`
 
-Note: some trainers override the effective network architecture internally (see `src/networks/get_network.py`), e.g. `ell/fell/bell` use `local_classifier`, and `eprop/esd_rtrl` use `recurrent`.
+Planning phase (`BenchmarkingSuite.initialize`):
 
-### 1.4 Minimal reproducibility config example
+- load global config and CLI overrides
+- discover network YAML files
+- resolve trainer classes from `trainers.<name>_trainer`
+- build all dataset x network x trainer combinations
+- skip invalid combinations based on:
+  - network tags (`fully_connected`, `convolutional`, `recurrent`, etc.)
+  - required/excluded tags from trainer config
+  - required network attributes
+  - architecture allow-list
 
-Save as `configs/reproducibility/my_run.yaml`:
+Execution phase (`BenchmarkingSuite.run`):
 
-```yaml
-experiment:
-  name: "MY_REPRO_RUN"
-  seed: 123
-  deterministic: true
-  log_dir: "./experiments"
+- instantiate network from network blueprint (`network_kwargs`)
+- build trainer kwargs from trainer spec (`training` + `params`)
+- train/evaluate each experiment
+- write manifest and reports (`experiment_manifest.json`, `results.json`, `results.csv`, `summary.md`)
 
-trainer:
-  name: "ottt"
-  update_last: false
-  update_every: 1
-  seq_batch: 1
+---
 
-data:
-  dataset: "CIFAR10"
-  timesteps: 25
-  data_dir: "./src/Data"
-  num_workers: 4
+## 2.3 `reproducibility.py` (batch of single-run configs)
 
-model:
-  architecture: "fc_snn"
-  layer_sizes: [3072, 512, 10]
-  beta: 0.9
-  tau: null
-  threshold: 1.0
-  recurrent_type: "standard"
-  quantization: false
+Flow:
 
-training:
-  epochs: 50
-  batch_size: 128
-  learning_rate: 0.001
-  optimizer: "adam"
-  weight_decay: 0.0
-  freeze_conv: false
+- discover `*.yaml/*.yml/*.json` under `--configs-dir`
+- read raw metadata (trainer/dataset) for scheduling
+- for each file:
+  - load full typed config with `load_config`
+  - apply CLI overrides (`epochs`, `batch-size`, `lr`, `timesteps`, `device`, `seed`)
+  - validate with `validate_config`
+  - run through `main.trainable` (same runtime path as `main.py`)
 
-hardware:
-  device: "auto"
-  mixed_precision: false
+Important behavior:
 
-checkpoint:
-  save_every: 0
-  save_best: true
-  save_latest: true
-  max_keep: 2
-```
+- `reproducibility.py` overrides `config.experiment.log_dir` so outputs are grouped under the suite run directory.
 
-Quick validation tip (prints issues, if any):
+---
+
+## 3) Config Surfaces and Field Usage
+
+## 3.1 `configs/benchmarking.yaml` (global benchmark suite)
+
+### `experiment`
+
+- `output_dir`: used (output root for timestamped benchmark runs).
+- `seed`: used (set before each experiment for comparability).
+- `deterministic`: used (passed to seed helper).
+- `name`: currently not used for output naming (run folder is hardcoded as `full_benchmark_<timestamp>`).
+
+### `execution`
+
+- `epochs`, `batch_size`, `learning_rate`, `timesteps`: used.
+- `device`: used by device resolver (`auto`, `cuda`, `cpu`, etc.).
+- `show_epoch_progress`: used.
+- `max_train_batches`, `max_test_batches`: used.
+- `single_process_data_loading`: used (forces `num_workers=0` in wrapped DataLoaders).
+- `continue_on_error`: used.
+- `run_neurobench`: used.
+- `neurobench_include_synaptic_operations`: optional; used if present.
+
+### `data`
+
+- `datasets`: used to build schedule.
+- `dataset_defaults`: used to populate per-dataset defaults:
+  - `input_shape` / `input_size`
+  - `num_classes`
+  - per-dataset `timesteps`
+
+### `trainers.<name>`
+
+- `module`, `class_name`: used to import trainer class.
+- `enabled`: used.
+- `requires_all_tags`, `excludes_any_tags`, `requires_network_attrs`, `allowed_architectures`: used for compatibility filtering.
+- `training.requires_grad`, `training.use_optimizer`, `training.optimizer`: used when constructing trainer/optimizer.
+- `params`: passed into trainer constructor (keys unsupported by constructor are filtered out).
+
+---
+
+## 3.2 `configs/networks/*.yaml` (network blueprints for matrix benchmarking)
+
+Each file provides:
+
+- `name`: used in experiment IDs and reports.
+- `enabled`: used.
+- `model.architecture`: used for selecting network class.
+- `network_kwargs`: used directly for network instantiation.
+- `dataset_overrides`: deep-merged per dataset.
+
+Notes:
+
+- In current implementation, runtime instantiation is driven by `network_kwargs` (plus compatibility metadata and `model.quantization`).
+- `model.layer_sizes`, `model.conv_layers`, etc. are mostly metadata in the benchmark pipeline unless your own tooling reads them.
+- Keep `model.*` and `network_kwargs.*` consistent manually to avoid confusion.
+
+Supported benchmarking architectures:
+
+- `fc_snn` -> `src/networks/benchmarking/fc_snn.py`
+- `r_snn` -> `src/networks/benchmarking/r_snn.py`
+- `conv_snn` -> `src/networks/benchmarking/conv_snn.py`
+- `vg11_snn` -> `src/networks/benchmarking/vg11_snn.py`
+
+---
+
+## 3.3 `configs/benchmarking/...` and `configs/reproducibility/...` (single-run configs)
+
+These are loaded via `load_config` (typed dataclass `Config`).
+
+Top-level sections and usage:
+
+- `experiment`: used for naming/logging/seed/determinism.
+- `model`: used for network construction (`architecture`, `layer_sizes`, `beta`, `tau`, `threshold`, `quantization`, `conv_layers`, `recurrent_type`).
+- `training`: used for epochs, batch size, LR, optimizer, weight decay, freeze conv.
+- `trainer`: used for trainer class + generic trainer flags (`update_last`, `update_every`, `seq_batch`).
+- `drtp` / `etlp` / `ostl` / `stop` / `osttp`: used only when that trainer is selected.
+- `data`: `dataset` and `timesteps` are used.
+- `hardware.device`: used.
+- `checkpoint`: used.
+
+---
+
+## 4) How Configs Reach `src/networks`, `src/trainers`, `src/datasets`
+
+## 4.1 Networks
+
+- `main.py` -> `src/networks/get_network.py` for most architectures.
+- `benchmarking.py` -> `_NETWORK_FACTORY` (`FCSNN`, `RSNN`, `ConvSNN`, `VG11SNN`) from `src/networks/benchmarking`.
+- DRTP conv paper mode in `main.py` uses `src/networks/reproducibility/DRTP_convolutional_network.py`.
+- OTTT reproducibility architecture `ottt_repro` maps to `src/networks/reproducibility/ottt_vgg_sws_snntorch.py`.
+
+## 4.2 Trainers
+
+- `main.py` imports by name using `main.py::get_trainer`.
+- `benchmarking.py` imports from `trainers.<module>` using config-specified module/class.
+- Trainer constructor kwargs are built from config in:
+  - `main.py` (explicit branches)
+  - `benchmarking.py::_trainer_kwargs` (filtered against signature)
+
+## 4.3 Datasets
+
+- All paths use `src/datasets/get_loader.py`.
+- `get_loader` dispatches to dataset-specific loaders in `src/datasets/*_loader.py`.
+- Training loops transpose loader output from `[B, T, ...]` to `[T, B, ...]` before calling trainers.
+- Flatten vs image-shape input is chosen by architecture:
+  - FC/recurrent-like -> flattened
+  - conv/vgg/ottt_repro -> non-flattened spatial tensors
+
+---
+
+## 5) CLI Override Rules
+
+## 5.1 `main.py`
+
+- If `--config` is provided, only explicitly passed CLI flags override config values.
+- `--optimizer` is a boolean flag that forces `training.optimizer = "adam"`.
+- `--layer-size`/`--n-layers` can reconstruct `model.layer_sizes` based on dataset input/class sizes.
+
+## 5.2 `benchmarking.py`
+
+Overrides available:
+
+- `--epochs`, `--batch-size`, `--lr`, `--timesteps`, `--device`, `--seed`
+- `--max-train-batches`, `--max-test-batches`
+- filters: `--datasets`, `--algorithms`, `--networks`
+- `--run-neurobench`
+
+## 5.3 `reproducibility.py`
+
+Overrides available:
+
+- `--epochs`, `--batch-size`, `--lr`, `--timesteps`, `--device`, `--seed`
+- filter: `--algorithms`
+
+---
+
+## 6) Validation and Compatibility
+
+Validation (`validate_config`) checks:
+
+- structural constraints (positive epochs/batch/timesteps/LR, architecture/trainer names, etc.)
+- trainer-specific constraints (e.g. OSTL/OSTTP/STOP architecture constraints)
+
+Benchmarking compatibility adds extra runtime scheduling checks:
+
+- network tags vs trainer requirements
+- required network attributes
+- architecture allow-list
+
+Skipped combinations are explicitly reported in:
+
+- benchmark manifest (`experiment_manifest.json`)
+- benchmark summary (`summary.md`)
+
+---
+
+## 7) Audit Results for the Requested Configs
+
+What was checked:
+
+1. `configs/benchmarking/*.yaml` loaded with `load_config` + `validate_config`: all pass.
+2. `configs/reproducibility/*.yaml` loaded with `load_config` + `validate_config`: all pass.
+3. `benchmarking.py --dry-run` with `configs/benchmarking.yaml` + `configs/networks`: succeeds.
+   - planned experiments: 72
+   - skipped combinations: 24 (all explained by compatibility rules)
+4. `reproducibility.py --dry-run`: discovers 2 configs, both runnable.
+
+Conclusion:
+
+- The requested configs are correctly handled by their intended pipelines.
+- The skip behavior in benchmark matrix mode is expected and transparent.
+
+---
+
+## 8) Known Gaps / Caveats (Important)
+
+These are implementation caveats, not failures of your current configs:
+
+1. `data.data_dir` in single-run configs is currently not used by loaders.
+   - Dataset root is driven by loader constants / `STSF_DATA` env var.
+
+2. `data.num_workers` in single-run configs is currently not used.
+   - Most loaders hardcode `num_workers=4`.
+   - Benchmarking mode can force `num_workers=0` only via `execution.single_process_data_loading`.
+
+3. `hardware.mixed_precision` exists in config schema but is currently not used in training code.
+
+4. In benchmarking network blueprints, `model.*` and `network_kwargs.*` can diverge.
+   - Runtime uses `network_kwargs` for instantiation.
+   - Keep both synchronized for clarity.
+
+5. `experiment.name` in `configs/benchmarking.yaml` is not used to name run directories.
+
+6. `validate_config` accepts trainers like `stllr`/`stdp`, but `main.py::get_trainer` does not currently map those names.
+   - Not an issue for the audited config sets, but relevant if you add those trainers to single-run configs.
+
+---
+
+## 9) Practical Usage Recipes
+
+## 9.1 Run one config directly
 
 ```bash
-python -c "from src.utils.config import load_config, validate_config; import sys; cfg=load_config(sys.argv[1]); print('\\n'.join(validate_config(cfg)) or 'OK')" configs/reproducibility/my_run.yaml
+python3 main.py --config configs/benchmarking/bptt/bptt-mnist-fc_snn.yaml --epochs 1
+```
+
+## 9.2 Run the full matrix benchmark
+
+```bash
+python3 benchmarking.py --config configs/benchmarking.yaml --networks-dir configs/networks
+```
+
+## 9.3 Run a filtered matrix benchmark
+
+```bash
+python3 benchmarking.py \
+  --config configs/benchmarking.yaml \
+  --networks-dir configs/networks \
+  --algorithms bptt,ottt \
+  --datasets MNIST,CIFAR10 \
+  --networks fc_snn,conv_snn \
+  --epochs 1
+```
+
+## 9.4 Run reproducibility suite configs
+
+```bash
+python3 reproducibility.py --configs-dir configs/reproducibility --epochs 1
+```
+
+## 9.5 Preview scheduling only (no training)
+
+```bash
+python3 benchmarking.py --dry-run
+python3 reproducibility.py --dry-run
 ```
 
 ---
 
-## 2) Benchmarking mode (`benchmarking.py`)
+## 10) How to Add a New Experiment Config Safely
 
-Benchmarking mode uses **two** config surfaces:
+For a new single-run config (`main.py` / `reproducibility.py`):
 
-1. One *global suite* YAML (default: `configs/benchmarking.yaml`)
-2. One *network blueprint* YAML per network (default directory: `configs/networks/*.yaml`)
+1. Start from a nearby working file in `configs/benchmarking/` or `configs/reproducibility/`.
+2. Keep `trainer.name` and `model.architecture` compatible.
+3. Validate:
+   ```bash
+   python3 -c "import sys; sys.path.insert(0,'src'); from utils.config import load_config, validate_config; c=load_config('your.yaml'); print('\\n'.join(validate_config(c)) or 'OK')"
+   ```
+4. Run a short smoke test with `--epochs 1`.
 
-### 2.1 Global benchmarking config (`configs/benchmarking.yaml`)
+For benchmarking matrix mode:
 
-The root must be a mapping with these sections:
+1. Add/modify network blueprint in `configs/networks/`.
+2. Ensure `network_kwargs` fully describes constructor args for the target class.
+3. Add/adjust trainer compatibility rules in `configs/benchmarking.yaml`.
+4. Run `python3 benchmarking.py --dry-run` and inspect skipped reasons.
 
-- `experiment`:
-  - `output_dir` (string path; root folder for timestamped runs)
-  - `seed` (int; reset before every experiment for comparability)
-  - `deterministic` (bool)
-- `execution`:
-  - `epochs` (int)
-  - `batch_size` (int)
-  - `learning_rate` (float)
-  - `timesteps` (int; default per-dataset value if not overridden in `data.dataset_defaults[...].timesteps`)
-  - `device` (string; supports `auto` plus torch device strings)
-  - `show_epoch_progress` (bool)
-  - `max_train_batches` (int or null)
-  - `max_test_batches` (int or null)
-  - `single_process_data_loading` (bool; forces `num_workers=0` to avoid multiprocessing issues)
-  - `continue_on_error` (bool)
-  - `run_neurobench` (bool)
-  - `neurobench_include_synaptic_operations` (bool; optional)
-- `data`:
-  - `datasets` (list of dataset names; if omitted and `dataset_defaults` is present, it defaults to the keys of `dataset_defaults`)
-  - `dataset_defaults` (mapping; per-dataset defaults used to fill network shapes/classes and optionally timesteps)
-- `trainers`: mapping of `trainer_name -> trainer_spec` (see next section)
-
-Minimal example (single dataset, single trainer):
-
-```yaml
-experiment:
-  output_dir: ./benchmark_results
-  seed: 42
-  deterministic: true
-
-execution:
-  epochs: 1
-  batch_size: 128
-  learning_rate: 0.001
-  timesteps: 25
-  device: auto
-  show_epoch_progress: true
-  max_train_batches: null
-  max_test_batches: null
-  single_process_data_loading: true
-  continue_on_error: true
-  run_neurobench: false
-
-data:
-  datasets: [MNIST]
-  dataset_defaults:
-    MNIST:
-      input_shape: [1, 28, 28]
-      input_size: 784
-      num_classes: 10
-      timesteps: 25
-
-trainers:
-  bptt:
-    module: trainers.bptt_trainer
-    class_name: BPTTTrainer
-    enabled: true
-    requires_all_tags: []
-    excludes_any_tags: []
-    requires_network_attrs: [reset]
-    allowed_architectures: []
-    training:
-      requires_grad: true
-      use_optimizer: true
-      optimizer: adam
-    params: {}
-```
-
-### 2.2 Trainer specs (inside `trainers:`)
-
-Each entry under `trainers:` should look like:
-
-- Required:
-  - `module`: Python module import path (with `./src` on `sys.path`), e.g. `trainers.bptt_trainer`
-  - `class_name`: class to import from that module, e.g. `BPTTTrainer`
-- Optional scheduling/compatibility fields (used to skip invalid combos):
-  - `enabled`: bool (default true)
-  - `requires_all_tags`: list of BaseSNN tags; available tags: `fully_connected`, `convolutional`, `recurrent`, `single_layer`, `vgg`
-  - `excludes_any_tags`: list of tags
-  - `requires_network_attrs`: list of attribute names that must exist on the network object
-  - `allowed_architectures`: list of allowed network architectures (compared to the network YAML `model.architecture`)
-- Optional training behavior:
-  - `training.requires_grad`: bool (wraps training in `torch.set_grad_enabled()`)
-  - `training.use_optimizer`: bool
-  - `training.optimizer`: `adam|sgd|nag|rmsprop` (only used when `use_optimizer: true`)
-- Optional trainer constructor kwargs:
-  - `params`: mapping passed to the trainer constructor (keys not accepted by the trainer are ignored unless it accepts `**kwargs`)
-
-### 2.3 Network blueprint configs (`configs/networks/*.yaml`)
-
-`benchmarking.py` loads every `*.yaml` / `*.yml` file in `configs/networks/`.
-
-Schema (root mapping):
-
-- `name` (string; defaults to file stem)
-- `description` (string; optional)
-- `enabled` (bool; default true)
-- `model` (mapping):
-  - `architecture` (required): one of `fc_snn|r_snn|conv_snn|vg11_snn` (these are the only architectures in `benchmarking.py`'s factory)
-  - `layer_sizes` (list[int]; optional but recommended for reporting; may be adjusted by `dataset_defaults`)
-  - `quantization` (bool; forwarded to trainers as `quant`)
-  - other keys are allowed, but `benchmarking.py` only reads `architecture`, `layer_sizes` (optional), and `quantization`
-- `network_kwargs` (mapping; **required**): kwargs passed directly to the network class constructor
-- `dataset_overrides` (mapping; optional):
-  - keys are dataset names (`MNIST`, `CIFAR10`, ...)
-  - each value can contain `model:` and/or `network_kwargs:` which are deep-merged onto the base config
-- `tags` (optional; informational only; benchmarking derives actual tags from the instantiated network)
-
-Important: `data.dataset_defaults` in the global config can automatically fill/override:
-
-- `network_kwargs.in_shape` based on `input_size` / `input_shape`
-- `network_kwargs.num_classes` based on `num_classes`
-- `model.layer_sizes[0]` / `model.layer_sizes[-1]` for `fc_snn` and `r_snn`
-
-Example (simplified `fc_snn` blueprint):
-
-```yaml
-name: fc_snn
-enabled: true
-
-model:
-  architecture: fc_snn
-  layer_sizes: [784, 256, 10]
-  quantization: false
-
-network_kwargs:
-  in_shape: [784]
-  num_classes: 10
-  hidden_sizes: [256]
-  beta: 0.9
-  threshold: 1.0
-
-dataset_overrides:
-  CIFAR10:
-    model:
-      layer_sizes: [3072, 512, 10]
-    network_kwargs:
-      in_shape: [3072]
-      hidden_sizes: [512]
-```
-
-### 2.4 Quick sanity checks
-
-- Benchmark schedule preview (writes `experiment_manifest.json` with skip reasons):
-  ```bash
-  python benchmarking.py --dry-run
-  ```
-
-- Reproducibility schedule preview (writes `experiment_manifest.json` under `benchmark_results/reproducibility/...`):
-  ```bash
-  python reproducibility.py --dry-run
-  ```
