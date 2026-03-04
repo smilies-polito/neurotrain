@@ -1,20 +1,14 @@
+# datasets/rate.py
+from __future__ import annotations
 import torch
+from snntorch import spikegen
 
 class Rate:
-    """
-    Simulate rate-coded spike trains from static images over T timesteps.
-    """
-
-    def __init__(self, T, flatten: bool = True):
+    """Rate-code a static tensor in [0,1] into spikes [T, ...] (time-major)."""
+    def __init__(self, T: int):
         self.T = T
-        self.flatten = flatten
 
-    def __call__(self, input):
-        if self.flatten:
-            input = input.view(-1)
-        # Allocate spike tensor [T x features]
-        output = torch.zeros((self.T, *input.shape), device=input.device)
-        for t in range(self.T):
-            # Probabilistic firing based on pixel intensity
-            output[t] = torch.rand_like(input).le(input).float()
-        return output
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # x is typically [C,H,W] for images
+        # x is typiically [D] for fully-connected layers
+        return spikegen.rate(x, num_steps=self.T)
