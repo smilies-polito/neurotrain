@@ -212,7 +212,7 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     )
 
     def objective(trial: "optuna.trial.Trial") -> float:
-        lr = trial.suggest_float("lr", 1e-4, 5e-3, log=True)
+        lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
         beta = trial.suggest_float("beta", 0.85, 0.99)
         threshold = trial.suggest_float("threshold", 0.5, 1.5)
 

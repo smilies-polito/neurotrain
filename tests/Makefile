@@ -25,6 +25,8 @@ bptt_cifar10_vgg11_optuna:
 		--optuna-epochs 5 \
 		--study-name bptt_cifar10_vgg11
 
-# Submit the provided sbatch script from inside tests/ while pointing it at repo root.
+# Submit the provided sbatch script from the repo root so Slurm paths work.
 bptt_cifar10_vgg11_sbatch:
-	sbatch --export=ALL,PROJECT_ROOT=$(abspath ..) ../hpc/bptt_cifar10_vgg11.sbatch
+	cd .. && mkdir -p hpc/slurm_outputs && sbatch \
+		--export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif \
+		hpc/bptt_cifar10_vgg11.sbatch
