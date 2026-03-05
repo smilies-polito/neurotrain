@@ -61,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--optuna-epochs", type=int, default=1, help="Epochs per Optuna trial.")
     p.add_argument("--study-name", type=str, default="bptt_cifar10_vgg11", help="Optuna study name.")
     p.add_argument("--optuna-storage", type=str, default="", help="Optuna storage URL (empty=in-memory).")
+    p.add_argument("--hpc-prints",dest="hpc_prints",action="store_true",help="Disable incremental batch progress prints.",)
     return p.parse_args()
 
 def set_seed(seed: int) -> None:
@@ -91,6 +92,7 @@ def run_training(
     threshold: float,
     seed: int,
     device: torch.device,
+    hpc_prints: bool = False,
     log_prefix: str = "",
     trial: "optuna.trial.Trial | None" = None,
 ) -> Dict[str, float]:
@@ -133,10 +135,12 @@ def run_training(
             total_correct += pred.eq(target.view_as(pred)).sum().item()
             total_samples += batch_size_cur
 
-            f = int(28 * i / n_batches)
-            print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
+            if not hpc_prints:
+                f = int(28 * i / n_batches)
+                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
 
-        print("\r" + " " * 40 + "\r", end="", flush=True)
+        if not hpc_prints:
+            print("\r" + " " * 40 + "\r", end="", flush=True)
 
         train_loss = total_loss / total_samples if total_samples > 0 else 0.0
         train_acc = total_correct / total_samples if total_samples > 0 else 0.0
@@ -225,6 +229,7 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             threshold=threshold,
             seed=args.seed + trial.number,
             device=device,
+            hpc_prints=args.hpc_prints,
             log_prefix=f"[trial {trial.number}] ",
             trial=trial,
         )
@@ -261,6 +266,7 @@ def main() -> None:
         threshold=args.threshold,
         seed=args.seed,
         device=device,
+        hpc_prints=args.hpc_prints,
     )
     print(f"\n[Done] final_test_acc={result['final_test_acc']:.4f} best_test_acc={result['best_test_acc']:.4f}")
 
