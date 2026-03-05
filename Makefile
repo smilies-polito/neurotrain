@@ -135,6 +135,28 @@ ostl-all-datasets:
 
 
 
+#  /$$   /$$ /$$   /$$ /$$$$$$ /$$$$$$$$       /$$$$$$$$ /$$$$$$$$  /$$$$$$  /$$$$$$$$ /$$$$$$ 
+# | $$  | $$| $$$ | $$|_  $$_/|__  $$__/      |__  $$__/| $$_____/ /$$__  $$|__  $$__//$$__  $$
+# | $$  | $$| $$$$| $$  | $$     | $$            | $$   | $$      | $$  \__/   | $$  | $$  \__/
+# | $$  | $$| $$ $$ $$  | $$     | $$            | $$   | $$$$$   |  $$$$$$    | $$  |  $$$$$$ 
+# | $$  | $$| $$  $$$$  | $$     | $$            | $$   | $$__/    \____  $$   | $$   \____  $$
+# | $$  | $$| $$\  $$$  | $$     | $$            | $$   | $$       /$$  \ $$   | $$   /$$  \ $$
+# |  $$$$$$/| $$ \  $$ /$$$$$$   | $$            | $$   | $$$$$$$$|  $$$$$$/   | $$  |  $$$$$$/
+#  \______/ |__/  \__/|______/   |__/            |__/   |________/ \______/    |__/   \______/ 
+
+test-mnist:
+	$(PYTHON) tests/dataloaders/test_mnist_loader.py
+test-fmnist:
+	$(PYTHON) tests/dataloaders/test_fashionmnist_loader.py
+test-nmnist:
+	$(PYTHON) tests/dataloaders/test_nmnist_loader.py
+test-cifar10:
+	$(PYTHON) tests/dataloaders/test_cifar10_loader.py
+test-dvsgesture:
+	$(PYTHON) tests/dataloaders/test_dvsgesture_loader.py
+test-svhn:
+	$(PYTHON) tests/dataloaders/test_svhn_loader.py
+
 
 #  /$$   /$$ /$$$$$$$$ /$$$$$$ /$$        /$$$$$$
 # | $$  | $$|__  $$__/|_  $$_/| $$       /$$__  $$

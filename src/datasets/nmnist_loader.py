@@ -1,140 +1,100 @@
-"""
-N-MNIST (Neuromorphic MNIST) dataset loader using Tonic library.
-
-N-MNIST is created by recording MNIST digits with a DVS camera while
-performing saccadic eye movements. This creates event-based spike trains
-that preserve temporal information - ideal for SNNs and DECOLLE.
-
-Reference: Orchard et al., "Converting Static Image Datasets to Spiking
-Neuromorphic Datasets Using Saccades", 2015.
-"""
+from __future__ import annotations
 
 from pathlib import Path
+import os
+import random
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-try:
-    from tonic import transforms as tonic_transforms
-    from tonic.datasets import NMNIST
-
-    TONIC_AVAILABLE = True
-except ImportError:
-    TONIC_AVAILABLE = False
-
-DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
+from tonic import transforms as tonic_transforms
+from tonic.datasets import NMNIST
 
 
-def NMNISTLoader(batch_size, T, flatten: bool = True, pin_memory: bool = False, seed=None):
+DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
+
+
+def _seed_worker(worker_id: int) -> None:
     """
-    Returns DataLoaders for N-MNIST (Neuromorphic MNIST) dataset.
-
-    Bins events into T frames of size 34×34 and flattens to [T, 34*34].
-    This is EVENT-BASED data recorded with a DVS camera - ideal for DECOLLE.
-
-    Args:
-        batch_size: Batch size for DataLoader
-        T: Number of time bins to divide events into
-
-    Returns:
-        trainloader, testloader: DataLoader instances
-
-    Note:
-        - Input size: 34*34 = 1156 (flattened)
-        - Output classes: 10 digits
-        - Requires tonic library: pip install tonic
+    Seed each DataLoader worker process deterministically.
+    (Same rationale as your CIFAR10 loader.)
     """
-    if not TONIC_AVAILABLE:
-        raise ImportError(
-            "N-MNIST requires the 'tonic' library. Install with: pip install tonic"
-        )
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
-    sensor_size = (34, 34, 2)  # N-MNIST sensor: 34x34, 2 polarities
 
-    # Transform pipeline: bin events into frames
+def NMNISTLoader(
+    batch_size: int,
+    T: int,
+    pin_memory: bool = False,
+    seed: int | None = None,
+    num_workers: int = 4,
+    data_root: str | Path | None = None,
+    download: bool = True,  # kept for API consistency; tonic downloads as needed
+):
+    """
+    Build train/test DataLoaders for N-MNIST with binned event frames (2 polarities).
+
+    Output batch shapes:
+      - data:   [B, T, 2, 34, 34]   (2 channels = ON/OFF polarities)
+      - target: [B]
+
+    Notes:
+      - We do NOT flatten here; models that need flattened inputs should do it in forward().
+      - Setting `seed` makes train shuffle and worker RNG deterministic.
+      - If you want binary frames (0/1), we clamp counts to [0,1].
+        Remove clamp_ if you prefer event counts per bin.
+    """
+    if data_root is None:
+        data_root = os.environ.get("NMNIST_ROOT", str(DEFAULT_DATA_ROOT))
+
+    sensor_size = NMNIST.sensor_size  # (34, 34, 2)
+
+    def to_torch_and_postprocess(frames: np.ndarray) -> torch.Tensor:
+        # ToFrame -> [T, 2, 34, 34] (counts per polarity)
+        x = torch.from_numpy(frames).to(torch.float32)  # [T,2,H,W]
+        x = x.clamp_(0, 1)  # binarize activity per polarity (optional)
+        return x
+
     transform = tonic_transforms.Compose(
         [
-            tonic_transforms.Denoise(filter_time=10000),  # Remove noise
-            tonic_transforms.ToFrame(
-                sensor_size=sensor_size,
-                n_time_bins=T,
-            ),
+            tonic_transforms.Denoise(filter_time=10000),
+            tonic_transforms.ToFrame(sensor_size=sensor_size, n_time_bins=T),
+            to_torch_and_postprocess,
         ]
     )
 
-    def collate_fn(batch):
-        """Custom collate to handle variable-length event sequences."""
-        frames_list = []
-        labels_list = []
+    train_ds = NMNIST(save_to=str(Path(data_root) / "NMNIST"), train=True, transform=transform)
+    test_ds  = NMNIST(save_to=str(Path(data_root) / "NMNIST"), train=False, transform=transform)
 
-        for events, label in batch:
-            # events shape: [T, 2, 34, 34] (2 polarities)
-            # Merge polarities and flatten spatial dims
-            if events.ndim == 4:
-                # Sum polarities: [T, 2, 34, 34] -> [T, 34, 34]
-                frame = events.sum(axis=1)
-            else:
-                frame = events
+    g = None
+    worker_init_fn = None
+    if seed is not None:
+        g = torch.Generator().manual_seed(seed)
+        worker_init_fn = _seed_worker
 
-            if flatten:
-                # Flatten spatial: [T, 34, 34] -> [T, 1156]
-                frame = frame.reshape(T, -1)
-            else:
-                # Convolutional models expect channel-first frames.
-                frame = frame.reshape(T, 1, 34, 34)
-
-            # Normalize to [0, 1] (events are counts)
-            frame = np.clip(frame, 0, 1).astype(np.float32)
-
-            frames_list.append(torch.from_numpy(frame))
-            labels_list.append(label)
-
-        # Keep DataLoader output batch-first: [batch, T, features].
-        # The training loop handles conversion to time-major format.
-        frames = torch.stack(frames_list)
-        labels = torch.tensor(labels_list, dtype=torch.long)
-
-        return frames, labels
-
-    # Load datasets
-    train_ds = NMNIST(
-        save_to=str(DATA_ROOT / "NMNIST"),
-        train=True,
-        transform=transform,
-    )
-    test_ds = NMNIST(
-        save_to=str(DATA_ROOT / "NMNIST"),
-        train=False,
-        transform=transform,
-    )
-
-    train_kw = dict(
+    trainloader = DataLoader(
+        train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
-        collate_fn=collate_fn,
+        num_workers=num_workers,
         pin_memory=pin_memory,
+        generator=g,
+        worker_init_fn=worker_init_fn,
+        persistent_workers=(num_workers > 0),
     )
-    if seed is not None:
-        train_kw["generator"] = torch.Generator().manual_seed(seed)
-    trainloader = DataLoader(train_ds, **train_kw)
+
     testloader = DataLoader(
         test_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
-        collate_fn=collate_fn,
+        num_workers=num_workers,
         pin_memory=pin_memory,
+        generator=g,
+        worker_init_fn=worker_init_fn,
+        persistent_workers=(num_workers > 0),
     )
 
     return trainloader, testloader
-
-
-# Dataset info for benchmarking
-NMNIST_INFO = {
-    "input_size": 34 * 34,  # 1156
-    "num_classes": 10,
-    "default_timesteps": 25,  # Events spread over 25 bins
-    "type": "event-based",
-}

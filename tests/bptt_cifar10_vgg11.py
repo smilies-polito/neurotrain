@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import random
 import sys
+import time
 import types
 from pathlib import Path
 from typing import Dict
@@ -80,75 +81,6 @@ def get_device(requested: str) -> torch.device:
 # -----------------------------------------------------------------------------
 # Train / eval
 # -----------------------------------------------------------------------------
-def train_one_epoch(
-    trainer: BPTTTrainer,
-    train_loader: torch.utils.data.DataLoader,
-    device: torch.device,
-) -> Dict[str, float]:
-    trainer.network.train()
-    total_loss = 0.0
-    total_correct = 0
-    total_samples = 0
-    non_blocking = device.type == "cuda"
-    n_batches = len(train_loader)
-    
-    # Loop on batches
-    for i, (data, target) in enumerate(train_loader, 1):
-        # Loader provides [B, T, ...] -> make [T, B, ...]
-        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
-        target = target.to(device, non_blocking=non_blocking)
-        # Launch trainer for current batch
-        loss, pred = trainer.train_sample(data, target)
-        batch_size = target.size(0)
-        # Calculate batch metrics
-        total_loss += loss.item() * batch_size
-        total_correct += pred.eq(target.view_as(pred)).sum().item()
-        total_samples += batch_size
-        
-        f = int(28 * i / n_batches)
-        print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
-
-    print("\r" + " " * 40 + "\r", end="", flush=True)
-
-    if total_samples == 0:
-        return {"loss": 0.0, "acc": 0.0}
-
-    # Return metrics
-    return {"loss": total_loss / total_samples, "acc": total_correct / total_samples}
-
-
-@torch.no_grad()
-def evaluate(
-    network: VGG11SNN_CIFAR10,
-    test_loader: torch.utils.data.DataLoader,
-    device: torch.device,
-) -> float:
-    network.eval()
-    total = 0
-    correct = 0
-
-    non_blocking = device.type == "cuda"
-    
-    # Loop on batches
-    for data, target in test_loader:
-        data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
-        target = target.to(device, non_blocking=non_blocking)
-        network.reset()
-        spike_sum = None
-        # Loop on timesteps
-        for t in range(data.size(0)):
-            spk_rec, _ = network(data[t])
-            out_t = spk_rec[-1]
-            spike_sum = out_t if spike_sum is None else spike_sum + out_t
-        # Calculate batch metrics
-        preds = spike_sum.argmax(dim=1)
-        correct += preds.eq(target).sum().item()
-        total += target.size(0)
-
-    # Return accuracy
-    return correct / total if total > 0 else 0.0
-
-
 def run_training(
     *,
     epochs: int,
@@ -160,6 +92,7 @@ def run_training(
     seed: int,
     device: torch.device,
     log_prefix: str = "",
+    trial: "optuna.trial.Trial | None" = None,
 ) -> Dict[str, float]:
     set_seed(seed)
 
@@ -177,22 +110,79 @@ def run_training(
     final_test_acc = 0.0
     final_train_loss = 0.0
 
+    non_blocking = device.type == "cuda"
+
     # Loop on epochs
     for epoch in range(1, epochs + 1):
-        # Train
-        train_metrics = train_one_epoch(trainer, train_loader, device)
-        # Test
-        test_acc = evaluate(network, test_loader, device)
-        # Extract metrics
-        final_train_loss = train_metrics["loss"]
+        epoch_start = time.perf_counter()
+
+        # [TRAIN] one full epoch on training batches
+        trainer.network.train()
+        total_loss = 0.0
+        total_correct = 0
+        total_samples = 0
+        n_batches = len(train_loader)
+
+        for i, (data, target) in enumerate(train_loader, 1):
+            data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+            target = target.to(device, non_blocking=non_blocking)
+
+            loss, pred = trainer.train_sample(data, target)
+            batch_size_cur = target.size(0)
+            total_loss += loss.item() * batch_size_cur
+            total_correct += pred.eq(target.view_as(pred)).sum().item()
+            total_samples += batch_size_cur
+
+            f = int(28 * i / n_batches)
+            print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
+
+        print("\r" + " " * 40 + "\r", end="", flush=True)
+
+        train_loss = total_loss / total_samples if total_samples > 0 else 0.0
+        train_acc = total_correct / total_samples if total_samples > 0 else 0.0
+
+        # [EVAL] one full pass on test batches
+        network.eval()
+        total = 0
+        correct = 0
+        with torch.no_grad():
+            for data, target in test_loader:
+                data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+                target = target.to(device, non_blocking=non_blocking)
+                network.reset()
+                spike_sum = None
+                for t in range(data.size(0)):
+                    spk_rec, _ = network(data[t])
+                    out_t = spk_rec[-1]
+                    spike_sum = out_t if spike_sum is None else spike_sum + out_t
+                preds = spike_sum.argmax(dim=1)
+                correct += preds.eq(target).sum().item()
+                total += target.size(0)
+
+        test_acc = correct / total if total > 0 else 0.0
+
+        # [METRICS] track epoch outputs and best score
+        final_train_loss = train_loss
         final_test_acc = test_acc
         best_test_acc = max(best_test_acc, test_acc)
+
+        epoch_time_s = time.perf_counter() - epoch_start
+
+        # [OPTUNA] report intermediate metric and prune weak trials early
+        if trial is not None:
+            trial.report(test_acc, step=epoch)
+            if trial.should_prune():
+                import optuna
+
+                raise optuna.TrialPruned()
+
         # Print metrics
         print(
             f"{log_prefix}epoch={epoch}/{epochs} "
-            f"train_loss={train_metrics['loss']:.4f} "
-            f"train_acc={train_metrics['acc']:.4f} "
-            f"test_acc={test_acc:.4f}"
+            f"train_loss={train_loss:.4f} "
+            f"train_acc={train_acc:.4f} "
+            f"test_acc={test_acc:.4f} "
+            f"epoch_time_s={epoch_time_s:.2f}"
         )
 
     # Return informations on the complete run
@@ -210,11 +200,15 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
         raise RuntimeError("Optuna is not installed. Install it with `pip install optuna`.") from err
 
     storage = args.optuna_storage or None
+    sampler = optuna.samplers.TPESampler(seed=args.seed)
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1)
     study = optuna.create_study(
         direction="maximize",
         study_name=args.study_name,
         storage=storage,
         load_if_exists=storage is not None,
+        sampler=sampler,
+        pruner=pruner,
     )
 
     def objective(trial: "optuna.trial.Trial") -> float:
@@ -232,12 +226,17 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             seed=args.seed + trial.number,
             device=device,
             log_prefix=f"[trial {trial.number}] ",
+            trial=trial,
         )
         trial.set_user_attr("final_test_acc", result["final_test_acc"])
         return result["best_test_acc"]
 
     print(f"[Optuna] trials={args.optuna_trials} epochs_per_trial={args.optuna_epochs} study={args.study_name}")
     study.optimize(objective, n_trials=args.optuna_trials)
+
+    pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
+    complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+    print(f"[Optuna] complete={len(complete_trials)} pruned={len(pruned_trials)}")
 
     print("\n[Optuna] Best trial")
     print(f"value={study.best_value:.4f}")
