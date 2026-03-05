@@ -90,9 +90,10 @@ def train_one_epoch(
     total_correct = 0
     total_samples = 0
     non_blocking = device.type == "cuda"
+    n_batches = len(train_loader)
     
     # Loop on batches
-    for data, target in train_loader:
+    for i, (data, target) in enumerate(train_loader, 1):
         # Loader provides [B, T, ...] -> make [T, B, ...]
         data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
@@ -103,6 +104,11 @@ def train_one_epoch(
         total_loss += loss.item() * batch_size
         total_correct += pred.eq(target.view_as(pred)).sum().item()
         total_samples += batch_size
+        
+        f = int(28 * i / n_batches)
+        print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
+
+    print("\r" + " " * 40 + "\r", end="", flush=True)
 
     if total_samples == 0:
         return {"loss": 0.0, "acc": 0.0}
