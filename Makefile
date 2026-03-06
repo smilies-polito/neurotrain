@@ -156,6 +156,8 @@ test-dvsgesture:
 	$(PYTHON) tests/dataloaders/test_dvsgesture_loader.py
 test-svhn:
 	$(PYTHON) tests/dataloaders/test_svhn_loader.py
+test-shd:
+	$(PYTHON) tests/dataloaders/test_shd_loader.py
 
 
 #  /$$   /$$ /$$$$$$$$ /$$$$$$ /$$        /$$$$$$

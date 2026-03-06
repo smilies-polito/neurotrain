@@ -117,6 +117,10 @@ class OSTTPTrainer(BaseTrainer):
             raise ValueError(
                 "output_loss='bce_probs' expects output_readout='probs'."
             )
+        if output_loss == "ce" and output_readout == "probs":
+            raise ValueError(
+                "output_loss='ce' expects logits/membrane readout, not post-sigmoid probabilities."
+            )
 
         self.network = network
         self.lr = float(lr)
@@ -493,7 +497,8 @@ class OSTTPTrainer(BaseTrainer):
         if self.output_loss == "bce_logits":
             return torch.sigmoid(y_out) - y_star
         if self.output_loss == "bce_probs":
-            return y_out - y_star
+            probs = y_out.clamp(1e-6, 1.0 - 1e-6)
+            return (probs - y_star) / (probs * (1.0 - probs))
         return y_out - y_star
 
     def _output_loss_value(self, y_out: torch.Tensor, y_star: torch.Tensor) -> torch.Tensor:
@@ -538,7 +543,7 @@ class OSTTPTrainer(BaseTrainer):
         Perform one OSTTP update on a temporal batch.
 
         Args:
-            data: [T, B, F]
+            data: [T, B, ...]
             target: [B] or [B,C] or [T,B,C] or [B,T,C]
 
         Returns:
@@ -563,7 +568,13 @@ class OSTTPTrainer(BaseTrainer):
         if not hasattr(self.network, "reset"):
             raise ValueError("OSTTPTrainer requires network.reset() to clear temporal state.")
 
-        num_timesteps, batch_size, _ = data.shape
+        if data.dim() < 3:
+            raise ValueError(
+                f"OSTTPTrainer expects input shape [T, B, ...], got {tuple(data.shape)}."
+            )
+
+        num_timesteps = int(data.shape[0])
+        batch_size = int(data.shape[1])
         device = data.device
         dtype = data.dtype
 

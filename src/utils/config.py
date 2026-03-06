@@ -578,6 +578,13 @@ def validate_config(config: Config) -> List[str]:
         issues.append(
             "osttp.output_loss='bce_probs' requires osttp.output_readout='probs'"
         )
+    if (
+        config.osttp.output_loss == "ce"
+        and config.osttp.output_readout == "probs"
+    ):
+        issues.append(
+            "osttp.output_loss='ce' requires logits/membrane readout, not osttp.output_readout='probs'"
+        )
     if config.osttp.feedback_scale <= 0:
         issues.append("osttp.feedback_scale must be positive")
     if config.osttp.grad_clip < 0:

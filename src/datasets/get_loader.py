@@ -15,6 +15,7 @@ from datasets.fashionmnist_loader import FashionMNISTLoader
 from datasets.svhn_loader import SVHNLoader
 from datasets.dvsgesture_loader import DVSGestureLoader
 from datasets.nmnist_loader import NMNISTLoader
+from datasets.shd_loader import SHDLoader
 # NeuroBench official benchmark loaders
 from datasets.neurobench_loaders import (
     SpeechCommandsLoader,
@@ -32,7 +33,7 @@ DATA_ROOT  = Path(os.environ.get("STSF_DATA", (_REPO_ROOT / "../Data").resolve()
 RATE_CODED_DATASETS = ["MNIST", "CIFAR10", "FashionMNIST", "SVHN"]
 
 # Event-based neuromorphic datasets (ideal for DECOLLE)
-EVENT_BASED_DATASETS = ["NMNIST", "DVSGesture"]
+EVENT_BASED_DATASETS = ["NMNIST", "DVSGesture", "SHD"]
 
 # All standard datasets
 STANDARD_DATASETS = RATE_CODED_DATASETS + EVENT_BASED_DATASETS
@@ -109,6 +110,13 @@ def get_loader(
             batch_size,
             T,
             flatten=flatten,
+            pin_memory=pin_memory,
+            seed=seed,
+        )
+    elif name == "SHD":
+        return SHDLoader(
+            batch_size,
+            T,
             pin_memory=pin_memory,
             seed=seed,
         )

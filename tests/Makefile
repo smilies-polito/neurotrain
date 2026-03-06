@@ -22,6 +22,15 @@ bptt_svhn_r:
 	python3 bptt_svhn_r.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
 
 
+# ------------------ # OSTTP TESTS # ------------------ #
+
+
+# TRAINING
+# OSTTP on SHD with the paper-style recurrent architecture
+osttp_shd_repro:
+	python3 osttp_shd_repro.py
+
+
 # OPTUNA HYPERPARAMETER OPTIMIZATION
 # BPTT on CIFAR-10 with VGG11 architecture
 bptt_cifar10_vgg11_optuna:
@@ -41,6 +50,10 @@ bptt_nmnist_r_optuna:
 # BPTT on SVHN with a simple recurrent architecture
 bptt_svhn_r_optuna:
 	python3 bptt_svhn_r.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_svhn_r
+
+# OSTTP on SHD with the paper-style recurrent architecture
+osttp_shd_repro_optuna:
+	python3 osttp_shd_repro.py --epochs 1 --batch-size 64 --timesteps 100 --lr 2e-4 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name osttp_shd_repro
 
 
 # HPC RUNS
@@ -62,3 +75,7 @@ bptt_nmnist_r_sbatch:
 # BPTT on SVHN with a simple recurrent architecture
 bptt_svhn_r_sbatch:
 	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif hpc/bptt_svhn_r.sbatch
+
+# OSTTP on SHD with the paper-style recurrent architecture
+osttp_shd_repro_sbatch:
+	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif hpc/osttp_shd_repro.sbatch
