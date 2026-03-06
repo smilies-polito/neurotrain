@@ -216,13 +216,14 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     )
 
     def objective(trial: "optuna.trial.Trial") -> float:
-        lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+        lr = trial.suggest_float("lr", 1e-6, 1e-4, log=True)
         beta = trial.suggest_float("beta", 0.85, 0.99)
-        threshold = trial.suggest_float("threshold", 0.5, 1.5)
+        threshold = trial.suggest_float("threshold", 1, 1.5)
+        batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
 
         result = run_training(
             epochs=args.optuna_epochs,
-            batch_size=args.batch_size,
+            batch_size=batch_size,
             timesteps=args.timesteps,
             lr=lr,
             beta=beta,

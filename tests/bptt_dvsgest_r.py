@@ -103,6 +103,7 @@ def run_training(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
+        num_workers=32,
         seed=seed,
     )
     network = RSNN(in_shape=(2, 128, 128), num_classes=11, beta=beta, threshold=threshold).to(device)
@@ -124,6 +125,7 @@ def run_training(
         total_correct = 0
         total_samples = 0
         n_batches = len(train_loader)
+        print(f"{n_batches} batches in the training loader.")
 
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.transpose(0, 1).to(device, non_blocking=non_blocking)

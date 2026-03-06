@@ -13,7 +13,7 @@ bptt_mnist_fc:
 	python3 bptt_mnist_fc.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r:
-	python3 bptt_dvsgest_r.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_dvsgest_r.py --epochs 10 --batch-size 16 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
 # BPTT on N-MNIST with a simple recurrent architecture
 bptt_nmnist_r:
 	python3 bptt_nmnist_r.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto

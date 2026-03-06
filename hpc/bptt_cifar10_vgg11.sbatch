@@ -47,16 +47,11 @@ fi
 srun --cpu-bind=cores --hint=nomultithread \
     apptainer exec --nv --bind "${PROJECT_ROOT}:${PROJECT_ROOT}" "${PROJECT_ROOT}/hpc/snn-training-benchmarking.sif" \
     bash -lc "cd '${PROJECT_ROOT}' && python3 tests/bptt_cifar10_vgg11.py \
-        --epochs 50 \
-        --batch-size 64 \
         --timesteps 10 \
-        --lr 1e-3 \
-        --beta 0.95 \
-        --threshold 1.0 \
         --seed 42 \
         --device cuda \
         --optuna-trials 100 \
-        --optuna-epochs 100 \
+        --optuna-epochs 20 \
         --study-name bptt_cifar10_vgg11 \
         --hpc-prints"
 

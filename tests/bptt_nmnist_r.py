@@ -103,6 +103,7 @@ def run_training(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
+        num_workers=32,
         seed=seed,
     )
     network = RSNN(in_shape=(2, 34, 34), num_classes=10, beta=beta, threshold=threshold).to(device)
@@ -125,6 +126,7 @@ def run_training(
         total_samples = 0
         n_batches = len(train_loader)
 
+        batch_start = time.perf_counter()
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
             target = target.to(device, non_blocking=non_blocking)
@@ -136,8 +138,10 @@ def run_training(
             total_samples += batch_size_cur
 
             if not hpc_prints:
+                batch_time = time.perf_counter() - batch_start
                 f = int(28 * i / n_batches)
-                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
+                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  {batch_time:.3f}s/batch", end="", flush=True)
+                batch_start = time.perf_counter()
 
         if not hpc_prints:
             print("\r" + " " * 40 + "\r", end="", flush=True)
