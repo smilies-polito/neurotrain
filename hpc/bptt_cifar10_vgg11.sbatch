@@ -53,6 +53,7 @@ srun --cpu-bind=cores --hint=nomultithread \
         --optuna-trials 100 \
         --optuna-epochs 20 \
         --study-name bptt_cifar10_vgg11 \
-        --hpc-prints"
+        --hpc-prints \
+        --optuna-storage sqlite:///optuna_results.db"
 
 echo "[INFO] done=$(date -Iseconds)"

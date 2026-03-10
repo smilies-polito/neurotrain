@@ -4,22 +4,22 @@
 # TRAINING
 # BPTT on CIFAR-10 with VGG11 architecture
 bptt_cifar10_vgg11:
-	python3 bptt_cifar10_vgg11.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_cifar10_vgg11.py
 # BPTT on Fashion-MNIST with a simple convolutional architecture
 bptt_fmnist_conv:
-	python3 bptt_fmnist_conv.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_fmnist_conv.py
 # BPTT on MNIST with a simple fully connected architecture
 bptt_mnist_fc:
-	python3 bptt_mnist_fc.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_mnist_fc.py
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r:
-	python3 bptt_dvsgest_r.py --epochs 10 --batch-size 16 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_dvsgest_r.py
 # BPTT on N-MNIST with a simple recurrent architecture
 bptt_nmnist_r:
-	python3 bptt_nmnist_r.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_nmnist_r.py
 # BPTT on SVHN with a simple recurrent architecture
 bptt_svhn_r:
-	python3 bptt_svhn_r.py --epochs 10 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto
+	python3 bptt_svhn_r.py
 
 
 # ------------------ # OSTTP TESTS # ------------------ #
@@ -32,26 +32,26 @@ osttp_shd_repro:
 # OPTUNA HYPERPARAMETER OPTIMIZATION
 # BPTT on CIFAR-10 with VGG11 architecture
 bptt_cifar10_vgg11_optuna:
-	python3 bptt_cifar10_vgg11.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_cifar10_vgg11
+	python3 bptt_cifar10_vgg11.py --optuna-trials 10 --optuna-epochs 5 --study-name bptt_cifar10_vgg11 --optuna-storage sqlite:///optuna_results/bptt_cifar10_vgg11.db
 # BPTT on Fashion-MNIST with a simple convolutional architecture
 bptt_fmnist_conv_optuna:
-	python3 bptt_fmnist_conv.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_fmnist_conv
+	python3 bptt_fmnist_conv.py --optuna-epochs 5 --study-name bptt_fmnist_conv --optuna-storage sqlite:///optuna_results/bptt_fmnist_conv.db
 # BPTT on MNIST with a simple fully connected architecture
 bptt_mnist_fc_optuna:
-	python3 bptt_mnist_fc.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 5 --optuna-epochs 3 --study-name bptt_mnist_fc --optuna-storage sqlite:///bptt_mnist_fc.db
+	python3 bptt_mnist_fc.py  --optuna-trials 20 --optuna-epochs 7 --study-name bptt_mnist_fc --optuna-storage sqlite:///optuna_results/bptt_mnist_fc.db
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r_optuna:
-	python3 bptt_dvsgest_r.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_dvsgest_r
+	python3 bptt_dvsgest_r.py --optuna-epochs 5 --study-name bptt_dvsgest_r --optuna-storage sqlite:///optuna_results/bptt_dvsgest_r.db
 # BPTT on N-MNIST with a simple recurrent architecture
 bptt_nmnist_r_optuna:
-	python3 bptt_nmnist_r.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_nmnist_r
+	python3 bptt_nmnist_r.py --optuna-epochs 5 --study-name bptt_nmnist_r --optuna-storage sqlite:///optuna_results/bptt_nmnist_r.db
 # BPTT on SVHN with a simple recurrent architecture
 bptt_svhn_r_optuna:
-	python3 bptt_svhn_r.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_svhn_r
+	python3 bptt_svhn_r.py --optuna-epochs 5 --study-name bptt_svhn_r --optuna-storage sqlite:///optuna_results/bptt_svhn_r.db
 
 # OSTTP on SHD with the paper-style recurrent architecture
 osttp_shd_repro_optuna:
-	python3 osttp_shd_repro.py --epochs 1 --batch-size 64 --timesteps 100 --lr 2e-4 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name osttp_shd_repro
+	python3 osttp_shd_repro.py --optuna-trials 10 --optuna-epochs 5 --study-name osttp_shd_repro --optuna-storage sqlite:///optuna_results/osttp_shd_repro.db
 
 
 # HPC RUNS

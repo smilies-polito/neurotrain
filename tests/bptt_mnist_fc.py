@@ -33,7 +33,7 @@ THRESHOLD = 1.0         # LIF spiking threshold.
 
 # Trainer defaults
 # General training defaults
-EPOCHS = 1             # Training epochs for the default non-Optuna run.
+EPOCHS = 10             # Training epochs for the default non-Optuna run.
 LR = 1e-3               # BPTT optimizer learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
