@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 # -----------------------------------------------------------------------------
-# Hardcoded SHD reproduction settings (edit here instead of extending the CLI)
+# Hardcoded Defaults
 # -----------------------------------------------------------------------------
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
@@ -29,18 +29,21 @@ DATA_ROOT = ""          # Optional SHD root override; empty string uses the load
 # Network defaults
 BETA = 0.95             # Recurrent hidden-layer leak/decay.
 THRESHOLD = 1.0         # Hidden spiking threshold.
+# Network specific defaults
 HIDDEN_SIZE = 450       # Paper-style recurrent hidden layer width.
 OUTPUT_BETA = 0.99      # Output leaky-integrator decay.
 
 # Trainer defaults
+# General training defaults
 EPOCHS = 10             # Training epochs for the default non-Optuna run.
 LR = 2e-4               # OSTTP optimizer learning rate.
-PSEUDO_DERIVATIVE = "fast_sigmoid"  # Surrogate used inside OSTTP eligibility updates.
-FEEDBACK_SCALE = 1.0    # Scale factor for fixed hidden feedback matrices.
-FEEDBACK_SEED = 42      # RNG seed for hidden feedback matrix initialization.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
+# Trainer specific defaults
+PSEUDO_DERIVATIVE = "fast_sigmoid"  # Surrogate used inside OSTTP eligibility updates.
+FEEDBACK_SCALE = 1.0    # Scale factor for fixed hidden feedback matrices.
+FEEDBACK_SEED = 42      # RNG seed for hidden feedback matrix initialization.
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
@@ -55,11 +58,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = PROJECT_ROOT / "tests"
 SRC_DIR = PROJECT_ROOT / "src"
 
+# Ensure src/ and tests/ are importable.
+# (tests/ first so local test helpers would win if they exist)
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
+# Work around src/networks/__init__.py eager imports by creating a lightweight
+# namespace package so we can import only what we need.
 if "networks" not in sys.modules:
     networks_pkg = types.ModuleType("networks")
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
@@ -70,6 +77,9 @@ from networks.reproducibility.osttp_shd_rec import OSTTPSHDRec
 from trainers.osttp_trainer import OSTTPTrainer
 
 
+# -----------------------------------------------------------------------------
+# Tiny utilities (inlined to keep this file self-contained)
+# -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Minimal SHD+OSTTP reproduction test.")
     p.add_argument("--epochs", type=int, default=EPOCHS, help="Training epochs.")
@@ -104,17 +114,24 @@ def get_device(requested: str) -> torch.device:
     return torch.device(requested)
 
 
+# -----------------------------------------------------------------------------
+# Train / eval
+# -----------------------------------------------------------------------------
 def run_training(
     *,
-    epochs: int,
+    # Dataset parameters
     batch_size: int,
     timesteps: int,
-    lr: float,
-    beta: float,
+    # Network parameters
     threshold: float,
+    beta: float,
+    # General training parameters
+    epochs: int,
+    lr: float,
     seed: int,
     device: torch.device,
     hpc_prints: bool = False,
+    # Optuna parameters
     log_prefix: str = "",
     trial: "optuna.trial.Trial | None" = None,
 ) -> Dict[str, float]:
@@ -185,6 +202,7 @@ def run_training(
         train_loss = total_loss / total_samples if total_samples > 0 else 0.0
         train_acc = total_correct / total_samples if total_samples > 0 else 0.0
 
+        # [EVAL] one full pass on test batches
         network.eval()
         total = 0
         correct = 0
@@ -193,15 +211,12 @@ def run_training(
                 data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
                 target = target.to(device, non_blocking=non_blocking)
                 network.reset()
-                final_mem = None
+                spike_sum = None
                 for t in range(data.size(0)):
-                    _, mem_rec = network(data[t])
-                    final_mem = mem_rec[-1]
-
-                if final_mem is None:
-                    raise RuntimeError("SHD evaluation produced no output membrane.")
-
-                preds = final_mem.argmax(dim=1)
+                    spk_rec, _ = network(data[t])
+                    out_t = spk_rec[-1]
+                    spike_sum = out_t if spike_sum is None else spike_sum + out_t
+                preds = spike_sum.argmax(dim=1)
                 correct += preds.eq(target).sum().item()
                 total += target.size(0)
 
@@ -212,13 +227,6 @@ def run_training(
         best_test_acc = max(best_test_acc, test_acc)
 
         epoch_time_s = time.perf_counter() - epoch_start
-
-        if trial is not None:
-            trial.report(test_acc, step=epoch)
-            if trial.should_prune():
-                import optuna
-
-                raise optuna.TrialPruned()
 
         print(
             f"{log_prefix}epoch={epoch}/{epochs} "
@@ -243,18 +251,15 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
 
     storage = args.optuna_storage or None
     sampler = optuna.samplers.TPESampler(seed=args.seed)
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1)
     study = optuna.create_study(
-        direction="maximize",
+        direction="maximize",               # We want to maximize test accuracy.
         study_name=args.study_name,
         storage=storage,
         load_if_exists=storage is not None,
         sampler=sampler,
-        pruner=pruner,
     )
 
-    def objective(trial: "optuna.trial.Trial") -> float:
-    
+    def objective(trial):
         lr = trial.suggest_float("lr", 1e-5, 5e-3, log=True)
         beta = trial.suggest_float("beta", 0.90, 0.99)
         threshold = trial.suggest_float("threshold", 0.5, 1.5)
@@ -274,14 +279,11 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             trial=trial,
         )
         trial.set_user_attr("final_test_acc", result["final_test_acc"])
+        # The objective for our exploration is the best test accuracy
         return result["best_test_acc"]
 
     print(f"[Optuna] trials={args.optuna_trials} epochs_per_trial={args.optuna_epochs} study={args.study_name}")
     study.optimize(objective, n_trials=args.optuna_trials)
-
-    pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
-    complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-    print(f"[Optuna] complete={len(complete_trials)} pruned={len(pruned_trials)}")
 
     print("\n[Optuna] Best trial")
     print(f"value={study.best_value:.4f}")
