@@ -5,10 +5,10 @@
 
 # ---------------------  SLURM Resource Directives  ---------------------------
 #SBATCH --job-name=bptt-cifar10-vgg11          
-#SBATCH --partition=gpu_a40                  
+#SBATCH --partition=serics_gpu                  
 #SBATCH --nodes=1                               
 #SBATCH --ntasks=1                              
-#SBATCH --cpus-per-task=8                       
+#SBATCH --cpus-per-task=16                       
 #SBATCH --gres=gpu:1                            
 #SBATCH --mem=48G                     
 #SBATCH --output=/home/acaviglia/snn-training-benchmarking/hpc/slurm_outputs/%x-%j.out   
