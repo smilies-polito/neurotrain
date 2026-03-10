@@ -79,6 +79,7 @@ logs/
 runs/
 tensorboard/
 benchmark_results/
+*.db
 
 # Data (keep structure, ignore large files)
 src/Data/

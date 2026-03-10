@@ -23,8 +23,6 @@ bptt_svhn_r:
 
 
 # ------------------ # OSTTP TESTS # ------------------ #
-
-
 # TRAINING
 # OSTTP on SHD with the paper-style recurrent architecture
 osttp_shd_repro:
@@ -40,7 +38,7 @@ bptt_fmnist_conv_optuna:
 	python3 bptt_fmnist_conv.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_fmnist_conv
 # BPTT on MNIST with a simple fully connected architecture
 bptt_mnist_fc_optuna:
-	python3 bptt_mnist_fc.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_mnist_fc
+	python3 bptt_mnist_fc.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 5 --optuna-epochs 3 --study-name bptt_mnist_fc --optuna-storage sqlite:///bptt_mnist_fc.db
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r_optuna:
 	python3 bptt_dvsgest_r.py --epochs 1 --batch-size 64 --timesteps 10 --lr 1e-3 --beta 0.95 --threshold 1.0 --seed 42 --device auto --optuna-trials 10 --optuna-epochs 5 --study-name bptt_dvsgest_r

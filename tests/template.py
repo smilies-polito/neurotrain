@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Single-file minimal integration test:
-MNIST loader + FCSNN + BPTTTrainer (+ optional Optuna).
+Template for unit-test of NETWORK and TRAINER.
+To adapt to a new network and trainer:
+- [ ] Modify the imports to include the needed dataset, network, and trainer classes.
+- [ ] Adjust the run_training function to initialize the dataset, network, and trainer.
+- [ ] Hardcode parameters at the top.
+- [ ] (Optional) If using Optuna se the ragnes to the parameters you are interested in tuning.
 """
 
 from __future__ import annotations
@@ -22,28 +26,30 @@ import torch
 # -----------------------------------------------------------------------------
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
-TIMESTEPS = 10         # Number of rate-coding steps produced by the MNIST loader.
-NUM_WORKERS = 4         # DataLoader worker processes for MNIST loading.
-DATA_ROOT = ""          # Optional MNIST root override; empty string uses the loader default.
+TIMESTEPS = 100         # Number of temporal bins produced by the SHD loader.
+NUM_WORKERS = 4         # DataLoader worker processes for SHD loading.
+DATA_ROOT = ""          # Optional SHD root override; empty string uses the loader default.
 
 # Network defaults
-BETA = 0.95             # LIF membrane leak/decay.
-THRESHOLD = 1.0         # LIF spiking threshold.
+BETA = 0.95             # Recurrent hidden-layer leak/decay.
+THRESHOLD = 1.0         # Hidden spiking threshold.
 # Network specific defaults
+# eg. HIDDEN_SIZE = 450       # Paper-style recurrent hidden layer width
 
 # Trainer defaults
 # General training defaults
-EPOCHS = 1             # Training epochs for the default non-Optuna run.
-LR = 1e-3               # BPTT optimizer learning rate.
+EPOCHS = 10             # Training epochs for the default non-Optuna run.
+LR = 2e-4               # OSTTP optimizer learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
-# Trainer specific defaults
+# [MODIFY] Import dataset, trainer and network ##################################################################
+# eg. PSEUDO_DERIVATIVE = "fast_sigmoid"  # Surrogate used inside OSTTP eligibility updates.
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
-OPTUNA_EPOCHS = 1       # Epochs executed inside each Optuna trial.
-STUDY_NAME = "bptt_mnist_fc"  # Optuna study name.
+OPTUNA_EPOCHS = 20      # Epochs executed inside each Optuna trial.
+STUDY_NAME = "optuna_study"  # Optuna study name.
 OPTUNA_STORAGE = ""     # Optuna storage URL; empty string keeps the study in memory.
 
 # -----------------------------------------------------------------------------
@@ -60,6 +66,7 @@ if str(TESTS_DIR) not in sys.path:
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
+
 # Work around src/networks/__init__.py eager imports by creating a lightweight
 # namespace package so we can import only what we need.
 if "networks" not in sys.modules:
@@ -67,22 +74,22 @@ if "networks" not in sys.modules:
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = networks_pkg
 
-from datasets.mnist_loader import MNISTLoader
-from networks.benchmarking.fc_snn import FCSNN
-from trainers.bptt_trainer import BPTTTrainer
-
+# [MODIFY] Import dataset, trainer and network ################################################################## 
+# from datasets.shd_loader import SHDLoader
+# from networks.reproducibility.osttp_shd_rec import OSTTPSHDRec
+# from trainers.osttp_trainer import OSTTPTrainer
 
 # -----------------------------------------------------------------------------
 # Tiny utilities (inlined to keep this file self-contained)
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Minimal MNIST+FCSNN BPTT test.")
+    p = argparse.ArgumentParser(description="Minimal SHD+OSTTP reproduction test.")
     p.add_argument("--epochs", type=int, default=EPOCHS, help="Training epochs.")
     p.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Batch size.")
-    p.add_argument("--timesteps", type=int, default=TIMESTEPS, help="Number of MNIST rate-coding steps.")
+    p.add_argument("--timesteps", type=int, default=TIMESTEPS, help="Number of SHD time bins.")
     p.add_argument("--lr", type=float, default=LR, help="Learning rate.")
-    p.add_argument("--beta", type=float, default=BETA, help="LIF beta.")
-    p.add_argument("--threshold", type=float, default=THRESHOLD, help="LIF threshold.")
+    p.add_argument("--beta", type=float, default=BETA, help="Hidden recurrent decay.")
+    p.add_argument("--threshold", type=float, default=THRESHOLD, help="Hidden firing threshold.")
     p.add_argument("--seed", type=int, default=SEED, help="Random seed.")
     p.add_argument("--device", choices=("auto", "cpu", "cuda"), default=DEVICE, help="Execution device.")
     p.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS, help="Number of Optuna trials (0 disables).")
@@ -109,9 +116,6 @@ def get_device(requested: str) -> torch.device:
     return torch.device(requested)
 
 
-# -----------------------------------------------------------------------------
-# Train / eval
-# -----------------------------------------------------------------------------
 def run_training(
     *,
     # Dataset parameters
@@ -126,22 +130,39 @@ def run_training(
     seed: int,
     device: torch.device,
     hpc_prints: bool = False,
+    # Training specific parameters
+    # eg. pseudo_derivative: str,
     # Optuna parameters
     log_prefix: str = "",
     trial: "optuna.trial.Trial | None" = None,
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    # Create the objects
-    train_loader, test_loader = MNISTLoader(
-        batch_size=batch_size,
-        T=timesteps,
-        pin_memory=(device.type == "cuda"),
-        seed=seed,
-        num_workers=NUM_WORKERS,
-    )
-    network = FCSNN(in_shape=(1, 28, 28), num_classes=10, beta=beta, threshold=threshold).to(device)
-    trainer = BPTTTrainer(network=network, lr=lr, batch_size=batch_size).to(device)
+    # [MODIFY] Initialize dataset, trainer and network ##################################################################
+    # train_loader, test_loader = SHDLoader(
+    #     batch_size=batch_size,
+    #     T=timesteps,
+    #     pin_memory=(device.type == "cuda"),
+    #     seed=seed,
+    #     num_workers=NUM_WORKERS,
+    # )
+    # network = OSTTPSHDRec(
+    #     hidden_size=HIDDEN_SIZE,
+    #     beta=beta,
+    #     output_beta=OUTPUT_BETA,
+    #     threshold=threshold,
+    # ).to(device)
+    # trainer = OSTTPTrainer(
+    #     network=network,
+    #     lr=lr,
+    #     batch_size=batch_size,
+    #     pseudo_derivative=PSEUDO_DERIVATIVE,
+    #     output_loss="ce",
+    #     output_readout="mem",
+    #     feedback_scale=FEEDBACK_SCALE,
+    #     feedback_seed=FEEDBACK_SEED,
+    #     use_optimizer=True,
+    # ).to(device)
 
     best_test_acc = 0.0
     final_test_acc = 0.0
@@ -207,7 +228,6 @@ def run_training(
 
         epoch_time_s = time.perf_counter() - epoch_start
 
-        # Print metrics
         print(
             f"{log_prefix}epoch={epoch}/{epochs} "
             f"train_loss={train_loss:.4f} "
@@ -216,7 +236,6 @@ def run_training(
             f"epoch_time_s={epoch_time_s:.2f}"
         )
 
-    # Return information on the complete run
     return {
         "best_test_acc": best_test_acc,
         "final_test_acc": final_test_acc,
