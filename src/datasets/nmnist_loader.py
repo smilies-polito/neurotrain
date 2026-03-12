@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from tonic import transforms as tonic_transforms
 from tonic.datasets import NMNIST
 
+from datasets.rate import time_major_collate
+
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
@@ -84,6 +86,7 @@ def NMNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -95,6 +98,7 @@ def NMNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

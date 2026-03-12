@@ -161,7 +161,7 @@ def run_training(
         n_batches = len(train_loader)
 
         for i, (data, target) in enumerate(train_loader, 1):
-            data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+            data = data.to(device, non_blocking=non_blocking)
             target = target.to(device, non_blocking=non_blocking)
 
             loss, pred = trainer.train_sample(data, target)
@@ -186,7 +186,7 @@ def run_training(
         correct = 0
         with torch.no_grad():
             for data, target in test_loader:
-                data = data.transpose(0, 1).to(device, non_blocking=non_blocking)
+                data = data.to(device, non_blocking=non_blocking)
                 target = target.to(device, non_blocking=non_blocking)
                 network.reset()
                 spike_sum = None

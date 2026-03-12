@@ -8,7 +8,7 @@ from torchvision.datasets import SVHN
 from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import DataLoader
 
-from datasets.rate import Rate  # your rate-coding transform (returns [T, C, H, W] per sample)
+from datasets.rate import Rate, time_major_collate  # your rate-coding transform (returns [T, C, H, W] per sample)
 
 
 # Default on-disk location for the dataset (relative to the repo layout).
@@ -36,7 +36,7 @@ def SVHNLoader(
     Build train/test DataLoaders for SVHN with rate-coded spike trains.
 
     Output batch shapes:
-      - data:   [B, T, 3, 32, 32]
+      - data:   [T, B, 3, 32, 32]
       - target: [B]
 
     Notes:
@@ -63,6 +63,7 @@ def SVHNLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -74,6 +75,7 @@ def SVHNLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

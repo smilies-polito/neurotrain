@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, ToTensor
 
-from datasets.rate import Rate  # returns [T, ...] per sample (time-major)
+from datasets.rate import Rate, time_major_collate  # returns [T, ...] per sample (time-major)
 
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
@@ -39,11 +39,9 @@ def MNISTLoader(
       - ToTensor() -> x in [0,1], shape [1,28,28]
       - Rate(T) -> spikes [T, 1, 28, 28]  (time-major)
 
-    Batched (default PyTorch collation):
-      - data:   [B, T, 1, 28, 28]
+    Batched output shapes:
+      - data:   [T, B, 1, 28, 28]
       - target: [B]
-
-    If your model expects time-major batches [T, B, ...], do: x = x.transpose(0, 1).
     """
     if data_root is None:
         data_root = os.environ.get("MNIST_ROOT", str(DEFAULT_DATA_ROOT))
@@ -65,6 +63,7 @@ def MNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -76,6 +75,7 @@ def MNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from tonic import transforms as tonic_transforms
 from tonic.datasets import SHD
 
+from datasets.rate import time_major_collate
+
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
@@ -50,7 +52,7 @@ def SHDLoader(
     Build train/test DataLoaders for SHD with fixed-bin spike-count frames.
 
     Output batch shapes:
-      - data:   [B, T, 700]
+      - data:   [T, B, 700]
       - target: [B]
 
     Notes:
@@ -97,6 +99,7 @@ def SHDLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -108,6 +111,7 @@ def SHDLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

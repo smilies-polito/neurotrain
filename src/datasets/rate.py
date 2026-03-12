@@ -1,6 +1,7 @@
 # datasets/rate.py
 from __future__ import annotations
 import torch
+from torch.utils.data import default_collate
 from snntorch import spikegen
 
 class Rate:
@@ -12,3 +13,9 @@ class Rate:
         # x is typically [C,H,W] for images
         # x is typiically [D] for fully-connected layers
         return spikegen.rate(x, num_steps=self.T)
+
+
+def time_major_collate(batch):
+    """Collate a batch and transpose data from [B, T, ...] -> [T, B, ...]."""
+    data, targets = default_collate(batch)
+    return data.transpose(0, 1), targets

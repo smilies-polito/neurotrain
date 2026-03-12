@@ -8,7 +8,7 @@ from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import DataLoader
 
-from datasets.rate import Rate  # your rate-coding transform (returns [T, C, H, W] per sample)
+from datasets.rate import Rate, time_major_collate  # your rate-coding transform (returns [T, C, H, W] per sample)
 
 
 # Default on-disk location for the dataset (relative to the repo layout).
@@ -47,7 +47,7 @@ def CIFAR10Loader(
     Build train/test DataLoaders for CIFAR-10 with rate-coded spike trains.
 
     Output batch shapes:
-      - data:   [B, T, 3, 32, 32]   (because Rate(T) produces [T,3,32,32] per sample)
+      - data:   [T, B, 3, 32, 32]   (because Rate(T) produces [T,3,32,32] per sample)
       - target: [B]
 
     Notes:
@@ -83,6 +83,7 @@ def CIFAR10Loader(
         generator=g,                     # controls deterministic shuffling
         worker_init_fn=worker_init_fn,   # controls deterministic RNG inside workers
         persistent_workers=(num_workers > 0),  # reuse workers between epochs for speed
+        collate_fn=time_major_collate,
     )
 
     # Test loader: no shuffle
@@ -94,6 +95,7 @@ def CIFAR10Loader(
         pin_memory=pin_memory,
         worker_init_fn=worker_init_fn,   # keeps transform RNG deterministic if seed was set
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

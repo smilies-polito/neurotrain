@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import FashionMNIST
 from torchvision.transforms import Compose, ToTensor, Normalize
 
-from datasets.rate import Rate  # returns [T, ...] per sample (time-major)
+from datasets.rate import Rate, time_major_collate  # returns [T, ...] per sample (time-major)
 
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
@@ -36,7 +36,7 @@ def FashionMNISTLoader(
     Build train/test DataLoaders for Fashion-MNIST with rate-coded spike trains.
 
     Output batch shapes:
-      - data:   [B, T, 1, 28, 28]
+      - data:   [T, B, 1, 28, 28]
       - target: [B]
 
     Notes:
@@ -70,6 +70,7 @@ def FashionMNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -81,6 +82,7 @@ def FashionMNISTLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

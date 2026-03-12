@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from tonic.datasets import DVSGesture
 from tonic import transforms as tonic_transforms
 
+from datasets.rate import time_major_collate
+
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
 
@@ -40,7 +42,7 @@ def DVSGestureLoader(
     Build train/test DataLoaders for DVS Gesture with binned event frames (2 polarities).
 
     Output batch shapes:
-      - data:   [B, T, 2, 128, 128]   (2 channels = ON/OFF polarities)
+      - data:   [T, B, 2, 128, 128]   (2 channels = ON/OFF polarities)
       - target: [B]
 
     Notes:
@@ -93,6 +95,7 @@ def DVSGestureLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -104,6 +107,7 @@ def DVSGestureLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader
