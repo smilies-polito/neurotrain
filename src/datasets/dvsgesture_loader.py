@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from tonic.datasets import DVSGesture
-from tonic import transforms as tonic_transforms
+from tonic import transforms as tonic_transforms, DiskCachedDataset
 
 from datasets.rate import time_major_collate
 
@@ -37,6 +37,7 @@ def DVSGestureLoader(
     num_workers: int = 4,
     data_root: str | Path | None = None,
     download: bool = True,  # kept for API consistency; tonic downloads as needed
+    use_cache: bool = True,  # cache preprocessed frames alongside the dataset
 ):
     """
     Build train/test DataLoaders for DVS Gesture with binned event frames (2 polarities).
@@ -49,6 +50,7 @@ def DVSGestureLoader(
       - We do NOT flatten here; models that need flattened inputs should do it in forward().
       - Setting `seed` makes train shuffle and worker RNG deterministic.
       - We clamp counts to [0,1] (binary activity per polarity). Remove clamp_ if you want counts.
+      - Caching is enabled by default; set use_cache=False to disable.
     """
     if data_root is None:
         data_root = os.environ.get("DVSGESTURE_ROOT", str(DEFAULT_DATA_ROOT))
@@ -79,6 +81,15 @@ def DVSGestureLoader(
         train=False,
         transform=transform,
     )
+
+    # Wrap with disk cache to avoid re-processing raw events on every access.
+    # On first pass each sample is transformed and saved; subsequent reads load
+    # the cached tensor directly, which is much faster than replaying the events.
+    if use_cache:
+        cache_path = Path(data_root) / "DVSGesture" / "cache"
+        cache_path = Path(cache_path)
+        train_ds = DiskCachedDataset(train_ds, cache_path=str(cache_path / f"train_T{T}"))
+        test_ds = DiskCachedDataset(test_ds, cache_path=str(cache_path / f"test_T{T}"))
 
     g = None
     worker_init_fn = None
