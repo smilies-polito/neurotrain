@@ -11,6 +11,9 @@ bptt_fmnist_conv:
 # BPTT on MNIST with a simple fully connected architecture
 bptt_mnist_fc:
 	python3 bptt_mnist_fc.py
+# BPTT on DVS-Gesture with VGG-9 architecture (BPTT baseline for OTTT/STLLR/TP)
+bptt_dvsgest_vgg9:
+	python3 bptt_dvsgest_vgg9.py
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r:
 	python3 bptt_dvsgest_r.py
@@ -39,6 +42,9 @@ bptt_fmnist_conv_optuna:
 # BPTT on MNIST with a simple fully connected architecture
 bptt_mnist_fc_optuna:
 	python3 bptt_mnist_fc.py  --optuna-trials 20 --optuna-epochs 7 --study-name bptt_mnist_fc --optuna-storage sqlite:///optuna_results/bptt_mnist_fc.db
+# BPTT on DVS-Gesture with VGG-9 architecture
+bptt_dvsgest_vgg9_optuna:
+	python3 bptt_dvsgest_vgg9.py --optuna-epochs 5 --study-name bptt_dvsgest_vgg9 --optuna-storage sqlite:///optuna_results/bptt_dvsgest_vgg9.db
 # BPTT on DVS-Gesture with a simple recurrent architecture
 bptt_dvsgest_r_optuna:
 	python3 bptt_dvsgest_r.py --optuna-epochs 5 --study-name bptt_dvsgest_r --optuna-storage sqlite:///optuna_results/bptt_dvsgest_r.db
