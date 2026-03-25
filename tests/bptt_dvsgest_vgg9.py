@@ -20,6 +20,7 @@ from typing import Dict
 
 import numpy as np
 import torch
+from torch.autograd import grad
 
 # -----------------------------------------------------------------------------
 # Hardcoded Defaults
@@ -29,18 +30,14 @@ BATCH_SIZE = 8          # Mini-batch size used for both training and evaluation.
 TIMESTEPS = 20          # Number of temporal bins produced by the DVSGesture loader.
 NUM_WORKERS = 2         # DataLoader worker processes for DVSGesture loading.
 
-# Network defaults
-BETA = 0.95             # LIF membrane decay: beta=0.95 (tau=20) needed for BPTT — with WS+Scale,
-                        # beta=0.5 (OTTT paper) kills firing rates to 0% from layer 3 onwards.
-                        # OTTT's rate-trick handles this; standard BPTT needs higher beta.
+# Network defaults — matches traces_propagation DVSGesture (l_leak_m=0.53, l_vth=1.0)
+BETA = 0.53             # LIF membrane decay.
 THRESHOLD = 1.0         # Spiking threshold.
-# Network specific defaults
-WS_SCALE = 1         # Post-LIF scale factor used in OTTT-SNN to compensate low spike rates.
 
 # Trainer defaults
 # General training defaults
-EPOCHS = 10             # Training epochs for the default non-Optuna run.
-LR = 1e-3               # Adam learning rate (OTTT paper default for DVSGesture).
+EPOCHS = 100             # Training epochs for the default non-Optuna run.
+LR = 1e-3               # Adam learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
@@ -74,7 +71,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.dvsgesture_loader import DVSGestureLoader
-from networks.benchmarking.vgg9_ottt import OTTT_VGG9
+from networks.benchmarking.vgg9_tp import TP_VGG9
 from trainers.bptt_trainer import BPTTTrainer
 
 # -----------------------------------------------------------------------------
@@ -145,20 +142,18 @@ def run_training(
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = OTTT_VGG9(
+    network = TP_VGG9(
         beta=beta,
         threshold=threshold,
-        ws_scale=WS_SCALE,
         verbose=True,
-        debug=True,
     ).to(device)
     trainer = BPTTTrainer(
         network=network,
         lr=lr,
         batch_size=batch_size,
-        grad_clip=1.0
+        grad_clip=1.0,
     ).to(device)
-    # CosineAnnealingLR: mirrors OTTT paper (T_max=300 over 300 epochs; here scaled to run length).
+    # CosineAnnealingLR: mirrors traces_propagation paper schedule.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(trainer.optimizer, T_max=epochs)
 
     best_test_acc = 0.0
@@ -203,12 +198,11 @@ def run_training(
         total = 0
         correct = 0
         # Accumulate per-layer spike rates across the full test set.
-        # spk_rec[i] for i < num_blocks contains Scale(ws_scale)-amplified spikes,
-        # so divide by ws_scale to recover binary spike rates in [0, 1].
+        # spk_rec[i] for i < _num_blocks contains binary spikes — mean() gives rate directly.
         layer_rate_sum = [0.0] * network._num_blocks
         n_eval_batches = 0
         with torch.no_grad():
-            for data, target in test_loader:
+            for i, (data, target) in enumerate(test_loader, 1):
                 data = data.to(device, non_blocking=non_blocking)
                 target = target.to(device, non_blocking=non_blocking)
                 network.reset()
@@ -218,8 +212,7 @@ def run_training(
                 for t in range(T):
                     spk_rec, _ = network(data[t])
                     for li in range(network._num_blocks):
-                        # divide by ws_scale to undo Scale layer and get true spike rate
-                        batch_layer_rates[li] += (spk_rec[li] / network.ws_scale).mean().item()
+                        batch_layer_rates[li] += spk_rec[li].mean().item()
                     out_t = spk_rec[-1]
                     spike_sum = out_t if spike_sum is None else spike_sum + out_t
                 for li in range(network._num_blocks):
@@ -228,6 +221,15 @@ def run_training(
                 preds = spike_sum.argmax(dim=1)
                 correct += preds.eq(target).sum().item()
                 total += target.size(0)
+
+                if not hpc_prints:
+                    f = int(28 * i / len(test_loader))
+                    print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / len(test_loader)):3d}% eval",
+                          end="", flush=True)
+
+        if not hpc_prints:
+            print("\r" + " " * 45 + "\r", end="", flush=True)
+
         avg_rates = [layer_rate_sum[li] / n_eval_batches for li in range(network._num_blocks)]
         rates_str = " ".join(f"L{li+1}={r:.3f}" for li, r in enumerate(avg_rates))
 
@@ -249,7 +251,15 @@ def run_training(
             f"epoch_time_s={epoch_time_s:.2f} "
             f"spike_rates=[{rates_str}]"
         )
-        network.debug_summary(label=f"epoch={epoch}/{epochs}", reset=True)
+
+        if trial is not None:
+            try:
+                import optuna
+                trial.report(test_acc, epoch)
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
+            except ImportError:
+                pass
 
     return {
         "best_test_acc": best_test_acc,
@@ -277,9 +287,9 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     def objective(trial):
 
         lr = trial.suggest_float("lr", 1e-5, 5e-3, log=True)
-        beta = trial.suggest_float("beta", 0.90, 0.99)
-        threshold = trial.suggest_float("threshold", 0.5, 1.5)
-        batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
+        beta = trial.suggest_float("beta", 0.40, 0.70)
+        threshold = trial.suggest_float("threshold", 0.5, 2.0)
+        batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
 
         result = run_training(
             epochs=args.optuna_epochs,
