@@ -78,8 +78,8 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 |------|---------|---------|--------|--------|
 | `bptt_mnist_fc.py` | FC-SNN | MNIST |  |  |
 | `bptt_fmnist_conv.py` | Conv-SNN | Fashion-MNIST |  |  |
-| `bptt_cifar10_vgg9.py` | VGG9 | CIFAR-10 | 10: 0.8685/0.7212 |  |
-| `bptt_dvsgest_vgg9.py` | VGG9 | DVSGesture | 10: 0.9179/0.8864 <br> 40: 1.0/0.9356 |  |
+| `bptt_cifar10_vgg9.py` | VGG9 | CIFAR-10 | 10: 0.8685/0.7212 | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
+| `bptt_dvsgest_vgg9.py` | VGG9 | DVSGesture | 10: 0.9179/0.8864 <br> 40: 1.0/0.9356 | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
 | `bptt_dvsgest_r.py` | R-SNN | DVSGesture |  |  |
 | `bptt_svhn_vgg9.py` | VGG9 | SVHN |  |  |
 | `bptt_svhn_r.py` | R-SNN | SVHN |  |  |
