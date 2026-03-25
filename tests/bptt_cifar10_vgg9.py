@@ -25,7 +25,7 @@ import torch
 # -----------------------------------------------------------------------------
 BATCH_SIZE = 32         # Mini-batch size used for both training and evaluation.
 TIMESTEPS = 20          # Number of rate-coded time steps per sample.
-NUM_WORKERS = 2         # DataLoader worker processes.
+NUM_WORKERS = 8         # DataLoader worker processes.
 
 BETA = 0.53             # LIF membrane decay.
 THRESHOLD = 1.0         # Spiking threshold.

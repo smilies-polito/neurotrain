@@ -28,7 +28,7 @@ from torch.autograd import grad
 # Dataset defaults
 BATCH_SIZE = 8          # Mini-batch size used for both training and evaluation.
 TIMESTEPS = 20          # Number of temporal bins produced by the DVSGesture loader.
-NUM_WORKERS = 2         # DataLoader worker processes for DVSGesture loading.
+NUM_WORKERS = 8         # DataLoader worker processes for DVSGesture loading.
 
 # Network defaults — matches traces_propagation DVSGesture (l_leak_m=0.53, l_vth=1.0)
 BETA = 0.53             # LIF membrane decay.
@@ -71,7 +71,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.dvsgesture_loader import DVSGestureLoader
-from networks.benchmarking.vgg9_tp import TP_VGG9
+from networks.benchmarking.vgg9_dvsgest import DVSGEST_VGG9
 from trainers.bptt_trainer import BPTTTrainer
 
 # -----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def run_training(
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = TP_VGG9(
+    network = DVSGEST_VGG9(
         beta=beta,
         threshold=threshold,
         verbose=True,

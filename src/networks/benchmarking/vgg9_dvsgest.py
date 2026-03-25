@@ -121,7 +121,7 @@ class LeakyIntegrator(nn.Module):
 # traces_propagation VGG-9 (BP_CNN variant 9)
 # ---------------------------------------------------------------------------
 
-class TP_VGG9(nn.Module):
+class DVSGEST_VGG9(nn.Module):
     """Exact replica of traces_propagation BP_CNN with VGG_CONFIGS[9]."""
 
     #                  (out_ch, pool_size, pool_type)
@@ -199,7 +199,7 @@ class TP_VGG9(nn.Module):
             sg_scale = getattr(spike_grad, 'scale', 1.0)
             print(
                 f"\n[VERBOSE] PRINTING NETWORK INFORMATIONS\n"
-                f"TP_VGG9  in_ch={in_channels}  classes={num_classes}"
+                f"DVSGEST_VGG9  in_ch={in_channels}  classes={num_classes}"
                 f"  beta={beta}  threshold={threshold}"
                 f"  params={n_params:,}\n"
                 f"  channels : {channels}\n"
