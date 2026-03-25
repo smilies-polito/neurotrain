@@ -1,24 +1,19 @@
 """
-Spiking VGG-9 faithfully replicating traces_propagation BP_CNN variant 9
-(Fernandez-Musoles et al.).
+Spiking VGG-9 for CIFAR-10.
 
-Source: temp_repos/traces_propagation/models/bp_cnn.py   (BP_CNN, VGG_CONFIGS[9])
-        temp_repos/traces_propagation/models/neuron_layers.py (LIFLayerCNN, LILayer)
+Identical architecture to vgg9_tp.py (traces_propagation BP_CNN variant 9),
+adapted for CIFAR-10:
+  - in_channels=3  (RGB images)
+  - num_classes=10 (CIFAR-10 classes)
 
-Architecture (DVSGesture config, vgg_variant=9, norm="weight"):
+Input per timestep: (B, 3, 32, 32)  — rate-coded CIFAR-10 frame.
+
+Architecture:
   8 conv blocks [64,128,256,256,512,512,512,512].
-  Each block: WSConv2d(scale=1.8, no gain, no bias) -> LIF -> Pool.
+  Each block: WSConv2d(scale=1.8) -> LIF -> Pool.
   Pool: MaxPool(2) after blocks 2,4,6; AdaptiveAvgPool(2,2) after block 8.
-  Classifier: LI readout (leaky integrate, no fire, leak=1.0, WS linear, no bias).
+  Classifier: LI readout (leak=1.0, WS linear, no bias).
   Classifier input: 512 * 2 * 2 = 2048 features.
-
-Neuron defaults (DVSGesture BPTT experiment):
-  beta = 0.53 (l_leak_m), threshold = 1.0 (l_vth), soft (subtract) reset.
-  Surrogate type "1": grad = 1 / (1 + (pi * x)^2).
-
-Init: kaiming_normal for all weights (via _setup_norm with norm="weight").
-
-forward() processes a single timestep (B, C, H, W).
 """
 
 import math
@@ -28,12 +23,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import snntorch as snn
 
-
-# ---------------------------------------------------------------------------
-# Custom surrogate — type "1" from traces_propagation/models/spike_activation.py
-#   grad = scale / (1 + (pi * (v - vth))^2)
-# This does not match any snntorch built-in exactly.
-# ---------------------------------------------------------------------------
 
 class _ATanSurrogateFn(torch.autograd.Function):
 
@@ -61,12 +50,6 @@ class ATanSurrogate(nn.Module):
         return _ATanSurrogateFn.apply(input_, self.scale)
 
 
-# ---------------------------------------------------------------------------
-# Weight-standardized Conv2d — traces_propagation style
-#   w = 1.8 * (w - mean) / sqrt(var_biased * fan_in + eps)
-#   No learnable gain, no bias.  eps = 1e-5.
-# ---------------------------------------------------------------------------
-
 class WSConv2d(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, padding=0, eps=1e-5):
@@ -87,12 +70,6 @@ class WSConv2d(nn.Module):
     def weight(self):
         return self.conv.weight
 
-
-# ---------------------------------------------------------------------------
-# Leaky Integrator head — traces_propagation LILayer
-#   mem = leak * mem + WS_linear(x)
-#   Returns membrane potential (no spike, no threshold).
-# ---------------------------------------------------------------------------
 
 class LeakyIntegrator(nn.Module):
 
@@ -117,14 +94,9 @@ class LeakyIntegrator(nn.Module):
         self.mem = torch.zeros(1, device=self.fc.weight.device)
 
 
-# ---------------------------------------------------------------------------
-# traces_propagation VGG-9 (BP_CNN variant 9)
-# ---------------------------------------------------------------------------
+class CIFAR10_VGG9(nn.Module):
+    """VGG-9 SNN for CIFAR-10 (3-channel RGB, 10 classes)."""
 
-class TP_VGG9(nn.Module):
-    """Exact replica of traces_propagation BP_CNN with VGG_CONFIGS[9]."""
-
-    #                  (out_ch, pool_size, pool_type)
     VGG9_CFG = [
         (64,  1, 'none'),
         (128, 2, 'max'),
@@ -138,8 +110,8 @@ class TP_VGG9(nn.Module):
 
     def __init__(
         self,
-        in_channels=2,
-        num_classes=11,
+        in_channels=3,
+        num_classes=10,
         beta=0.53,
         threshold=1.0,
         spike_grad=None,
@@ -169,12 +141,9 @@ class TP_VGG9(nn.Module):
                 setattr(self, f'pool{i}', nn.MaxPool2d(pool_sz, pool_sz))
             elif pool_type == 'aavg':
                 setattr(self, f'pool{i}', nn.AdaptiveAvgPool2d((pool_sz, pool_sz)))
-            # 'none' → no pool attribute created
 
             prev_ch = ch
 
-        # Classifier: LI readout with leak=1.0 (pure integration, no fire).
-        # After block 8 AdaptiveAvgPool2d(2,2): spatial = 2x2, channels = 512.
         self.head = LeakyIntegrator(512 * 2 * 2, num_classes, leak=1.0)
 
         self._num_blocks = len(self.VGG9_CFG)
@@ -199,7 +168,7 @@ class TP_VGG9(nn.Module):
             sg_scale = getattr(spike_grad, 'scale', 1.0)
             print(
                 f"\n[VERBOSE] PRINTING NETWORK INFORMATIONS\n"
-                f"TP_VGG9  in_ch={in_channels}  classes={num_classes}"
+                f"CIFAR10_VGG9  in_ch={in_channels}  classes={num_classes}"
                 f"  beta={beta}  threshold={threshold}"
                 f"  params={n_params:,}\n"
                 f"  channels : {channels}\n"
@@ -227,7 +196,6 @@ class TP_VGG9(nn.Module):
             mem_list.append(mem)
             x = spk
 
-        # LI readout head
         out = self.head(x.flatten(1))
         spk_list.append(out)
         mem_list.append(out)
@@ -251,22 +219,18 @@ class TP_VGG9(nn.Module):
                 nn.init.kaiming_normal_(m.weight)
 
 
-# ---------------------------------------------------------------------------
-# Smoke test
-# ---------------------------------------------------------------------------
-
 if __name__ == '__main__':
     B, T = 2, 20
-    model = TP_VGG9(in_channels=2, num_classes=11)
+    model = CIFAR10_VGG9(in_channels=3, num_classes=10)
     model.init_states()
 
-    out_sum = torch.zeros(B, 11)
+    out_sum = torch.zeros(B, 10)
     for t in range(T):
-        spk_list, mem_list = model(torch.randn(B, 2, 128, 128))
+        spk_list, mem_list = model(torch.randn(B, 3, 32, 32))
         out_sum += spk_list[-1]
 
     n_params = sum(p.numel() for p in model.parameters())
-    print(f'TP_VGG9  output={spk_list[-1].shape}  params={n_params:,}')
-    assert spk_list[-1].shape == (B, 11)
+    print(f'CIFAR10_VGG9  output={spk_list[-1].shape}  params={n_params:,}')
+    assert spk_list[-1].shape == (B, 10)
     assert torch.isfinite(out_sum).all()
     print('Smoke test passed.')

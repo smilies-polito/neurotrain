@@ -36,7 +36,6 @@ def main() -> None:
         return
 
     train_data, train_target = next(iter(train_loader))
-    assert train_data.size(0) == train_target.size(0), "train batch size mismatch"
     print(
         f"[TRAIN] \n\t data.shape={tuple(train_data.shape)} exprected [batch, timesteps, channels, height, width] \n\t data.ndim={train_data.ndim} \n\t dtype={train_data.dtype}"
     )

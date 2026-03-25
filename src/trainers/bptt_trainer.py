@@ -38,6 +38,7 @@ class BPTTTrainer(BaseTrainer):
         quant: bool = False,
         use_optimizer: bool = True,
         optimizer=None,
+        grad_clip: float | None = None,
         **kwargs,
     ):
         """
@@ -51,6 +52,8 @@ class BPTTTrainer(BaseTrainer):
             quant: Quantization flag (unused for BPTT, kept for interface compatibility)
             use_optimizer: Whether to use optimizer (always True for BPTT)
             optimizer: Pre-configured optimizer (if None, creates Adam)
+            grad_clip: Max gradient norm for clipping (None disables clipping).
+                       Standard values: 1.0 (aggressive) to 5.0 (conservative).
             **kwargs: Additional arguments (ignored)
         """
         super().__init__()
@@ -74,6 +77,7 @@ class BPTTTrainer(BaseTrainer):
         }
         self.loss_fn = loss_functions.get(loss_type, SF.ce_rate_loss())
         self.loss_type = loss_type
+        self.grad_clip = grad_clip
 
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
@@ -117,6 +121,8 @@ class BPTTTrainer(BaseTrainer):
             # Backward pass
             self.optimizer.zero_grad()
             loss.backward()
+            if self.grad_clip is not None:
+                nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
             self.optimizer.step()
         
         # Compute predictions from spike sum (no gradients needed)
