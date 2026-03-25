@@ -1,23 +1,38 @@
 """
 OSTTP (Online Spatio-Temporal Learning with Target Projection) trainer.
 
-This trainer implements a forward-only, no-BPTT learning rule where each
-spiking layer is updated with:
+Implements the algorithm from:
+  Ortner et al., "Online Spatio-Temporal Learning with Target Projection",
+  IEEE AICAS 2023.
 
-    Delta theta_l ~ sum_t (L_t^l * e_{t,theta_l}^l)
+OSTTP combines OSTL eligibility traces with DRTP learning signals to achieve
+fully online, forward-only training of spiking neural networks:
 
-- Output learning signal: analytic dE_t/dy_t^K
-- Hidden learning signal: fixed random target projection B_l y*_t
-- Eligibility traces: OSTL recursions over time (epsilon/e)
+    Δθ_l ≈ Σ_t  L_t^l · e_{t,θ_l}^l          (Eq. 6)
 
-The network is not modified. Layer states and presynaptic inputs are captured
-through module introspection + forward hooks.
+  - Output layer:  L_t^K = dE_t / dy_t^K       (analytic gradient)
+  - Hidden layers:  L_t^l = B_l · y*_t          (Eq. 11, random projection)
+
+  - Eligibility traces (Eqs. 8-9):
+    ε_t = (ds_t/ds_{t-1}) · ε_{t-1} + ∂s_t/∂θ + (ds_t/dy_{t-1}) · e_{t-1}
+    e_t = (∂y_t/∂s_t) · ε_t + ∂y_t/∂θ
+
+Supported network patterns:
+  - Spiking layers: nn.Linear → snn.Leaky / snn.RLeaky
+  - Output readout: last-layer membrane ("mem"), separate nn.Linear ("logits")
+  - Reset mechanisms: "zero" (full), "subtract" (soft), "none"
+
+Neuron dynamics (snntorch with reset_delay=True):
+  Leaky, reset='zero':      s_t = β(1-y_{t-1})s_{t-1} + I_t
+  Leaky, reset='subtract':  s_t = βs_{t-1} - y_{t-1}·b + I_t
+  Leaky, reset='none':      s_t = βs_{t-1} + I_t
+  RLeaky adds:              + y_{t-1} @ H  (recurrent, ungated by reset)
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import snntorch as snn
@@ -26,935 +41,660 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from trainers.base_trainer import BaseTrainer
+from networks.base_snn import BaseSNN
 
+
+# ---------------------------------------------------------------------------
+# Layer metadata
+# ---------------------------------------------------------------------------
 
 @dataclass
 class _LayerSpec:
-    """Metadata for one trainable spiking layer in OSTTP."""
-
+    """Metadata for one (Linear → spiking neuron) pair."""
     synapse: nn.Linear
-    neuron: nn.Module
+    neuron: nn.Module          # snn.Leaky or snn.RLeaky
     n_in: int
-    n_post: int
-    reset_mechanism: str
-    recurrent_weight: Optional[torch.nn.Parameter]
-    recurrent_bias: Optional[torch.nn.Parameter]
-    threshold_param: Optional[torch.nn.Parameter]
+    n_out: int
+    reset: str                 # "zero" | "subtract" | "none"
+    rec_weight: Optional[nn.Parameter] = None   # RLeaky recurrent weight
+    rec_bias: Optional[nn.Parameter] = None
+    thresh_param: Optional[nn.Parameter] = None  # trainable threshold
 
+
+# ---------------------------------------------------------------------------
+# Main trainer
+# ---------------------------------------------------------------------------
 
 class OSTTPTrainer(BaseTrainer):
     """
     Online Spatio-Temporal Learning with Target Projection (OSTTP).
 
-    Supported patterns:
-    - Spiking layers: nn.Linear -> snn.Leaky / snn.RLeaky
-    - Output readout:
-      - "spk": last spiking layer spikes
-      - "mem": last spiking layer membrane
-      - "logits": separate non-spiking nn.Linear readout
-      - "probs": separate non-spiking nn.Linear (+ optional Sigmoid) readout
-
-    Notes:
-    - Convolutional synapses are currently not implemented because exact
-      per-neuron eligibility tensors are not represented in this framework.
-    - RLeaky with `reset_delay=False` is rejected to stay exact with equations
-      based on y_{t-1}.
+    Args:
+        network:          nn.Module with Linear→Leaky/RLeaky layers.
+        lr:               Learning rate (used when use_optimizer=False).
+        pseudo:           Pseudo-derivative: "tanh" or "fast_sigmoid".
+        output_loss:      "ce" (cross-entropy) or "mse".
+        output_readout:   "mem" (last spiking layer membrane) or
+                          "logits" (separate non-spiking Linear readout).
+        feedback_scale:   Scaling factor for random feedback matrices B_l.
+        feedback_seed:    RNG seed for reproducible B_l generation.
+        grad_clip:        If >0, clamp gradient magnitudes.
+        use_optimizer:    If True, accumulate .grad and call optimizer.step().
+        optimizer:        Optional external optimizer (else Adam is created).
     """
-
-    _VALID_PSEUDO = ("tanh", "fast_sigmoid")
-    _VALID_OUTPUT_LOSS = ("ce", "mse", "bce", "bce_logits", "bce_probs")
-    _VALID_OUTPUT_READOUT = ("spk", "mem", "logits", "probs")
 
     def __init__(
         self,
-        network: nn.Module,
-        lr: float,
-        batch_size: int,
-        pseudo_derivative: str = "tanh",
+        network: BaseSNN,
+        lr: float = 1e-3,
+        pseudo: str = "tanh",
         output_loss: str = "ce",
         output_readout: str = "mem",
         feedback_scale: float = 1.0,
         feedback_seed: int = 42,
-        target_dim: Optional[int] = None,
         grad_clip: float = 0.0,
         use_optimizer: bool = False,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        debug: bool = False,
         **kwargs,
     ):
         super().__init__()
 
-        pseudo_derivative = str(pseudo_derivative).lower()
-        if pseudo_derivative not in self._VALID_PSEUDO:
-            raise ValueError(
-                f"pseudo_derivative must be one of {self._VALID_PSEUDO}, got {pseudo_derivative}"
-            )
-
-        output_loss = str(output_loss).lower()
-        if output_loss not in self._VALID_OUTPUT_LOSS:
-            raise ValueError(
-                f"output_loss must be one of {self._VALID_OUTPUT_LOSS}, got {output_loss}"
-            )
-
-        output_readout = str(output_readout).lower()
-        if output_readout not in self._VALID_OUTPUT_READOUT:
-            raise ValueError(
-                f"output_readout must be one of {self._VALID_OUTPUT_READOUT}, got {output_readout}"
-            )
-
-        # Backward-compatible alias.
-        if output_loss == "bce":
-            if output_readout == "probs":
-                output_loss = "bce_probs"
-            else:
-                output_loss = "bce_logits"
-
-        if output_loss == "bce_logits" and output_readout != "logits":
-            raise ValueError(
-                "output_loss='bce_logits' expects output_readout='logits'."
-            )
-        if output_loss == "bce_probs" and output_readout != "probs":
-            raise ValueError(
-                "output_loss='bce_probs' expects output_readout='probs'."
-            )
-        if output_loss == "ce" and output_readout == "probs":
-            raise ValueError(
-                "output_loss='ce' expects logits/membrane readout, not post-sigmoid probabilities."
-            )
+        # @TODO: are these controls needed?
+        assert pseudo in ("tanh", "fast_sigmoid"), f"Unknown pseudo: {pseudo}"
+        assert output_loss in ("ce", "mse"), f"Unknown output_loss: {output_loss}"
+        assert output_readout in ("mem", "logits"), f"Unknown output_readout: {output_readout}"
 
         self.network = network
         self.lr = float(lr)
-        self.batch_size = int(batch_size)
-        self.pseudo_derivative = pseudo_derivative
+        self.pseudo = pseudo
         self.output_loss = output_loss
         self.output_readout = output_readout
         self.feedback_scale = float(feedback_scale)
         self.feedback_seed = int(feedback_seed)
         self.grad_clip = float(grad_clip)
         self.use_optimizer = bool(use_optimizer)
-        self.debug = bool(debug)
 
-        self.layer_specs = self._resolve_osttp_layers()
-        if not self.layer_specs:
-            raise ValueError(
-                "OSTTPTrainer requires at least one Linear -> (Leaky/RLeaky) layer pair."
-            )
+        # --- Discover layers ---
+        self.layers: List[_LayerSpec] = self._discover_layers()
+        assert self.layers, "No Linear→Leaky/RLeaky pairs found in network."
 
-        self.num_layers = len(self.layer_specs)
-        self._output_is_spiking = self.output_readout in ("spk", "mem")
-
-        self._leaf_modules = self._list_leaf_modules()
+        # --- Output readout ---
         self.output_synapse: Optional[nn.Linear] = None
-        self.output_activation: Optional[nn.Module] = None
+        if output_readout == "logits":
+            self.output_synapse = self._find_output_linear()
 
-        if self._output_is_spiking:
-            self.output_size = self.layer_specs[-1].n_post
-        else:
-            self.output_synapse, self.output_activation = self._resolve_output_readout_modules()
-            self.output_size = int(self.output_synapse.out_features)
+        self.output_size = (
+            self.output_synapse.out_features
+            if self.output_synapse is not None
+            else self.layers[-1].n_out
+        )
 
-        hidden_count = self.num_layers - 1 if self._output_is_spiking else self.num_layers
-        if hidden_count < 0:
-            hidden_count = 0
-        self.hidden_layer_count = hidden_count
+        # --- Feedback matrices (created lazily on first train_sample) ---
+        self._n_hidden_fb = (
+            len(self.layers) - 1 if output_readout == "mem" else len(self.layers)
+        )
+        self._fb_names: List[str] = []
+        self._fb_ready = False
 
-        default_target_dim = int(getattr(self.network, "n_classes", self.output_size))
-        self.target_dim: Optional[int] = int(target_dim) if target_dim is not None else default_target_dim
-
-        # Fixed hidden feedback matrices B_l are created once and never trained.
-        self._feedback_names: List[str] = []
-        self._feedback_ready = False
-
-        self._external_optimizer = optimizer
-        if self.use_optimizer:
-            self.optimizer = optimizer or torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        # --- Optimizer ---
+        if use_optimizer:
+            self.optimizer = optimizer or torch.optim.Adam(
+                network.parameters(), lr=self.lr
+            )
         else:
             self.optimizer = None
 
-        self._hook_handles: List[torch.utils.hooks.RemovableHandle] = []
-        self._hook_inputs: List[Optional[torch.Tensor]] = [None] * self.num_layers
-        self._hook_currents: List[Optional[torch.Tensor]] = [None] * self.num_layers
-        self._hook_spikes: List[Optional[torch.Tensor]] = [None] * self.num_layers
-        self._hook_mems: List[Optional[torch.Tensor]] = [None] * self.num_layers
+        # --- Forward hooks to capture per-layer tensors ---
+        self._hooks: List[torch.utils.hooks.RemovableHook] = []
+        self._h_input: List[Optional[torch.Tensor]] = [None] * len(self.layers)
+        self._h_spk: List[Optional[torch.Tensor]] = [None] * len(self.layers)
+        self._h_mem: List[Optional[torch.Tensor]] = [None] * len(self.layers)
+        self._h_out_in: Optional[torch.Tensor] = None   # input to output linear
+        self._h_out_logits: Optional[torch.Tensor] = None
+        self._install_hooks()
 
-        self._hook_out_input: Optional[torch.Tensor] = None
-        self._hook_out_logits: Optional[torch.Tensor] = None
-        self._hook_out_probs: Optional[torch.Tensor] = None
+    # -----------------------------------------------------------------------
+    # Layer discovery
+    # -----------------------------------------------------------------------
 
-        self._register_layer_hooks()
+    def _discover_layers(self) -> List[_LayerSpec]:
+        """Find adjacent (nn.Linear, snn.Leaky/RLeaky) pairs."""
+        pairs: List[Tuple[nn.Linear, nn.Module]] = []
+        seen = set()
 
-    def _list_leaf_modules(self) -> List[Tuple[str, nn.Module]]:
-        leaves: List[Tuple[str, nn.Module]] = []
-        for name, module in self.network.named_modules():
-            if not name:
-                continue
-            if any(True for _ in module.children()):
-                continue
-            leaves.append((name, module))
-        return leaves
-
-    def _resolve_osttp_layers(self) -> List[_LayerSpec]:
-        """
-        Discover Linear->spiking pairs in container definition order.
-
-        Pairing rule: adjacent modules within the same container.
-        This supports ModuleList/Sequential and common patterns like fc1/lif1,
-        fc2/lif2 without modifying the network class.
-        """
-
-        pairs: List[Tuple[nn.Module, nn.Module]] = []
-        seen_pairs = set()
-
-        def _try_add_pair(syn: nn.Module, neuron: nn.Module) -> None:
-            if not self._is_supported_synapse(syn):
+        def _try(syn, neu):
+            if not isinstance(syn, nn.Linear):
                 return
-            if not self._is_supported_neuron(neuron):
+            if not isinstance(neu, (snn.Leaky, snn.RLeaky)):
                 return
-            key = (id(syn), id(neuron))
-            if key in seen_pairs:
+            key = (id(syn), id(neu))
+            if key in seen:
                 return
-            seen_pairs.add(key)
-            pairs.append((syn, neuron))
+            seen.add(key)
+            pairs.append((syn, neu))
 
-        # Explicit `network.layers` fallback for custom frameworks where layers
-        # may live in a plain list/tuple.
-        if hasattr(self.network, "layers"):
-            modules = getattr(self.network, "layers")
-            if isinstance(modules, (list, tuple, nn.ModuleList, nn.Sequential)):
-                seq = list(modules)
-                for i in range(len(seq) - 1):
-                    _try_add_pair(seq[i], seq[i + 1])
-
-        # Generic scan over all containers (same-container adjacency).
-        for _container_name, container in self.network.named_modules():
+        # Scan containers for adjacent children
+        for _, container in self.network.named_modules():
             children = list(container.children())
             for i in range(len(children) - 1):
-                _try_add_pair(children[i], children[i + 1])
+                _try(children[i], children[i + 1])
 
-        specs: List[_LayerSpec] = []
-        for synapse, neuron in pairs:
-            if isinstance(synapse, nn.Conv2d):
+        specs = []
+        for syn, neu in pairs:
+            if syn.bias is not None and syn.bias.requires_grad:
                 raise NotImplementedError(
-                    "OSTTPTrainer currently supports nn.Linear synapses only. "
-                    "Conv2d OSTL eligibility requires explicit unfolded patch traces "
-                    "for each postsynaptic unit and is not implemented here."
+                    "Trainable bias on spiking-layer Linear is not supported."
                 )
-            if not isinstance(synapse, nn.Linear):
-                continue
-
-            if synapse.bias is not None and synapse.bias.requires_grad:
+            if getattr(neu, "reset_delay", True) is False:
                 raise NotImplementedError(
-                    "OSTTP equations here update W/H/threshold only for spiking layers; "
-                    "trainable synaptic bias on spiking layers is not implemented."
+                    "reset_delay=False is not supported (equations assume y_{t-1})."
                 )
 
-            if getattr(neuron, "reset_delay", True) is False:
-                raise NotImplementedError(
-                    "OSTTPTrainer expects reset_delay=True to match equations based on y_{t-1}."
-                )
+            reset = str(getattr(neu, "reset_mechanism", "subtract"))
+            assert reset in ("zero", "subtract", "none"), f"Bad reset: {reset}"
 
-            reset_mechanism = str(getattr(neuron, "reset_mechanism", "subtract"))
-            if reset_mechanism not in ("zero", "subtract", "none"):
-                raise ValueError(
-                    f"Unsupported reset_mechanism '{reset_mechanism}' for OSTTP."
-                )
+            rec_w = rec_b = None
+            rec = getattr(neu, "recurrent", None)
+            if rec is not None:
+                assert hasattr(rec, "weight"), "RLeaky must use all_to_all=True."
+                rec_w = rec.weight
+                rec_b = getattr(rec, "bias", None)
 
-            rec_weight = None
-            rec_bias = None
-            recurrent = getattr(neuron, "recurrent", None)
-            if recurrent is not None:
-                if not hasattr(recurrent, "weight"):
-                    raise NotImplementedError(
-                        "RLeaky one-to-one recurrent mode is not supported; "
-                        "use all_to_all=True so recurrent.weight exists."
-                    )
-                rec_weight = recurrent.weight
-                rec_bias = recurrent.bias if hasattr(recurrent, "bias") else None
-                if rec_weight.dim() != 2 or rec_weight.shape[0] != rec_weight.shape[1]:
-                    raise NotImplementedError(
-                        "OSTTP recurrent support requires square recurrent weight matrices."
-                    )
-                if int(rec_weight.shape[0]) != int(synapse.out_features):
-                    raise NotImplementedError(
-                        "Recurrent matrix size must match synapse out_features for OSTTP."
-                    )
+            thresh_p = None
+            th = getattr(neu, "threshold", None)
+            if isinstance(th, nn.Parameter) and th.requires_grad:
+                thresh_p = th
 
-            threshold_param = None
-            threshold = getattr(neuron, "threshold", None)
-            if isinstance(threshold, torch.nn.Parameter) and threshold.requires_grad:
-                threshold_param = threshold
-
-            specs.append(
-                _LayerSpec(
-                    synapse=synapse,
-                    neuron=neuron,
-                    n_in=int(synapse.in_features),
-                    n_post=int(synapse.out_features),
-                    reset_mechanism=reset_mechanism,
-                    recurrent_weight=rec_weight,
-                    recurrent_bias=rec_bias,
-                    threshold_param=threshold_param,
-                )
-            )
-
+            specs.append(_LayerSpec(
+                synapse=syn, neuron=neu,
+                n_in=syn.in_features, n_out=syn.out_features,
+                reset=reset,
+                rec_weight=rec_w, rec_bias=rec_b,
+                thresh_param=thresh_p,
+            ))
         return specs
 
-    def _resolve_output_readout_modules(self) -> Tuple[nn.Linear, Optional[nn.Module]]:
-        used_synapse_ids = {id(spec.synapse) for spec in self.layer_specs}
-        candidates: List[Tuple[int, nn.Linear]] = []
+    def _find_output_linear(self) -> nn.Linear:
+        """Find the last nn.Linear not already used as a spiking synapse."""
+        used = {id(s.synapse) for s in self.layers}
+        last = None
+        for _, m in self.network.named_modules():
+            if isinstance(m, nn.Linear) and id(m) not in used:
+                last = m
+        if last is None:
+            raise ValueError("output_readout='logits' requires a non-spiking Linear.")
+        return last
 
-        for idx, (name, module) in enumerate(self._leaf_modules):
-            if not isinstance(module, nn.Linear):
-                continue
-            if id(module) in used_synapse_ids:
-                continue
-            if ".recurrent" in name:
-                continue
-            candidates.append((idx, module))
+    # -----------------------------------------------------------------------
+    # Forward hooks
+    # -----------------------------------------------------------------------
 
-        if not candidates:
-            raise ValueError(
-                "output_readout='logits'/'probs' requires a non-spiking nn.Linear "
-                "readout after the spiking stack."
+    def _install_hooks(self):
+        for idx, spec in enumerate(self.layers):
+            self._hooks.append(
+                spec.synapse.register_forward_hook(self._syn_hook(idx))
             )
-
-        out_idx, out_linear = candidates[-1]
-
-        out_activation: Optional[nn.Module] = None
-        if self.output_readout == "probs":
-            if out_idx + 1 < len(self._leaf_modules):
-                next_mod = self._leaf_modules[out_idx + 1][1]
-                if isinstance(next_mod, nn.Sigmoid):
-                    out_activation = next_mod
-
-        return out_linear, out_activation
-
-    @staticmethod
-    def _is_supported_synapse(module: nn.Module) -> bool:
-        return isinstance(module, (nn.Linear, nn.Conv2d))
-
-    @staticmethod
-    def _is_supported_neuron(module: nn.Module) -> bool:
-        return isinstance(module, (snn.Leaky, snn.RLeaky))
-
-    def _register_layer_hooks(self) -> None:
-        for idx, spec in enumerate(self.layer_specs):
-            self._hook_handles.append(
-                spec.synapse.register_forward_hook(self._make_synapse_hook(idx))
+            self._hooks.append(
+                spec.neuron.register_forward_hook(self._neu_hook(idx))
             )
-            self._hook_handles.append(
-                spec.neuron.register_forward_hook(self._make_neuron_hook(idx))
-            )
-
         if self.output_synapse is not None:
-            self._hook_handles.append(
-                self.output_synapse.register_forward_hook(self._make_output_synapse_hook())
-            )
-            if self.output_readout == "probs" and self.output_activation is not None:
-                self._hook_handles.append(
-                    self.output_activation.register_forward_hook(self._make_output_probs_hook())
-                )
-
-    def _make_synapse_hook(self, idx: int):
-        def _hook(_module, inputs, output):
-            if inputs and torch.is_tensor(inputs[0]):
-                self._hook_inputs[idx] = inputs[0].detach()
-            if torch.is_tensor(output):
-                self._hook_currents[idx] = output.detach()
-
-        return _hook
-
-    def _make_neuron_hook(self, idx: int):
-        def _hook(_module, _inputs, output):
-            if not isinstance(output, (tuple, list)) or len(output) < 2:
-                return
-            spk_t, mem_t = output[0], output[1]
-            self._hook_spikes[idx] = spk_t.detach()
-            self._hook_mems[idx] = mem_t.detach()
-
-        return _hook
-
-    def _make_output_synapse_hook(self):
-        def _hook(_module, inputs, output):
-            if inputs and torch.is_tensor(inputs[0]):
-                self._hook_out_input = inputs[0].detach()
-            if torch.is_tensor(output):
-                self._hook_out_logits = output.detach()
-
-        return _hook
-
-    def _make_output_probs_hook(self):
-        def _hook(_module, _inputs, output):
-            if torch.is_tensor(output):
-                self._hook_out_probs = output.detach()
-
-        return _hook
-
-    def _clear_step_cache(self) -> None:
-        for idx in range(self.num_layers):
-            self._hook_inputs[idx] = None
-            self._hook_currents[idx] = None
-            self._hook_spikes[idx] = None
-            self._hook_mems[idx] = None
-
-        self._hook_out_input = None
-        self._hook_out_logits = None
-        self._hook_out_probs = None
-
-    def _prepare_temporal_targets(
-        self,
-        target: torch.Tensor,
-        num_timesteps: int,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        """
-        Build y*_t with shape [T, B, C].
-
-        Supported target formats:
-        - [B] class indices
-        - [B, C] per-sample vectors (broadcast across time)
-        - [T, B, C] per-timestep vectors
-        - [B, T, C] per-timestep vectors
-        """
-        if target.dim() == 1:
-            if self.target_dim is None:
-                self.target_dim = self.output_size
-            y_star = torch.zeros(target.size(0), self.target_dim, device=device, dtype=dtype)
-            y_star.scatter_(1, target.view(-1, 1), 1.0)
-            return y_star.unsqueeze(0).expand(num_timesteps, -1, -1)
-
-        if target.dim() == 2:
-            y_star = target.to(device=device, dtype=dtype)
-            self.target_dim = int(y_star.size(-1))
-            return y_star.unsqueeze(0).expand(num_timesteps, -1, -1)
-
-        if target.dim() == 3:
-            if target.size(0) == num_timesteps:
-                y_star = target
-            elif target.size(1) == num_timesteps:
-                y_star = target.transpose(0, 1)
-            else:
-                raise ValueError(
-                    "3D targets must have shape [T, B, C] or [B, T, C]."
-                )
-            y_star = y_star.to(device=device, dtype=dtype)
-            self.target_dim = int(y_star.size(-1))
-            return y_star
-
-        raise ValueError(
-            "Unsupported target shape for OSTTP. Expected [B], [B,C], [T,B,C], or [B,T,C]."
-        )
-
-    def _ensure_feedback_matrices(self, device: torch.device, dtype: torch.dtype) -> None:
-        if self.target_dim is None:
-            raise RuntimeError("target_dim is undefined; cannot build OSTTP feedback matrices.")
-
-        if self.output_size != int(self.target_dim):
-            raise NotImplementedError(
-                "OSTTP output size must match target dimension in this implementation. "
-                f"Got output_size={self.output_size}, target_dim={self.target_dim}."
+            self._hooks.append(
+                self.output_synapse.register_forward_hook(self._out_hook())
             )
 
-        if self._feedback_ready:
+    def _syn_hook(self, idx):
+        def hook(_, inp, out):
+            if inp and torch.is_tensor(inp[0]):
+                self._h_input[idx] = inp[0].detach()
+        return hook
+
+    def _neu_hook(self, idx):
+        def hook(_, _inp, out):
+            if isinstance(out, (tuple, list)) and len(out) >= 2:
+                self._h_spk[idx] = out[0].detach()
+                self._h_mem[idx] = out[1].detach()
+        return hook
+
+    def _out_hook(self):
+        def hook(_, inp, out):
+            if inp and torch.is_tensor(inp[0]):
+                self._h_out_in = inp[0].detach()
+            if torch.is_tensor(out):
+                self._h_out_logits = out.detach()
+        return hook
+
+    def _clear_hooks(self):
+        for i in range(len(self.layers)):
+            self._h_input[i] = self._h_spk[i] = self._h_mem[i] = None
+        self._h_out_in = self._h_out_logits = None
+
+    # -----------------------------------------------------------------------
+    # Feedback matrices  B_l  (fixed random, Eq. 11)
+    # -----------------------------------------------------------------------
+
+    def _ensure_feedback(self, target_dim: int, device, dtype):
+        """
+        Create random DRTP matrices B_l for hidden layers if not already done and instantiate as buffers.
+         - target_dim: dimension of y*_t (number of classes)
+         - device, dtype: match the network parameters
+        The matrix sizes are (target_dim, n_out) for each hidden layer, where n_out is the layer's number of neurons.
+        """
+        # @TODO: do we actually need this flag?
+        if self._fb_ready:
             return
+        # Create a random number generator for reproducible feedback matrices
+        gen = torch.Generator(device="cpu")
+        gen.manual_seed(self.feedback_seed)
+        # Scale feedback by 1/sqrt(fan_out) to keep magnitudes reasonable
+        std = self.feedback_scale / math.sqrt(max(target_dim, 1))
 
-        std = 1.0 / math.sqrt(max(float(self.target_dim), 1.0))
-        generator = torch.Generator(device="cpu")
-        generator.manual_seed(self.feedback_seed)
+        for idx in range(self._n_hidden_fb):
+            n_out = self.layers[idx].n_out
+            B = torch.empty(target_dim, n_out, dtype=dtype)
+            B.normal_(mean=0.0, std=std, generator=gen)
+            name = f"_fb_{idx}"
+            self.register_buffer(name, B.to(device), persistent=True)
+            self._fb_names.append(name)
 
-        self._feedback_names = []
-        for idx, spec in enumerate(self.layer_specs[: self.hidden_layer_count]):
-            fb = torch.empty(self.target_dim, spec.n_post, dtype=dtype)
-            fb.normal_(mean=0.0, std=std, generator=generator)
-            if self.feedback_scale != 1.0:
-                fb.mul_(self.feedback_scale)
+        self._fb_ready = True
 
-            name = f"_feedback_{idx}"
-            self.register_buffer(name, fb.to(device=device), persistent=True)
-            self._feedback_names.append(name)
+    def _get_fb(self, idx: int) -> torch.Tensor:
+        return getattr(self, self._fb_names[idx])
 
-        self._feedback_ready = True
+    # -----------------------------------------------------------------------
+    # Pseudo-derivative  ψ(x)
+    # -----------------------------------------------------------------------
 
-    def _feedback_for_hidden(self, hidden_idx: int) -> torch.Tensor:
-        return getattr(self, self._feedback_names[hidden_idx])
-
-    def _pseudo_derivative_fn(self, x: torch.Tensor) -> torch.Tensor:
-        if self.pseudo_derivative == "tanh":
-            # psi(x) = 1 - tanh(x)^2
+    def _psi(self, x: torch.Tensor) -> torch.Tensor:
+        if self.pseudo == "tanh":
             return 1.0 - torch.tanh(x).pow(2)
-
-        # psi(x) = 1 / (100*|x| + 1)^2
+        # fast_sigmoid: 1 / (100|x| + 1)^2
         return 1.0 / (100.0 * x.abs() + 1.0).pow(2)
 
-    def _output_learning_signal(
-        self,
-        y_out: torch.Tensor,
-        y_star: torch.Tensor,
-    ) -> torch.Tensor:
-        if self.output_loss == "ce":
-            return torch.softmax(y_out, dim=1) - y_star
-        if self.output_loss == "bce_logits":
-            return torch.sigmoid(y_out) - y_star
-        if self.output_loss == "bce_probs":
-            probs = y_out.clamp(1e-6, 1.0 - 1e-6)
-            return (probs - y_star) / (probs * (1.0 - probs))
-        return y_out - y_star
+    # -----------------------------------------------------------------------
+    # Output loss / learning signal
+    # -----------------------------------------------------------------------
 
-    def _output_loss_value(self, y_out: torch.Tensor, y_star: torch.Tensor) -> torch.Tensor:
+    def _loss_value(self, y_out, y_star):
         if self.output_loss == "ce":
-            return -(y_star * F.log_softmax(y_out, dim=1)).sum(dim=1).mean()
-        if self.output_loss == "bce_logits":
-            return F.binary_cross_entropy_with_logits(y_out, y_star)
-        if self.output_loss == "bce_probs":
-            probs = y_out.clamp(1e-6, 1.0 - 1e-6)
-            return F.binary_cross_entropy(probs, y_star)
+            return -(y_star * F.log_softmax(y_out, dim=1)).sum(1).mean()
         return F.mse_loss(y_out, y_star)
 
-    def _reduce_threshold_grad(
-        self,
-        grad_per_neuron: torch.Tensor,
-        threshold_param: torch.nn.Parameter,
-    ) -> torch.Tensor:
-        param_numel = threshold_param.numel()
-        if param_numel == 1:
-            return grad_per_neuron.sum().view_as(threshold_param)
-        if param_numel == grad_per_neuron.numel():
-            return grad_per_neuron.view_as(threshold_param)
-        raise ValueError(
-            "Trainable threshold shape is incompatible with OSTTP per-neuron threshold updates."
-        )
+    def _output_signal(self, y_out, y_star):
+        """L_t^K = dE_t / dy_t^K  (analytic)."""
+        if self.output_loss == "ce":
+            return torch.softmax(y_out, dim=1) - y_star   # (B, C)
+        return y_out - y_star  # MSE gradient
 
-    def _accumulate_or_apply(self, param: torch.nn.Parameter, grad: torch.Tensor) -> None:
-        if self.grad_clip > 0.0:
+    # -----------------------------------------------------------------------
+    # Target preparation
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _make_targets(target, n_classes, T, device, dtype):
+        """Convert target to one-hot [T, B, C]."""
+        if target.dim() == 1:
+            y = torch.zeros(target.size(0), n_classes, device=device, dtype=dtype)
+            y.scatter_(1, target.unsqueeze(1), 1.0)
+            return y.unsqueeze(0).expand(T, -1, -1)
+        if target.dim() == 2:
+            return target.to(device=device, dtype=dtype).unsqueeze(0).expand(T, -1, -1)
+        if target.dim() == 3:
+            if target.size(0) == T:
+                return target.to(device=device, dtype=dtype)
+            if target.size(1) == T:
+                return target.transpose(0, 1).to(device=device, dtype=dtype)
+        raise ValueError(f"Unsupported target shape {target.shape}")
+
+    # -----------------------------------------------------------------------
+    # Accumulate or apply gradient
+    # -----------------------------------------------------------------------
+
+    def _apply_grad(self, param: nn.Parameter, grad: torch.Tensor):
+        if self.grad_clip > 0:
             grad = grad.clamp(-self.grad_clip, self.grad_clip)
-
-        if self.use_optimizer and self.optimizer is not None:
+        if self.use_optimizer:
             if param.grad is None:
                 param.grad = grad.clone()
             else:
-                param.grad += grad
+                param.grad.add_(grad)
         else:
-            param.data -= self.lr * grad
+            param.data.sub_(self.lr * grad)
+
+    # -----------------------------------------------------------------------
+    # Expand scalar/vector to (B, n_out)
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _expand(val, B, n, device, dtype):
+        if isinstance(val, torch.Tensor):
+            t = val.detach().to(device=device, dtype=dtype)
+        else:
+            t = torch.tensor(float(val), device=device, dtype=dtype)
+        if t.numel() == 1:
+            return t.view(1, 1).expand(B, n)
+        return t.flatten().unsqueeze(0).expand(B, n)
+
+    # -----------------------------------------------------------------------
+    # Core: train one temporal sample
+    # -----------------------------------------------------------------------
 
     @torch.no_grad()
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
-        Perform one OSTTP update on a temporal batch.
+        One OSTTP training step on a temporal batch.
 
         Args:
-            data: [T, B, ...]
-            target: [B] or [B,C] or [T,B,C] or [B,T,C]
+            data:   (T, B, n_input)
+            target: (B,) class indices  or  (B, C)  or  (T, B, C)
 
         Returns:
-            loss: scalar (time-averaged output loss)
-            pred: [B, 1] argmax over time-summed readout
-
-        Paper-to-code mapping used below:
-        - s_t^l: membrane/state tensor (s_rec)
-        - y_t^l: layer output tensor (spike or analog readout)
-        - b: threshold
-        - H: recurrent weights
-        - beta: decay
-        - L_t^K = dE_t/dy_t^K (output learning signal)
-        - L_t^l = B_l y*_t for hidden layers (Eq. 11)
-        - Delta theta_l ~ sum_t L_t^l e_t^{l,theta} (Eq. 6)
-        - epsilon/e recursions follow Eq. (8)-(9):
-          epsilon_t = (ds_t/ds_{t-1}) epsilon_{t-1} + ds_t/dtheta +
-                      (ds_t/dy_{t-1}) (dy_{t-1}/dtheta)
-          e_t = (dy_t/ds_t) epsilon_t + dy_t/dtheta
+            loss:   scalar (time-averaged)
+            pred:   (B, 1) argmax predictions
         """
+        assert data.dim() >= 3, f"Expected (T, B, ...), got {data.shape}"
 
-        if not hasattr(self.network, "reset"):
-            raise ValueError("OSTTPTrainer requires network.reset() to clear temporal state.")
+        T, B = data.shape[0], data.shape[1]
+        device, dtype = data.device, data.dtype
+        n_layers = len(self.layers)
 
-        if data.dim() < 3:
-            raise ValueError(
-                f"OSTTPTrainer expects input shape [T, B, ...], got {tuple(data.shape)}."
-            )
+        # Turn targets into one-hot [T, B, C]
+        y_star = self._make_targets(target, self.output_size, T, device, dtype)
+        # Generate random matrices for DRTP
+        self._ensure_feedback(self.output_size, device, dtype)
 
-        num_timesteps = int(data.shape[0])
-        batch_size = int(data.shape[1])
-        device = data.device
-        dtype = data.dtype
-
-        y_star = self._prepare_temporal_targets(
-            target=target,
-            num_timesteps=num_timesteps,
-            device=device,
-            dtype=dtype,
-        )
-        self._ensure_feedback_matrices(device=device, dtype=dtype)
-
+        # Reset network state
         self.network.reset()
-        if self.use_optimizer and self.optimizer is not None:
+        if self.optimizer is not None:
             self.optimizer.zero_grad(set_to_none=True)
 
-        # Eligibility states per spiking layer and parameter.
-        layer_state: List[Dict[str, torch.Tensor]] = []
-        prev_spk: List[torch.Tensor] = []
-        prev_mem: List[torch.Tensor] = []
+        # --- Allocate eligibility states per layer ---
+        # WEIGHT TRACES
+        eps_w = []   # (B, n_out, n_in)
+        e_w = []
+        dW = []      # accumulated weight gradient
 
-        for spec in self.layer_specs:
-            state: Dict[str, torch.Tensor] = {
-                "eps_w": torch.zeros(batch_size, spec.n_post, spec.n_in, device=device, dtype=dtype),
-                "e_w": torch.zeros(batch_size, spec.n_post, spec.n_in, device=device, dtype=dtype),
-                "delta_w": torch.zeros_like(spec.synapse.weight, device=device, dtype=dtype),
-            }
-            if spec.recurrent_weight is not None and spec.recurrent_weight.requires_grad:
-                state["eps_h"] = torch.zeros(
-                    batch_size, spec.n_post, spec.n_post, device=device, dtype=dtype
-                )
-                state["e_h"] = torch.zeros(
-                    batch_size, spec.n_post, spec.n_post, device=device, dtype=dtype
-                )
-                state["delta_h"] = torch.zeros_like(
-                    spec.recurrent_weight, device=device, dtype=dtype
-                )
-            if spec.threshold_param is not None:
-                state["eps_b"] = torch.zeros(batch_size, spec.n_post, device=device, dtype=dtype)
-                state["e_b"] = torch.zeros(batch_size, spec.n_post, device=device, dtype=dtype)
-                state["delta_b"] = torch.zeros(spec.n_post, device=device, dtype=dtype)
+        # RECURRENT WEIGHTS TRACES (RLeaky only)
+        eps_h = []   # (B, n_out, n_out) for RLeaky
+        e_h = []
+        dH = []
 
-            layer_state.append(state)
-            prev_spk.append(torch.zeros(batch_size, spec.n_post, device=device, dtype=dtype))
-            prev_mem.append(torch.zeros(batch_size, spec.n_post, device=device, dtype=dtype))
+        # BIAS TRACES   
+        eps_b = []   # (B, n_out) for trainable threshold
+        e_b = []
+        db = []
 
-        output_state: Optional[Dict[str, torch.Tensor]] = None
-        if self.output_synapse is not None:
-            output_state = {
-                "delta_w": torch.zeros_like(self.output_synapse.weight, device=device, dtype=dtype)
-            }
-            if self.output_synapse.bias is not None and self.output_synapse.bias.requires_grad:
-                output_state["delta_b"] = torch.zeros_like(
-                    self.output_synapse.bias, device=device, dtype=dtype
-                )
+        prev_spk = []
+        prev_mem = []
 
-        readout_sum = torch.zeros(batch_size, self.output_size, device=device, dtype=dtype)
-        total_loss = torch.zeros((), device=device, dtype=dtype)
+        # Initialization for all data structures
+        for spec in self.layers:
+            n_i, n_o = spec.n_in, spec.n_out
+            eps_w.append(torch.zeros(B, n_o, n_i, device=device, dtype=dtype))
+            e_w.append(torch.zeros(B, n_o, n_i, device=device, dtype=dtype))
+            dW.append(torch.zeros(n_o, n_i, device=device, dtype=dtype))
 
-        for t in range(num_timesteps):
-            self._clear_step_cache()
-            forward_out = self.network(data[t])
-
-            # (a) Forward step capture: x_t^l, y_t^l, s_t^l for spiking layers.
-            hooks_complete = (
-                all(val is not None for val in self._hook_inputs)
-                and all(val is not None for val in self._hook_spikes)
-                and all(val is not None for val in self._hook_mems)
-            )
-
-            if hooks_complete:
-                x_rec = [val for val in self._hook_inputs if val is not None]
-                y_rec = [val for val in self._hook_spikes if val is not None]
-                s_rec = [val for val in self._hook_mems if val is not None]
-                i_rec = [val for val in self._hook_currents if val is not None]
-                if len(i_rec) != self.num_layers:
-                    i_rec = [
-                        F.linear(x_t, spec.synapse.weight.detach(), spec.synapse.bias)
-                        for x_t, spec in zip(x_rec, self.layer_specs)
-                    ]
-            elif (
-                isinstance(forward_out, (tuple, list))
-                and len(forward_out) >= 2
-                and isinstance(forward_out[0], (tuple, list))
-                and isinstance(forward_out[1], (tuple, list))
-            ):
-                y_rec = [tens.detach() for tens in forward_out[0]]
-                s_rec = [tens.detach() for tens in forward_out[1]]
-                if len(y_rec) != self.num_layers or len(s_rec) != self.num_layers:
-                    raise RuntimeError(
-                        "OSTTPTrainer fallback capture expected one spike/mem pair per discovered layer."
-                    )
-                x_rec = [data[t].detach()]
-                x_rec.extend(y_rec[:-1])
-                i_rec = [
-                    F.linear(x_t, spec.synapse.weight.detach(), spec.synapse.bias)
-                    for x_t, spec in zip(x_rec, self.layer_specs)
-                ]
+            if spec.rec_weight is not None and spec.rec_weight.requires_grad:
+                eps_h.append(torch.zeros(B, n_o, n_o, device=device, dtype=dtype))
+                e_h.append(torch.zeros(B, n_o, n_o, device=device, dtype=dtype))
+                dH.append(torch.zeros(n_o, n_o, device=device, dtype=dtype))
             else:
+                eps_h.append(None)
+                e_h.append(None)
+                dH.append(None)
+
+            if spec.thresh_param is not None:
+                eps_b.append(torch.zeros(B, n_o, device=device, dtype=dtype))
+                e_b.append(torch.zeros(B, n_o, device=device, dtype=dtype))
+                db.append(torch.zeros(n_o, device=device, dtype=dtype))
+            else:
+                eps_b.append(None)
+                e_b.append(None)
+                db.append(None)
+
+            prev_spk.append(torch.zeros(B, n_o, device=device, dtype=dtype))
+            prev_mem.append(torch.zeros(B, n_o, device=device, dtype=dtype))
+
+        # Output readout accumulator
+        dW_out = None
+        db_out = None
+        if self.output_synapse is not None:
+            dW_out = torch.zeros_like(self.output_synapse.weight)
+            if self.output_synapse.bias is not None:
+                db_out = torch.zeros_like(self.output_synapse.bias)
+
+        readout_sum = torch.zeros(B, self.output_size, device=device, dtype=dtype)
+        total_loss = torch.tensor(0.0, device=device, dtype=dtype)
+
+        # ===================================================================
+        # Time loop
+        # ===================================================================
+        for t in range(T):
+            # Reset hook storage
+            self._clear_hooks()
+            # FORWARD PASS
+            self.network(data[t])
+
+            # --- Collect per-layer tensors from hooks ---
+            x = [self._h_input[i] for i in range(n_layers)]
+            spk = [self._h_spk[i] for i in range(n_layers)]
+            mem = [self._h_mem[i] for i in range(n_layers)]
+
+            if any(v is None for v in x + spk + mem):
                 raise RuntimeError(
-                    "OSTTPTrainer could not capture per-layer (input, spike, membrane) tensors. "
-                    "Ensure the network uses Linear->Leaky/RLeaky layers reachable by hooks."
+                    "Hooks failed to capture all layer tensors. "
+                    "Check that your network uses Linear→Leaky/RLeaky pairs."
                 )
 
-            # (b) Output learning signal L_t^K and hidden projections L_t^l (Eq. 11).
-            if self.output_readout == "spk":
-                y_out_t = y_rec[-1]
-            elif self.output_readout == "mem":
-                y_out_t = s_rec[-1]
-            elif self.output_readout == "logits":
-                if self._hook_out_logits is not None:
-                    y_out_t = self._hook_out_logits
-                elif torch.is_tensor(forward_out):
-                    y_out_t = forward_out.detach()
+            # --- Output readout ---
+            if self.output_readout == "mem":
+                y_out = mem[-1]
+            else:
+                if self._h_out_logits is not None:
+                    y_out = self._h_out_logits
                 else:
-                    raise RuntimeError(
-                        "output_readout='logits' requires a captured linear readout tensor."
-                    )
-            else:  # probs
-                if self._hook_out_probs is not None:
-                    y_out_t = self._hook_out_probs
-                elif torch.is_tensor(forward_out):
-                    y_out_t = forward_out.detach()
-                elif self._hook_out_logits is not None:
-                    y_out_t = torch.sigmoid(self._hook_out_logits)
-                else:
-                    raise RuntimeError(
-                        "output_readout='probs' requires captured probabilities "
-                        "or a tensor output from network.forward."
-                    )
+                    raise RuntimeError("output_readout='logits' but hook missed.")
 
+            # --- Learning signals ---
             y_star_t = y_star[t]
-            l_out = self._output_learning_signal(y_out_t, y_star_t)
-            total_loss += self._output_loss_value(y_out_t, y_star_t)
-            readout_sum += y_out_t
+            # Calculate the output learning signal used for the output layer only
+            l_out = self._output_signal(y_out, y_star_t)     # (B, C)
+            # Calculate the loss
+            total_loss += self._loss_value(y_out, y_star_t)
+            readout_sum += y_out
 
-            hidden_fb_idx = 0
+            fb_idx = 0  # counter for hidden feedback matrices
 
-            for layer_idx, spec in enumerate(self.layer_specs):
-                state = layer_state[layer_idx]
+            # ---------------------------------------------------------------
+            # Per-layer eligibility update
+            # ---------------------------------------------------------------
+            for i, spec in enumerate(self.layers):
+                x_t = x[i]                 # (B, n_in)  presynaptic input
+                s_t = mem[i]               # (B, n_out) current membrane
+                y_prev = prev_spk[i]       # (B, n_out) previous spike
+                s_prev = prev_mem[i]       # (B, n_out) previous membrane
 
-                x_t = x_rec[layer_idx]
-                s_t = s_rec[layer_idx]
-                y_prev = prev_spk[layer_idx]
-                s_prev = prev_mem[layer_idx]
-                cur_t = i_rec[layer_idx]
+                # Extract data and create the data structures
+                beta = self._expand(
+                    getattr(spec.neuron, "beta", 1.0), B, spec.n_out, device, dtype
+                )
+                thresh = self._expand(
+                    getattr(spec.neuron, "threshold", 1.0), B, spec.n_out, device, dtype
+                )
+                
+                # Calcola il gradiente della funzione di attivazione (pseudo-derivata) rispetto alla membrana s_t
+                psi = self._psi(s_t - thresh)              # (B, n_out)
+                # Extract recurrent weights
+                H = spec.rec_weight.detach() if spec.rec_weight is not None else None
 
-                # Expand beta/threshold into [B, n_post] tensors.
-                beta_raw = getattr(spec.neuron, "beta", 1.0)
-                if isinstance(beta_raw, torch.Tensor):
-                    beta_t = beta_raw.detach().to(device=device, dtype=dtype)
-                else:
-                    beta_t = torch.tensor(float(beta_raw), device=device, dtype=dtype)
-                if beta_t.numel() == 1:
-                    beta_t = beta_t.view(1, 1).expand(batch_size, spec.n_post)
-                elif beta_t.numel() == spec.n_post:
-                    beta_t = beta_t.flatten().view(1, spec.n_post).expand(batch_size, spec.n_post)
-                else:
-                    raise ValueError(
-                        f"beta with {beta_t.numel()} values cannot map to n_post={spec.n_post}."
-                    )
+                # ----- Jacobians (see docstring for equations) -----
+                # How much past membrane potential influences current:
+                # j_s  = ds_t/ds_{t-1}         (B, n_out)  diagonal
+                # How much past output spike of the neuron influence current membrane potential:
+                # J_y  = ds_t/dy_{t-1}         diag or full matrix
+                # How much bias/threshold influences current membrane potential:
+                # ds_db = ∂s_t/∂b              (B, n_out)
 
-                thresh_raw = getattr(spec.neuron, "threshold", 1.0)
-                if isinstance(thresh_raw, torch.Tensor):
-                    thresh_t = thresh_raw.detach().to(device=device, dtype=dtype)
-                else:
-                    thresh_t = torch.tensor(float(thresh_raw), device=device, dtype=dtype)
-                if thresh_t.numel() == 1:
-                    thresh_t = thresh_t.view(1, 1).expand(batch_size, spec.n_post)
-                elif thresh_t.numel() == spec.n_post:
-                    thresh_t = thresh_t.flatten().view(1, spec.n_post).expand(batch_size, spec.n_post)
-                else:
-                    raise ValueError(
-                        f"threshold with {thresh_t.numel()} values cannot map to n_post={spec.n_post}."
-                    )
+                if spec.reset == "zero":
+                    # s_t = β(1-y_{t-1})s_{t-1} + I_t [+ y_{t-1}@H]
+                    j_s = beta * (1.0 - y_prev)
+                    diag_y = -beta * s_prev         # diagonal of ds/dy from reset
+                    ds_db = torch.zeros_like(y_prev)  # b doesn't appear in s
 
-                psi_t = self._pseudo_derivative_fn(s_t - thresh_t)
+                elif spec.reset == "subtract":
+                    # s_t = βs_{t-1} - y_{t-1}·b + I_t [+ y_{t-1}@H]
+                    j_s = beta
+                    diag_y = -thresh                # ds/dy from -y·b term
+                    ds_db = -y_prev                 # ∂s/∂b = -y_{t-1}
 
-                # (c) Jacobians ds_t/ds_{t-1}, ds_t/dy_{t-1} for snnTorch reset dynamics.
-                # snn.Leaky(reset='zero', reset_delay=True):
-                #   s_t = beta*(1 - y_{t-1})*s_{t-1} + I_t
-                # snn.RLeaky(reset='zero', reset_delay=True):
-                #   s_t = (1 - y_{t-1})*(beta*s_{t-1} + I_t + H*y_{t-1})
-                rec_weight = spec.recurrent_weight.detach() if spec.recurrent_weight is not None else None
-                rec_bias = spec.recurrent_bias.detach() if spec.recurrent_bias is not None else None
-                rec_row_scale = None
-
-                if spec.reset_mechanism == "subtract":
-                    j_s = beta_t
-                    diag_term = -thresh_t
-                    ds_db = -y_prev
-                elif spec.reset_mechanism == "none":
-                    j_s = beta_t
-                    diag_term = torch.zeros_like(beta_t)
-                    ds_db = torch.zeros_like(y_prev)
-                else:  # "zero"
-                    j_s = beta_t * (1.0 - y_prev)
+                else:  # "none"
+                    # s_t = βs_{t-1} + I_t [+ y_{t-1}@H]
+                    j_s = beta
+                    diag_y = torch.zeros_like(beta)  # no dependence on y
                     ds_db = torch.zeros_like(y_prev)
 
-                    if isinstance(spec.neuron, snn.RLeaky):
-                        rec_term = torch.zeros_like(s_t)
-                        if rec_weight is not None:
-                            rec_term = F.linear(y_prev, rec_weight, rec_bias)
-                        base_pre_reset = beta_t * s_prev + cur_t + rec_term
-                        diag_term = -base_pre_reset
-                        rec_row_scale = 1.0 - y_prev
-                    else:
-                        if rec_weight is not None:
-                            raise NotImplementedError(
-                                "Unexpected recurrent weights on Leaky layer for reset='zero'."
-                            )
-                        diag_term = -(beta_t * s_prev)
+                # ----- Combine J_y · e_prev for each parameter -----
+                # For Leaky (no recurrence): J_y is diagonal → element-wise
+                # For RLeaky: J_y = H + diag(diag_y) → full matrix multiply
 
-                if rec_weight is None:
-                    jy_e_w = diag_term.unsqueeze(-1) * state["e_w"]
-                    jy_e_h = None
-                    jy_e_b = diag_term * state["e_b"] if "e_b" in state else None
+                # If we have no recurrent weights we consider only the weigths and biases
+                # We multiply the jacobian for the corresponding traces
+                if H is None:
+                    # Leaky: J_y is diagonal = diag_y
+                    Jy_ew = diag_y.unsqueeze(-1) * e_w[i]   # (B, n_out, n_in)
+                    Jy_eh = None
+                    Jy_eb = diag_y * e_b[i] if e_b[i] is not None else None
+                # If we have recurrent weights we consider also the contribution of the previous spikes to the current state
                 else:
-                    rec_mat = rec_weight.unsqueeze(0).expand(batch_size, -1, -1)
-                    if rec_row_scale is not None:
-                        rec_mat = rec_row_scale.unsqueeze(-1) * rec_mat
-                    j_y = rec_mat + torch.diag_embed(diag_term)
-                    jy_e_w = torch.bmm(j_y, state["e_w"])
-                    jy_e_h = torch.bmm(j_y, state["e_h"]) if "e_h" in state else None
-                    jy_e_b = (
-                        torch.bmm(j_y, state["e_b"].unsqueeze(-1)).squeeze(-1)
-                        if "e_b" in state
-                        else None
+                    # RLeaky: J_y = H + diag(diag_y)         (n_out, n_out)
+                    # Expand H to batch: (B, n_out, n_out)
+                    J_y = H.unsqueeze(0).expand(B, -1, -1) + torch.diag_embed(diag_y)
+                    Jy_ew = torch.bmm(J_y, e_w[i])
+                    Jy_eh = torch.bmm(J_y, e_h[i]) if e_h[i] is not None else None
+                    Jy_eb = (
+                        torch.bmm(J_y, e_b[i].unsqueeze(-1)).squeeze(-1)
+                        if e_b[i] is not None else None
                     )
 
-                # (d) Eligibility recursions epsilon/e for W/H/b (Eq. 8-9).
-                ds_d_w = x_t.unsqueeze(1).expand(-1, spec.n_post, -1)
-                state["eps_w"] = j_s.unsqueeze(-1) * state["eps_w"] + ds_d_w + jy_e_w
+                # ----- Eligibility recursion (Eq. 8-9) -----
 
-                is_spiking_output_layer = self._output_is_spiking and layer_idx == (self.num_layers - 1)
-                if is_spiking_output_layer and self.output_readout == "mem":
-                    dy_ds = torch.ones_like(psi_t)
-                    dy_db = torch.zeros_like(psi_t)
+                # --- W (input weights) ---
+                # ∂s_t/∂W[j→i] = x_t[j] for neuron i
+                ds_dW = x_t.unsqueeze(1).expand(-1, spec.n_out, -1)   # (B, n_out, n_in)
+
+                eps_w[i] = j_s.unsqueeze(-1) * eps_w[i] + ds_dW + Jy_ew
+
+                # Output layer with "mem" readout: dy/ds = 1 (no spike nonlinearity)
+                is_output_mem = (
+                    self.output_readout == "mem" and i == n_layers - 1
+                )
+                dy_ds = torch.ones_like(psi) if is_output_mem else psi
+                dy_db = torch.zeros_like(psi) if is_output_mem else -psi
+
+                e_w[i] = dy_ds.unsqueeze(-1) * eps_w[i]               # (B, n_out, n_in)
+
+                # --- H (recurrent weights, RLeaky only) ---
+                if eps_h[i] is not None:
+                    # ∂s_t/∂H[j→i] = y_{t-1}[j] for neuron i
+                    ds_dH = y_prev.unsqueeze(1).expand(-1, spec.n_out, -1)
+                    eps_h[i] = j_s.unsqueeze(-1) * eps_h[i] + ds_dH + Jy_eh
+                    e_h[i] = dy_ds.unsqueeze(-1) * eps_h[i]
+
+                # --- b (threshold) ---
+                if eps_b[i] is not None:
+                    Jy_eb_val = Jy_eb if Jy_eb is not None else diag_y * e_b[i]
+                    eps_b[i] = j_s * eps_b[i] + ds_db + Jy_eb_val
+                    e_b[i] = dy_ds * eps_b[i] + dy_db
+
+                # ----- Learning signal (Eq. 11) -----
+                if is_output_mem:
+                    # Last spiking layer IS the output → use analytic gradient
+                    L = l_out                                # (B, C)
                 else:
-                    dy_ds = psi_t
-                    dy_db = -psi_t
+                    # Hidden layer → random projection of target
+                    L = torch.matmul(y_star_t, self._get_fb(fb_idx))  # (B, n_out)
+                    fb_idx += 1
 
-                state["e_w"] = dy_ds.unsqueeze(-1) * state["eps_w"]
+                # ----- Accumulate Δθ (Eq. 6) -----
+                dW[i] += (L.unsqueeze(-1) * e_w[i]).sum(0)   # (n_out, n_in)
+                if dH[i] is not None:
+                    dH[i] += (L.unsqueeze(-1) * e_h[i]).sum(0)
+                if db[i] is not None:
+                    db[i] += (L * e_b[i]).sum(0)
 
-                if "eps_h" in state and "e_h" in state:
-                    ds_d_h = y_prev.unsqueeze(1).expand(-1, spec.n_post, -1)
-                    if jy_e_h is None:
-                        raise RuntimeError("Recurrent eligibility requested without recurrent Jacobian.")
-                    state["eps_h"] = j_s.unsqueeze(-1) * state["eps_h"] + ds_d_h + jy_e_h
-                    state["e_h"] = dy_ds.unsqueeze(-1) * state["eps_h"]
+            # --- Non-spiking output layer ---
+            if dW_out is not None and self.output_synapse is not None:
+                out_in = self._h_out_in
+                if out_in is None:
+                    raise RuntimeError("Hook missed output linear input.")
+                # e_out = dy/ds · x  (identity activation → dy/ds = 1)
+                e_out = out_in.unsqueeze(1).expand(-1, self.output_size, -1)
+                dW_out += (l_out.unsqueeze(-1) * e_out).sum(0)
+                if db_out is not None:
+                    db_out += (l_out).sum(0)
 
-                if "eps_b" in state and "e_b" in state:
-                    if jy_e_b is None:
-                        jy_e_b = diag_term * state["e_b"]
-                    state["eps_b"] = j_s * state["eps_b"] + ds_db + jy_e_b
-                    state["e_b"] = dy_ds * state["eps_b"] + dy_db
+            # Save state for next timestep
+            for i in range(n_layers):
+                prev_spk[i] = spk[i]
+                prev_mem[i] = mem[i]
 
-                # Hidden layers use fixed projection; output layer uses dE/dy_t^K.
-                if is_spiking_output_layer:
-                    l_t = l_out
+        # ===================================================================
+        # Apply accumulated gradients
+        # ===================================================================
+        denom = float(max(B, 1))
+
+        # For each layer
+        for i, spec in enumerate(self.layers):
+            self._apply_grad(spec.synapse.weight, dW[i] / denom)
+            if dH[i] is not None and spec.rec_weight is not None:
+                self._apply_grad(spec.rec_weight, dH[i] / denom)
+            if db[i] is not None and spec.thresh_param is not None:
+                grad_b = db[i] / denom
+                # Reduce to match parameter shape (scalar or per-neuron)
+                if spec.thresh_param.numel() == 1:
+                    grad_b = grad_b.sum().view_as(spec.thresh_param)
                 else:
-                    l_t = torch.matmul(y_star_t, self._feedback_for_hidden(hidden_fb_idx))
-                    hidden_fb_idx += 1
+                    grad_b = grad_b.view_as(spec.thresh_param)
+                self._apply_grad(spec.thresh_param, grad_b)
 
-                # (e) Time accumulation of Delta theta_l from Eq. (6).
-                state["delta_w"] += (l_t.unsqueeze(-1) * state["e_w"]).sum(dim=0)
-                if "delta_h" in state:
-                    state["delta_h"] += (l_t.unsqueeze(-1) * state["e_h"]).sum(dim=0)
-                if "delta_b" in state:
-                    state["delta_b"] += (l_t * state["e_b"]).sum(dim=0)
+        if dW_out is not None and self.output_synapse is not None:
+            self._apply_grad(self.output_synapse.weight, dW_out / denom)
+        if db_out is not None and self.output_synapse is not None:
+            self._apply_grad(self.output_synapse.bias, db_out / denom)
 
-            # Non-spiking output readout branch (logits/probs): update output linear.
-            if output_state is not None and self.output_synapse is not None:
-                if self._hook_out_input is None:
-                    raise RuntimeError(
-                        "Could not capture output readout input. Ensure output linear module "
-                        "is used in network.forward."
-                    )
-                out_in_t = self._hook_out_input
-
-                if self.output_readout == "logits":
-                    dy_ds_out = torch.ones_like(l_out)
-                else:  # probs
-                    dy_ds_out = y_out_t * (1.0 - y_out_t)
-
-                e_out_w = dy_ds_out.unsqueeze(-1) * out_in_t.unsqueeze(1)
-                output_state["delta_w"] += (l_out.unsqueeze(-1) * e_out_w).sum(dim=0)
-
-                if "delta_b" in output_state and self.output_synapse.bias is not None:
-                    e_out_b = dy_ds_out
-                    output_state["delta_b"] += (l_out * e_out_b).sum(dim=0)
-
-            for idx in range(self.num_layers):
-                prev_spk[idx] = y_rec[idx]
-                prev_mem[idx] = s_rec[idx]
-
-        denom = float(max(batch_size, 1))
-        for spec, state in zip(self.layer_specs, layer_state):
-            grad_w = state["delta_w"] / denom
-            self._accumulate_or_apply(spec.synapse.weight, grad_w)
-
-            if "delta_h" in state and spec.recurrent_weight is not None:
-                grad_h = state["delta_h"] / denom
-                self._accumulate_or_apply(spec.recurrent_weight, grad_h)
-
-            if "delta_b" in state and spec.threshold_param is not None:
-                grad_b_neuron = state["delta_b"] / denom
-                grad_b = self._reduce_threshold_grad(grad_b_neuron, spec.threshold_param)
-                self._accumulate_or_apply(spec.threshold_param, grad_b)
-
-        if output_state is not None and self.output_synapse is not None:
-            grad_out_w = output_state["delta_w"] / denom
-            self._accumulate_or_apply(self.output_synapse.weight, grad_out_w)
-
-            if "delta_b" in output_state and self.output_synapse.bias is not None:
-                grad_out_b = output_state["delta_b"] / denom
-                self._accumulate_or_apply(self.output_synapse.bias, grad_out_b)
-
-        if self.use_optimizer and self.optimizer is not None:
+        if self.optimizer is not None:
             self.optimizer.step()
             self.optimizer.zero_grad(set_to_none=True)
 
-        if self.debug:
-            for idx, state in enumerate(layer_state):
-                print(
-                    f"[OSTTP] layer={idx} |dW|={state['delta_w'].norm().item():.4e}",
-                    flush=True,
-                )
-                if "delta_h" in state:
-                    print(
-                        f"[OSTTP] layer={idx} |dH|={state['delta_h'].norm().item():.4e}",
-                        flush=True,
-                    )
-            if output_state is not None:
-                print(
-                    f"[OSTTP] output_readout |dW|={output_state['delta_w'].norm().item():.4e}",
-                    flush=True,
-                )
-
-        loss = total_loss / float(max(num_timesteps, 1))
+        loss = total_loss / float(max(T, 1))
         pred = readout_sum.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
-    def reset(self) -> None:
+    # -----------------------------------------------------------------------
+    # Utilities
+    # -----------------------------------------------------------------------
+
+    def reset(self):
         self.network.reset()
-        if self.use_optimizer and self.optimizer is not None:
+        if self.optimizer is not None:
             self.optimizer.zero_grad(set_to_none=True)
 
     def checkpoint_state(self) -> dict:
-        if not self._feedback_ready:
-            return {"target_dim": self.target_dim, "feedback": []}
+        mats = [getattr(self, n).cpu() for n in self._fb_names] if self._fb_ready else []
+        return {"feedback": mats}
 
-        mats = [getattr(self, name).detach().cpu() for name in self._feedback_names]
-        return {
-            "target_dim": self.target_dim,
-            "feedback": mats,
-        }
-
-    def load_checkpoint_state(self, state: dict) -> None:
-        target_dim = state.get("target_dim", self.target_dim)
-        if target_dim is not None:
-            self.target_dim = int(target_dim)
-
-        feedback = state.get("feedback", None)
-        if feedback is None:
+    def load_checkpoint_state(self, state: dict):
+        fb = state.get("feedback", [])
+        if not fb:
             return
-
-        device = self.layer_specs[0].synapse.weight.device
-        dtype = self.layer_specs[0].synapse.weight.dtype
-        self._ensure_feedback_matrices(device=device, dtype=dtype)
-
-        if len(feedback) != len(self._feedback_names):
-            raise ValueError(
-                "Checkpoint feedback matrix count does not match trainer hidden layers."
-            )
-
-        for name, matrix in zip(self._feedback_names, feedback):
-            getattr(self, name).copy_(matrix.to(device=device, dtype=dtype))
+        dev = self.layers[0].synapse.weight.device
+        dt = self.layers[0].synapse.weight.dtype
+        self._ensure_feedback(fb[0].shape[0], dev, dt)
+        for name, mat in zip(self._fb_names, fb):
+            getattr(self, name).copy_(mat.to(device=dev, dtype=dt))
 
     def to(self, device):
         super().to(device)
-        if self.use_optimizer and self._external_optimizer is None:
+        if self.use_optimizer and self.optimizer is not None:
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         return self
