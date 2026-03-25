@@ -8,6 +8,7 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 - `📂 docs/`: Contains documentation for the framework.
 - `📂 hpc/`: Contains scripts for running benchmarks on High-Performance Computing (HPC) clusters.
 - `📂 src/`: Contains the source code of the framework.
+- `📂 test/`: Test programs used to test different components.
   - `📂 src/networks/`: Contains different SNN architectures.
   - `📂 src/trainers/`: Contains different trainer objects that implement various training algorithms.
   - `📂 src/datasets/`: Contains code for loading and preprocessing datasets.
@@ -17,33 +18,83 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 - `benchmarking.py`: The main entry point for running benchmarking experiments.
 - `reproducibility.py`: Script to launch reproducibility experiments on implemented trainers.
 
-## Main Files
+## Unit Tests & Validation
 
-### `main.py`
-This file serves as the main entry point for running single experiments.
+### Dataloaders
 
-How to call it:
-...
+| Dataset | Type | Status | Notes |
+|---------|------|--------|-------|
+| MNIST | Rate-coded | 🟢 |  |
+| Fashion-MNIST | Rate-coded | 🟢 |  |
+| CIFAR-10 | Rate-coded | 🟢 |  |
+| SVHN | Rate-coded | 🟢 |  |
+| NMNIST | Event-based | 🟢 |  |
+| DVSGesture | Event-based | 🟢 | Works with caching |
+| SHD | Event-based | 🟡 | Noticed a few issues that seems related to dataset itself, need to check them |
+| DVS-CIFAR10 | Event-based | 🔴 | Not implemented yet |
 
-The file starts form the main, there is reading and extraction of config both from file and command line, then some helpers are created for logging and checkpoint management then we have the most crtitical lines:
-```python
-# Get trainer class
-trainer_class = get_trainer(config.trainer.name)
-```
 
-and: 
-```python
-# Run training
-trainable(
-    config=config,
-    trainer_class=trainer_class,
-    logger=logger,
-    checkpoint_manager=checkpoint_manager,
-    start_epoch=start_epoch,
-    resume_checkpoint=resume_checkpoint,
-)
-```
+### Networks
 
-The `get_trainer` function is a simple helper function that returns the trainer class based on the name specified in the config.
+| Architecture | Type | Location | Status | Notes |
+|-------------|------|----------|--------|-------|
+| FC-SNN | Feedforward | `benchmarking/fc_snn.py` | 🟢 | Fully-connected, baseline for rate-coded data |
+| Conv-SNN | Convolutional | `benchmarking/conv_snn.py` | 🟢 | Convolutional layers, for image tasks |
+| R-SNN | Recurrent | `benchmarking/r_snn.py` | 🟢 | Recurrent SNN, for temporal tasks |
+| VGG9 (CIFAR-10) | Convolutional | `benchmarking/vgg9_cifar10.py` | 🟢 | VGG-inspired, tuned for CIFAR-10 |
+| VGG9 (DVSGesture) | Convolutional | `benchmarking/vgg9_dvsgest.py` | 🟢 | VGG-inspired, for event-based gestures |
+| VGG9 (SVHN) | Convolutional | `benchmarking/vgg9_svhn.py` | 🟢 | VGG-inspired, for street view data |
+| Paper-specific | Various | `reproducibility/` | 🟢 | Algorithm-specific implementations (DECOLLE, DRTP, E-prop, etc.) |
 
-The `trainable` function is the main function that runs the training loop, it takes care of the entire training process including logging, checkpointing, and evaluation.
+### Trainers
+
+| Algorithm | Trainer File | Status | Supported Networks |
+|-----------|--------------|--------|-------------------|
+| BPTT | `bptt_trainer.py` | 🟢 | All |
+| OSTL | `ostl_trainer.py` | 🔴 | Recurrent |
+| OTTT | `ottt_trainer.py` | 🔴 | Convolutional |
+| OSTTP | `osttp_trainer.py` | 🔴 | Recurrent (SHD-tuned) |
+| OTPE | `otpe_trainer.py` | 🔴 | All |
+| DRTP | `drtp_trainer.py` | 🔴 | All |
+| DECOLLE | `decolle_trainer.py` | 🔴 | All |
+| E-prop | `eprop_trainer.py` | 🔴 | Recurrent |
+| ESD-RTRL | `esd_rtrl_trainer.py` | 🔴 | Recurrent |
+| ETLP | `etlp_trainer.py` | 🔴 | All |
+| STOP | `stop_trainer.py` | 🔴 | All |
+| TP | `tp_trainer.py` | 🔴 | All |
+| ELL | `ell_trainer.py` | 🔴 | Feedforward |
+| FELL | `fell_trainer.py` | 🔴 | Feedforward |
+| BELL | `bell_trainer.py` | 🔴 | Feedforward |
+| STLLR | `stllr_trainer.py` | 🔴 | All |
+| STSF | `stsf_trainer.py` | 🔴 | All |
+
+### Test Programs
+
+**Integration & Trainer Validation** — Full training loops testing trainer × network × dataset combinations:
+
+##### BPTT
+
+| Test | Network | Dataset | Result | Commit |
+|------|---------|---------|--------|--------|
+| `bptt_mnist_fc.py` | FC-SNN | MNIST |  |  |
+| `bptt_fmnist_conv.py` | Conv-SNN | Fashion-MNIST |  |  |
+| `bptt_cifar10_vgg9.py` | VGG9 | CIFAR-10 |  |  |
+| `bptt_cifar10_vgg9_direct.py` | VGG9 | CIFAR-10 (direct) |  |  |
+| `bptt_dvsgest_vgg9.py` | VGG9 | DVSGesture |  |  |
+| `bptt_dvsgest_r.py` | R-SNN | DVSGesture |  |  |
+| `bptt_svhn_vgg9.py` | VGG9 | SVHN |  |  |
+| `bptt_svhn_r.py` | R-SNN | SVHN |  |  |
+| `bptt_nmnist_r.py` | R-SNN | NMNIST |  |  |
+
+**Dataset Smoke Tests** — Minimal tests verifying dataloaders work correctly:
+
+| Test | Dataset | Command |
+|------|---------|---------|
+| `test_mnist_loader.py` | MNIST | `python tests/dataloaders/test_mnist_loader.py` |
+| `test_fashionmnist_loader.py` | Fashion-MNIST | `python tests/dataloaders/test_fashionmnist_loader.py` |
+| `test_cifar10_loader.py` | CIFAR-10 | `python tests/dataloaders/test_cifar10_loader.py` |
+| `test_svhn_loader.py` | SVHN | `python tests/dataloaders/test_svhn_loader.py` |
+| `test_nmnist_loader.py` | NMNIST | `python tests/dataloaders/test_nmnist_loader.py` |
+| `test_dvsgesture_loader.py` | DVSGesture | `python tests/dataloaders/test_dvsgesture_loader.py` |
+| `test_shd_loader.py` | SHD | `python tests/dataloaders/test_shd_loader.py` |
+
