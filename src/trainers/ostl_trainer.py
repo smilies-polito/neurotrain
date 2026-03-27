@@ -2,7 +2,28 @@
 OSTL (Online Spatio-Temporal Learning) trainer for feed-forward SNNs.
 
 Implements the deep feed-forward SNU formulation from:
-    Bohnstingl et al., "Online Spatio-Temporal Learning in Deep Neural Networks", 2020.
+    Bohnstingl et al., "Online Spatio-Temporal Learning in Deep Neural Networks",
+    IEEE TNNLS, 2023.  (arXiv: 2007.12723v2)
+
+Key equations (arxiv v2 numbering, cited in the code below):
+    Eq. (11)  OSTL gradient:          ∂E/∂θ_l ≈ Σ_t L_l^t · e_l^{t,θ}
+    Eq. (12)  eligibility trace (W):  e^{t,W} = diag(h′^t) · ε^{t,W}
+    Eq. (14)  eligibility tensor (W): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g′^t · x^t
+    Eq. (16)  state Jacobian (ff):    ∂s^t/∂s^{t-1} = g′^t · (d·(1−h^{t-1}) − V^{t-1}·h′^{t-1})
+    Eq. (18)  learning signal:        L_l = W_{l+1}^T · diag(h′_{l+1} ⊙ g′_{l+1}) · L_{l+1}
+    Eq. (19)  output error:           L_K = output − target
+
+Implementation notes:
+  - g(x) = identity is assumed throughout (g′ = 1), matching the standard LIF/SNU neuron.
+    The reference code supports g = LeakyReLU (Section V-B) but this is not implemented here.
+  - The surrogate gradient h′ uses a logistic function, not the paper's tanh-based
+    pseudoderivative (1 − tanh²). The OSTL algorithm is agnostic to surrogate choice.
+  - nn.Linear.bias is treated as an additive input bias (not the SNU threshold bias b_l).
+    Its eligibility tensor follows the same recursion as W but with injection term 1
+    instead of x^t:  ε^{t,bias} = (∂s^t/∂s^{t-1}) · ε^{t-1,bias} + 1.
+  - V^{t-1} in Eq. (16) is the membrane BEFORE reset that generated spike h^{t-1}.
+    snnTorch uses soft reset and returns V_stored = V_pre − θ·spk, so we recover
+    V_pre = V_stored + θ·spk before applying the formula.
 """
 
 from __future__ import annotations
@@ -25,9 +46,7 @@ class OSTLTrainer(BaseTrainer):
     - `network.synapses` + `network.neurons` (preferred)
     - alternating `[nn.Linear, snn.Leaky, ...]` in `network.layers` (legacy)
 
-    Unsupported:
-    - recurrent layers (`network.recurrent_layers`)
-    - convolutional trainable layers
+    Not supported: recurrent layers, convolutional layers.
     """
 
     def __init__(
@@ -39,7 +58,6 @@ class OSTLTrainer(BaseTrainer):
         grad_clip: float = 0.0,
         update_last: bool = False,
         update_every: int = 1,
-        quant: bool = False,
         use_optimizer: bool = False,
         optimizer: Optional[torch.optim.Optimizer] = None,
         output_mode: str = "spike",
@@ -55,7 +73,6 @@ class OSTLTrainer(BaseTrainer):
         self.grad_clip = float(grad_clip)
         self.update_last = bool(update_last)
         self.update_every = int(update_every)
-        self.quant = bool(quant)
         self.use_optimizer = bool(use_optimizer)
         self.output_mode = str(output_mode).lower()
 
@@ -68,40 +85,34 @@ class OSTLTrainer(BaseTrainer):
         if self.update_every <= 0:
             raise ValueError("OSTLTrainer requires update_every >= 1.")
         if self.output_mode not in ("spike", "mem"):
-            raise ValueError(
-                f"Invalid output_mode '{output_mode}'. Use 'spike' or 'mem'."
-            )
+            raise ValueError(f"Invalid output_mode '{output_mode}'. Use 'spike' or 'mem'.")
 
         self.linear_layers, self.lif_layers = self._resolve_layers(self.network)
         if len(self.linear_layers) == 0:
-            raise TypeError(
-                "OSTLTrainer requires at least one Linear+Leaky layer pair."
-            )
+            raise TypeError("OSTLTrainer requires at least one Linear+Leaky layer pair.")
 
         recurrent_layers = getattr(self.network, "recurrent_layers", None)
         if recurrent_layers is not None and len(recurrent_layers) > 0:
-            raise TypeError(
-                "OSTLTrainer is feed-forward only and does not support recurrent layers."
-            )
+            raise TypeError("OSTLTrainer is feed-forward only and does not support recurrent layers.")
 
         self.num_layers = len(self.linear_layers)
         self.n_classes = int(getattr(self.network, "n_classes"))
 
-        self.layer_decay = [
-            self._to_scalar(lif.beta, "beta") for lif in self.lif_layers
-        ]
+        # Per-layer LIF parameters needed for Eq. (16)
+        self.layer_decay = [self._to_scalar(lif.beta, "beta") for lif in self.lif_layers]
         self.layer_threshold = [
-            self._to_scalar(getattr(lif, "threshold", 1.0), "threshold")
-            for lif in self.lif_layers
+            self._to_scalar(getattr(lif, "threshold", 1.0), "threshold") for lif in self.lif_layers
         ]
 
         self._external_optimizer = optimizer
         if self.use_optimizer:
-            self.optimizer = optimizer or torch.optim.Adam(
-                self.network.parameters(), lr=self.lr
-            )
+            self.optimizer = optimizer or torch.optim.Adam(self.network.parameters(), lr=self.lr)
         else:
             self.optimizer = None
+
+    # -------------------------------------------------------------------------
+    # Static helpers
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def _to_scalar(value, name: str) -> float:
@@ -115,6 +126,7 @@ class OSTLTrainer(BaseTrainer):
 
     @staticmethod
     def _resolve_layers(network: nn.Module) -> tuple[List[nn.Linear], List[snn.Leaky]]:
+        """Extract paired (nn.Linear, snn.Leaky) lists from the network."""
         synapses = getattr(network, "synapses", None)
         neurons = getattr(network, "neurons", None)
 
@@ -134,7 +146,6 @@ class OSTLTrainer(BaseTrainer):
                 raise TypeError(
                     "OSTLTrainer expects equal non-zero lengths for network.synapses and network.neurons."
                 )
-
             linear_layers: List[nn.Linear] = []
             lif_layers: List[snn.Leaky] = []
             for idx, (syn, neu) in enumerate(zip(synapses, neurons)):
@@ -156,49 +167,41 @@ class OSTLTrainer(BaseTrainer):
                 "OSTLTrainer expects either (network.synapses, network.neurons) or network.layers."
             )
         if not isinstance(raw_layers, (nn.ModuleList, list, tuple)):
-            raise TypeError(
-                "OSTLTrainer expects network.layers to be a ModuleList/list/tuple."
-            )
+            raise TypeError("OSTLTrainer expects network.layers to be a ModuleList/list/tuple.")
         if len(raw_layers) == 0 or len(raw_layers) % 2 != 0:
             raise TypeError(
                 "OSTLTrainer expects network.layers to be an even-length alternating [Linear, Leaky] list."
             )
-
         linear_layers = []
         lif_layers = []
         for idx in range(0, len(raw_layers), 2):
-            linear_layer = raw_layers[idx]
-            lif_layer = raw_layers[idx + 1]
-            if not isinstance(linear_layer, nn.Linear) or not isinstance(
-                lif_layer, snn.Leaky
-            ):
+            lin, lif = raw_layers[idx], raw_layers[idx + 1]
+            if not isinstance(lin, nn.Linear) or not isinstance(lif, snn.Leaky):
                 raise TypeError(
                     "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] entries in network.layers."
                 )
-            linear_layers.append(linear_layer)
-            lif_layers.append(lif_layer)
+            linear_layers.append(lin)
+            lif_layers.append(lif)
         return linear_layers, lif_layers
 
-    def _surrogate_derivative(
-        self, membrane_minus_threshold: torch.Tensor
-    ) -> torch.Tensor:
-        # Logistic surrogate derivative for h'(s).
-        scaled = self.surrogate_scale * membrane_minus_threshold
-        sig = torch.sigmoid(scaled)
+    # -------------------------------------------------------------------------
+    # Surrogate gradient
+    # -------------------------------------------------------------------------
+
+    def _surrogate_grad(self, mem_minus_threshold: torch.Tensor) -> torch.Tensor:
+        """Logistic surrogate: h′(V−θ) = k·σ(k·(V−θ))·(1−σ(k·(V−θ))).
+
+        Note: the paper uses h′(x) = 1 − tanh²(x) as the pseudoderivative (Section V).
+        The logistic surrogate used here is an equally valid choice — the OSTL algorithm
+        is agnostic to surrogate form.
+        """
+        s = self.surrogate_scale * mem_minus_threshold
+        sig = torch.sigmoid(s)
         return self.surrogate_scale * sig * (1.0 - sig)
 
-    def _accumulate_or_apply_grad(self, layer: nn.Linear, grad_w: torch.Tensor) -> None:
-        if self.grad_clip > 0.0:
-            grad_w = grad_w.clamp(-self.grad_clip, self.grad_clip)
-
-        if self.use_optimizer and self.optimizer is not None:
-            if layer.weight.grad is None:
-                layer.weight.grad = grad_w.clone()
-            else:
-                layer.weight.grad.add_(grad_w)
-            return
-
-        layer.weight.add_(-self.lr * grad_w)
+    # -------------------------------------------------------------------------
+    # Training
+    # -------------------------------------------------------------------------
 
     @torch.no_grad()
     def train_sample(
@@ -208,186 +211,216 @@ class OSTLTrainer(BaseTrainer):
         Train one mini-batch.
 
         Args:
-            data: [T, B, ...]
-            target: [B]
+            data:   [T, B, ...]  — time-first input
+            target: [B]          — class labels
+        Returns:
+            loss: scalar, pred: [B, 1]
         """
         if data.dim() < 3:
             raise ValueError(
                 f"OSTLTrainer expects input shape [T, B, ...], got {tuple(data.shape)}."
             )
 
-        num_timesteps = int(data.shape[0])
-        batch_size = int(data.shape[1])
+        # Extract dimensions and device info for later use
+        T = data.shape[0]
+        B = data.shape[1]
         device = data.device
-
-        if target.dim() != 1 or int(target.shape[0]) != batch_size:
+        dtype = data.dtype if data.is_floating_point() else torch.float32
+        # Quick check target shape and type
+        if target.dim() != 1 or target.shape[0] != B:
             raise ValueError(
-                "OSTLTrainer expects target shape [B], "
-                f"got {tuple(target.shape)} for batch size {batch_size}."
+                f"OSTLTrainer expects target shape [B], got {tuple(target.shape)} for batch size {B}."
             )
 
-        value_dtype = data.dtype if data.is_floating_point() else torch.float32
-        target_onehot = torch.zeros(
-            batch_size, self.n_classes, device=device, dtype=value_dtype
-        )
-        target_onehot.scatter_(1, target.long().unsqueeze(1), 1.0)
+        # One-hot targets for MSE output error (Eq. 19)
+        # Could it be equation 20 actually?
+        target_oh = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
+        target_oh.scatter_(1, target.long().unsqueeze(1), 1.0)
 
+        # Reset of the network and optimizer
         self.network.reset()
         if self.use_optimizer and self.optimizer is not None:
             self.optimizer.zero_grad(set_to_none=True)
 
-        eps_w = [
-            layer.weight.new_zeros(batch_size, layer.out_features, layer.in_features)
+        # -----------------------------------------------------------------------
+        # OSTL running state (reset at the start of each sample/sequence)
+        # -----------------------------------------------------------------------
+        # elig_vec[l]: [B, out_l, in_l] — eligibility tensor ε^{t,W_l} (Eq. 14)
+        elig_vec = [
+            layer.weight.new_zeros(B, layer.out_features, layer.in_features)
             for layer in self.linear_layers
         ]
-        prev_mem = [
-            layer.weight.new_zeros(batch_size, layer.out_features)
+        # elig_vec_bias[l]: [B, out_l] — eligibility tensor ε^{t,bias_l} (same recursion, injection=1)
+        elig_vec_bias = [
+            layer.weight.new_zeros(B, layer.out_features) if layer.bias is not None else None
             for layer in self.linear_layers
         ]
-        prev_spk = [
-            layer.weight.new_zeros(batch_size, layer.out_features)
-            for layer in self.linear_layers
-        ]
-        prev_h_prime = [
-            layer.weight.new_zeros(batch_size, layer.out_features)
-            for layer in self.linear_layers
-        ]
+        # Values from t−1 used in Eq. (16): stored membrane, spike, surrogate derivative
+        prev_mem = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
+        prev_spk = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
+        prev_h_prime = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
 
-        grad_buffer = [torch.zeros_like(layer.weight) for layer in self.linear_layers]
-        pending_grads = 0
+        # Gradient accumulation buffers (flushed according to update schedule)
+        grad_buf = [torch.zeros_like(layer.weight) for layer in self.linear_layers]
+        grad_buf_bias = [
+            torch.zeros_like(layer.bias) if layer.bias is not None else None
+            for layer in self.linear_layers
+        ]
+        pending = 0   # number of timesteps accumulated in grad_buf since last flush
 
-        output_sum = torch.zeros(
-            batch_size, self.n_classes, device=device, dtype=value_dtype
-        )
-        total_loss = torch.zeros((), device=device, dtype=value_dtype)
-        loss_steps = 0
+        output_sum = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
+        total_loss = torch.zeros((), device=device, dtype=dtype)
+        loss_count = 0
 
-        for t in range(num_timesteps):
+        # -----------------------------------------------------------------------
+        # LOOP OVER TIMESTEPS
+        # -----------------------------------------------------------------------
+        for t in range(T):
+
+            # Forward pass for the network
             spk_rec, mem_rec = self.network(data[t])
+            # Quinck sanity check
             if len(spk_rec) != self.num_layers or len(mem_rec) != self.num_layers:
                 raise ValueError(
                     "OSTLTrainer expects network(data[t]) to return spike/membrane lists "
                     f"of length {self.num_layers}."
                 )
 
+            # Handle different output modes: spike vs. membrane
             output_t = spk_rec[-1] if self.output_mode == "spike" else mem_rec[-1]
-            if output_t.shape != (batch_size, self.n_classes):
-                raise ValueError(
-                    f"OSTLTrainer expects output shape {(batch_size, self.n_classes)}, "
-                    f"got {tuple(output_t.shape)} with output_mode='{self.output_mode}'."
-                )
             output_sum.add_(output_t)
 
-            supervised_step = (not self.update_last) or (t == num_timesteps - 1)
-            if supervised_step:
-                total_loss = total_loss + F.mse_loss(output_t, target_onehot)
-                loss_steps += 1
+            # Only compute loss / learning signal on supervised timesteps
+            is_supervised = (not self.update_last) or (t == T - 1)
+            if is_supervised:
+                total_loss = total_loss + F.mse_loss(output_t, target_oh)
+                loss_count += 1
 
-            e_w_per_layer = []
-            h_prime_per_layer = []
+            # -------------------------------------------------------------------
+            # Eq. (14, 12): build eligibility vector ε and trace e = h′·ε per layer
+            # -------------------------------------------------------------------
+            h_prime: List[torch.Tensor] = []                    # surrogate derivative h′_l^t
+            elig_trace: List[torch.Tensor] = []                 # eligibility trace  e_l^{t,W}
+            elig_trace_bias: List[Optional[torch.Tensor]] = []  # eligibility trace  e_l^{t,bias}
 
-            for layer_idx, layer in enumerate(self.linear_layers):
-                mem_t = mem_rec[layer_idx]
-                if mem_t.shape != (batch_size, layer.out_features):
-                    raise ValueError(
-                        "OSTLTrainer expects membrane tensors shaped "
-                        f"(B, {layer.out_features}) for layer {layer_idx}, got {tuple(mem_t.shape)}."
-                    )
+            for l, layer in enumerate(self.linear_layers):
+                mem_t = mem_rec[l]
 
-                pre_t = data[t] if layer_idx == 0 else spk_rec[layer_idx - 1]
+                # Presynaptic activity x_{l-1}^t (raw input for layer 0, spikes otherwise)
+                pre_t = data[t] if l == 0 else spk_rec[l - 1]
                 if pre_t.dim() > 2:
                     pre_t = pre_t.flatten(1)
-                if pre_t.shape != (batch_size, layer.in_features):
-                    raise ValueError(
-                        "OSTLTrainer expects presynaptic activity shaped "
-                        f"(B, {layer.in_features}) for layer {layer_idx}, got {tuple(pre_t.shape)}."
-                    )
                 pre_t = pre_t.to(dtype=layer.weight.dtype)
 
-                h_prime_t = self._surrogate_derivative(
-                    mem_t - self.layer_threshold[layer_idx]
+                # Surrogate derivative at the current membrane  h′_l^t = h′(V^t − θ)
+                h_prime_t = self._surrogate_grad(mem_t - self.layer_threshold[l])
+                h_prime.append(h_prime_t)
+
+                # Eq. (16): diagonal state Jacobian  ∂s^t/∂s^{t-1} = g′·(d·(1−h^{t-1}) − V^{t-1}·h′^{t-1})
+                # g′ = 1 here (identity activation, see module docstring).
+                # snnTorch soft reset returns V_stored = V_pre_reset − θ·spk,
+                # so recover V_pre_reset = V_stored + θ·spk before using it here.
+                pre_reset_mem = prev_mem[l] + self.layer_threshold[l] * prev_spk[l]
+                state_deriv = self.layer_decay[l] * (
+                    (1.0 - prev_spk[l]) - pre_reset_mem * prev_h_prime[l]
                 )
-                h_prime_per_layer.append(h_prime_t)
 
-                # Eq. (16), feed-forward case: g' = 1 for SNU/Leaky state update.
-                ds_ds_prev = self.layer_decay[layer_idx] * (
-                    (1.0 - prev_spk[layer_idx])
-                    - prev_mem[layer_idx] * prev_h_prime[layer_idx]
-                )
+                # Eq. (14): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g′·x^t  (g′=1)
+                elig_vec[l] = state_deriv.unsqueeze(-1) * elig_vec[l] + pre_t.unsqueeze(1)
 
-                # Eq. (14): eligibility-vector recursion for W.
-                eps_w[layer_idx] = ds_ds_prev.unsqueeze(-1) * eps_w[
-                    layer_idx
-                ] + pre_t.unsqueeze(1)
+                # Eq. (12): e^{t,W} = h′^t · ε^{t,W}
+                elig_trace.append(h_prime_t.unsqueeze(-1) * elig_vec[l])
 
-                # Eq. (12): eligibility trace for W.
-                e_w_per_layer.append(h_prime_t.unsqueeze(-1) * eps_w[layer_idx])
+                # Bias eligibility (analogous to Eq. 14/12 with injection term = 1)
+                if layer.bias is not None:
+                    elig_vec_bias[l] = state_deriv * elig_vec_bias[l] + 1.0
+                    elig_trace_bias.append(h_prime_t * elig_vec_bias[l])
+                else:
+                    elig_trace_bias.append(None)
 
-            if supervised_step:
-                learning_signals: List[torch.Tensor] = [
-                    torch.empty(0, device=device) for _ in range(self.num_layers)
-                ]
-                # Eq. (19): L_k = (W_out^T y_k - y*) with identity readout W_out = I.
-                learning_signals[-1] = output_t - target_onehot
+            if is_supervised:
+                # ---------------------------------------------------------------
+                # Eq. (18, 19): learning signals L_l^t propagated from output to input
+                # ---------------------------------------------------------------
+                L: List[torch.Tensor] = [torch.empty(0, device=device) for _ in range(self.num_layers)]
 
-                # Eq. (18): recursive learning-signal propagation through depth.
-                for layer_idx in range(self.num_layers - 2, -1, -1):
-                    w_next = self.linear_layers[layer_idx + 1].weight
-                    jacobian = h_prime_per_layer[layer_idx + 1].unsqueeze(
-                        -1
-                    ) * w_next.unsqueeze(0)
-                    learning_signals[layer_idx] = torch.einsum(
-                        "bi,bij->bj", learning_signals[layer_idx + 1], jacobian
-                    )
+                # Eq. (19): output layer error  L_K = ŷ − y*
+                L[-1] = output_t - target_oh
 
-                for layer_idx in range(self.num_layers):
-                    grad_t = (
-                        torch.einsum(
-                            "bi,bij->ij",
-                            learning_signals[layer_idx],
-                            e_w_per_layer[layer_idx],
-                        )
-                        / batch_size
-                    )
-                    grad_buffer[layer_idx].add_(grad_t)
-                pending_grads += 1
+                # Eq. (18): L_l = W_{l+1}^T · diag(h′_{l+1}) · L_{l+1}
+                for l in range(self.num_layers - 2, -1, -1):
+                    jac = h_prime[l + 1].unsqueeze(-1) * self.linear_layers[l + 1].weight.unsqueeze(0)
+                    L[l] = torch.einsum("bi,bij->bj", L[l + 1], jac)
 
+                # Eq. (11): Δθ_l = (1/B) Σ_b L_l^t · e_l^{t,θ}
+                for l, layer in enumerate(self.linear_layers):
+                    grad_buf[l].add_(torch.einsum("bi,bij->ij", L[l], elig_trace[l]) / B)
+                    if layer.bias is not None and elig_trace_bias[l] is not None:
+                        grad_buf_bias[l].add_(torch.einsum("bi,bi->i", L[l], elig_trace_bias[l]) / B)
+                pending += 1
+
+            # -------------------------------------------------------------------
+            # Update schedule: flush buffered gradients when the trigger fires
+            # -------------------------------------------------------------------
             if self.update_last:
-                should_update = t == num_timesteps - 1
+                do_update = t == T - 1
             elif self.update_every > 1:
-                should_update = (t + 1) % self.update_every == 0
+                do_update = (t + 1) % self.update_every == 0
             else:
-                should_update = True
+                do_update = True
 
-            if should_update and pending_grads > 0:
-                for layer_idx, layer in enumerate(self.linear_layers):
-                    self._accumulate_or_apply_grad(layer, grad_buffer[layer_idx])
-                    grad_buffer[layer_idx].zero_()
-                pending_grads = 0
+            if do_update and pending > 0:
+                for l, layer in enumerate(self.linear_layers):
+                    g = grad_buf[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf[l]
+                    if self.use_optimizer and self.optimizer is not None:
+                        layer.weight.grad = g.clone() if layer.weight.grad is None else layer.weight.grad.add_(g)
+                    else:
+                        layer.weight.add_(-self.lr * g)
+                    grad_buf[l].zero_()
 
+                    if layer.bias is not None and grad_buf_bias[l] is not None:
+                        g_b = grad_buf_bias[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf_bias[l]
+                        if self.use_optimizer and self.optimizer is not None:
+                            layer.bias.grad = g_b.clone() if layer.bias.grad is None else layer.bias.grad.add_(g_b)
+                        else:
+                            layer.bias.add_(-self.lr * g_b)
+                        grad_buf_bias[l].zero_()
+
+                pending = 0
                 if self.use_optimizer and self.optimizer is not None:
                     self.optimizer.step()
                     self.optimizer.zero_grad(set_to_none=True)
 
-            for layer_idx in range(self.num_layers):
-                prev_mem[layer_idx] = mem_rec[layer_idx]
-                prev_spk[layer_idx] = spk_rec[layer_idx]
-                prev_h_prime[layer_idx] = h_prime_per_layer[layer_idx]
+            # Advance stored state to t for use at t+1
+            for l in range(self.num_layers):
+                prev_mem[l] = mem_rec[l]
+                prev_spk[l] = spk_rec[l]
+                prev_h_prime[l] = h_prime[l]
 
-        # Flush trailing accumulated gradients for non-divisible update_every windows.
-        if pending_grads > 0:
-            for layer_idx, layer in enumerate(self.linear_layers):
-                self._accumulate_or_apply_grad(layer, grad_buffer[layer_idx])
+        # Flush any remaining gradients (non-divisible update_every windows)
+        if pending > 0:
+            for l, layer in enumerate(self.linear_layers):
+                g = grad_buf[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf[l]
+                if self.use_optimizer and self.optimizer is not None:
+                    layer.weight.grad = g.clone() if layer.weight.grad is None else layer.weight.grad.add_(g)
+                else:
+                    layer.weight.add_(-self.lr * g)
+
+                if layer.bias is not None and grad_buf_bias[l] is not None:
+                    g_b = grad_buf_bias[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf_bias[l]
+                    if self.use_optimizer and self.optimizer is not None:
+                        layer.bias.grad = g_b.clone() if layer.bias.grad is None else layer.bias.grad.add_(g_b)
+                    else:
+                        layer.bias.add_(-self.lr * g_b)
+
             if self.use_optimizer and self.optimizer is not None:
                 self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
 
-        if loss_steps == 0:
-            raise RuntimeError(
-                "OSTLTrainer internal error: no supervised step was processed."
-            )
+        if loss_count == 0:
+            raise RuntimeError("OSTLTrainer: no supervised step was processed.")
 
-        loss = total_loss / float(loss_steps)
+        loss = total_loss / float(loss_count)
         pred = output_sum.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
