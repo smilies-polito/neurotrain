@@ -1,31 +1,3 @@
-"""
-OSTL (Online Spatio-Temporal Learning) trainer for feed-forward SNNs.
-
-Implements the deep feed-forward SNU formulation from:
-    Bohnstingl et al., "Online Spatio-Temporal Learning in Deep Neural Networks",
-    IEEE TNNLS, 2023.  (arXiv: 2007.12723v2)
-
-Key equations (arxiv v2 numbering, cited in the code below):
-    Eq. (11)  OSTL gradient:          ∂E/∂θ_l ≈ Σ_t L_l^t · e_l^{t,θ}
-    Eq. (12)  eligibility trace (W):  e^{t,W} = diag(h′^t) · ε^{t,W}
-    Eq. (14)  eligibility tensor (W): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g′^t · x^t
-    Eq. (16)  state Jacobian (ff):    ∂s^t/∂s^{t-1} = g′^t · (d·(1−h^{t-1}) − V^{t-1}·h′^{t-1})
-    Eq. (18)  learning signal:        L_l = W_{l+1}^T · diag(h′_{l+1} ⊙ g′_{l+1}) · L_{l+1}
-    Eq. (19)  output error:           L_K = output − target
-
-Implementation notes:
-  - g(x) = identity is assumed throughout (g′ = 1), matching the standard LIF/SNU neuron.
-    The reference code supports g = LeakyReLU (Section V-B) but this is not implemented here.
-  - The surrogate gradient h′ uses a logistic function, not the paper's tanh-based
-    pseudoderivative (1 − tanh²). The OSTL algorithm is agnostic to surrogate choice.
-  - nn.Linear.bias is treated as an additive input bias (not the SNU threshold bias b_l).
-    Its eligibility tensor follows the same recursion as W but with injection term 1
-    instead of x^t:  ε^{t,bias} = (∂s^t/∂s^{t-1}) · ε^{t-1,bias} + 1.
-  - V^{t-1} in Eq. (16) is the membrane BEFORE reset that generated spike h^{t-1}.
-    snnTorch uses soft reset and returns V_stored = V_pre − θ·spk, so we recover
-    V_pre = V_stored + θ·spk before applying the formula.
-"""
-
 from __future__ import annotations
 
 from typing import List, Optional
@@ -39,22 +11,12 @@ from trainers.base_trainer import BaseTrainer
 
 
 class OSTLTrainer(BaseTrainer):
-    """
-    OSTL trainer for feed-forward linear+Leaky SNN stacks.
-
-    Supported structures:
-    - `network.synapses` + `network.neurons` (preferred)
-    - alternating `[nn.Linear, snn.Leaky, ...]` in `network.layers` (legacy)
-
-    Not supported: recurrent layers, convolutional layers.
-    """
 
     def __init__(
         self,
         network: nn.Module,
         lr: float,
         batch_size: int,
-        surrogate_scale: float = 5.0,
         grad_clip: float = 0.0,
         update_last: bool = False,
         update_every: int = 1,
@@ -66,20 +28,19 @@ class OSTLTrainer(BaseTrainer):
         super().__init__()
         del kwargs
 
+        # Save the parameters
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        self.surrogate_scale = float(surrogate_scale)
         self.grad_clip = float(grad_clip)
         self.update_last = bool(update_last)
         self.update_every = int(update_every)
         self.use_optimizer = bool(use_optimizer)
         self.output_mode = str(output_mode).lower()
 
+        # Validate the parameters
         if self.lr <= 0.0:
             raise ValueError("OSTLTrainer requires lr > 0.")
-        if self.surrogate_scale <= 0.0:
-            raise ValueError("OSTLTrainer requires surrogate_scale > 0.")
         if self.grad_clip < 0.0:
             raise ValueError("OSTLTrainer requires grad_clip >= 0.")
         if self.update_every <= 0:
@@ -87,6 +48,7 @@ class OSTLTrainer(BaseTrainer):
         if self.output_mode not in ("spike", "mem"):
             raise ValueError(f"Invalid output_mode '{output_mode}'. Use 'spike' or 'mem'.")
 
+        # Resolve the layers
         self.linear_layers, self.lif_layers = self._resolve_layers(self.network)
         if len(self.linear_layers) == 0:
             raise TypeError("OSTLTrainer requires at least one Linear+Leaky layer pair.")
@@ -98,11 +60,20 @@ class OSTLTrainer(BaseTrainer):
         self.num_layers = len(self.linear_layers)
         self.n_classes = int(getattr(self.network, "n_classes"))
 
-        # Per-layer LIF parameters needed for Eq. (16)
+        # Per-layer LIF parameters needed for Eq. (17)
         self.layer_decay = [self._to_scalar(lif.beta, "beta") for lif in self.lif_layers]
         self.layer_threshold = [
             self._to_scalar(getattr(lif, "threshold", 1.0), "threshold") for lif in self.lif_layers
         ]
+
+        for idx, lif in enumerate(self.lif_layers):
+            rm = getattr(lif, "reset_mechanism", None)
+            if rm != "zero":
+                raise TypeError(
+                    f"OSTLTrainer requires reset_mechanism='zero' on all snn.Leaky layers "
+                    f"(layer {idx} has reset_mechanism={rm!r}). "
+                    "Pass reset_mechanism='zero' when constructing the network."
+                )
 
         self._external_optimizer = optimizer
         if self.use_optimizer:
@@ -185,21 +156,6 @@ class OSTLTrainer(BaseTrainer):
         return linear_layers, lif_layers
 
     # -------------------------------------------------------------------------
-    # Surrogate gradient
-    # -------------------------------------------------------------------------
-
-    def _surrogate_grad(self, mem_minus_threshold: torch.Tensor) -> torch.Tensor:
-        """Logistic surrogate: h′(V−θ) = k·σ(k·(V−θ))·(1−σ(k·(V−θ))).
-
-        Note: the paper uses h′(x) = 1 − tanh²(x) as the pseudoderivative (Section V).
-        The logistic surrogate used here is an equally valid choice — the OSTL algorithm
-        is agnostic to surrogate form.
-        """
-        s = self.surrogate_scale * mem_minus_threshold
-        sig = torch.sigmoid(s)
-        return self.surrogate_scale * sig * (1.0 - sig)
-
-    # -------------------------------------------------------------------------
     # Training
     # -------------------------------------------------------------------------
 
@@ -216,6 +172,7 @@ class OSTLTrainer(BaseTrainer):
         Returns:
             loss: scalar, pred: [B, 1]
         """
+        # Control on input shape
         if data.dim() < 3:
             raise ValueError(
                 f"OSTLTrainer expects input shape [T, B, ...], got {tuple(data.shape)}."
@@ -233,7 +190,6 @@ class OSTLTrainer(BaseTrainer):
             )
 
         # One-hot targets for MSE output error (Eq. 19)
-        # Could it be equation 20 actually?
         target_oh = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
         target_oh.scatter_(1, target.long().unsqueeze(1), 1.0)
 
@@ -255,7 +211,7 @@ class OSTLTrainer(BaseTrainer):
             layer.weight.new_zeros(B, layer.out_features) if layer.bias is not None else None
             for layer in self.linear_layers
         ]
-        # Values from t−1 used in Eq. (16): stored membrane, spike, surrogate derivative
+        # Values from t-1 used in Eq. (16): stored membrane, spike, surrogate derivative
         prev_mem = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_spk = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_h_prime = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
@@ -297,9 +253,9 @@ class OSTLTrainer(BaseTrainer):
                 loss_count += 1
 
             # -------------------------------------------------------------------
-            # Eq. (14, 12): build eligibility vector ε and trace e = h′·ε per layer
+            # Eq. (14, 12): build eligibility vector ε and trace e = h'·ε per layer
             # -------------------------------------------------------------------
-            h_prime: List[torch.Tensor] = []                    # surrogate derivative h′_l^t
+            h_prime: List[torch.Tensor] = []                    # surrogate derivative h'_l^t
             elig_trace: List[torch.Tensor] = []                 # eligibility trace  e_l^{t,W}
             elig_trace_bias: List[Optional[torch.Tensor]] = []  # eligibility trace  e_l^{t,bias}
 
@@ -312,26 +268,26 @@ class OSTLTrainer(BaseTrainer):
                     pre_t = pre_t.flatten(1)
                 pre_t = pre_t.to(dtype=layer.weight.dtype)
 
-                # Surrogate derivative at the current membrane  h′_l^t = h′(V^t − θ)
-                h_prime_t = self._surrogate_grad(mem_t - self.layer_threshold[l])
+                # Surrogate derivative at the current membrane  h'_l^t = h'(V^t - θ)
+                # Section V: The pseudoderivative dh(x)/dx = 1 - tanh^2(x) is used.
+                h_prime_t = 1.0 - torch.tanh(mem_t - self.layer_threshold[l]).pow(2)
                 h_prime.append(h_prime_t)
 
-                # Eq. (16): diagonal state Jacobian  ∂s^t/∂s^{t-1} = g′·(d·(1−h^{t-1}) − V^{t-1}·h′^{t-1})
-                # g′ = 1 here (identity activation, see module docstring).
-                # snnTorch soft reset returns V_stored = V_pre_reset − θ·spk,
-                # so recover V_pre_reset = V_stored + θ·spk before using it here.
-                pre_reset_mem = prev_mem[l] + self.layer_threshold[l] * prev_spk[l]
+                # Eq. (17): diagonal state Jacobian  ∂s^t/∂s^{t-1} = d·((1-spk^{t-1}) - s^{t-1}·h'^{t-1})
+                # g' = 1 here (identity activation, see module docstring).
+                # With zero reset, prev_mem == V_pre at non-spike (exact) and 0 at spike
+                # (approximation; h' is near zero there so the error is negligible).
                 state_deriv = self.layer_decay[l] * (
-                    (1.0 - prev_spk[l]) - pre_reset_mem * prev_h_prime[l]
+                    (1.0 - prev_spk[l]) - prev_mem[l] * prev_h_prime[l]
                 )
 
-                # Eq. (14): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g′·x^t  (g′=1)
+                # Eq. (15): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g'·x^t  (g'=1)
                 elig_vec[l] = state_deriv.unsqueeze(-1) * elig_vec[l] + pre_t.unsqueeze(1)
 
-                # Eq. (12): e^{t,W} = h′^t · ε^{t,W}
+                # Eq. (13): e^{t,W} = h'^t · ε^{t,W}
                 elig_trace.append(h_prime_t.unsqueeze(-1) * elig_vec[l])
 
-                # Bias eligibility (analogous to Eq. 14/12 with injection term = 1)
+                # Bias eligibility (Eq. 14 / Eq. 15 with injection term = 1)
                 if layer.bias is not None:
                     elig_vec_bias[l] = state_deriv * elig_vec_bias[l] + 1.0
                     elig_trace_bias.append(h_prime_t * elig_vec_bias[l])
@@ -344,10 +300,10 @@ class OSTLTrainer(BaseTrainer):
                 # ---------------------------------------------------------------
                 L: List[torch.Tensor] = [torch.empty(0, device=device) for _ in range(self.num_layers)]
 
-                # Eq. (19): output layer error  L_K = ŷ − y*
+                # Eq. (19): output layer error  L_K = ŷ - y*
                 L[-1] = output_t - target_oh
 
-                # Eq. (18): L_l = W_{l+1}^T · diag(h′_{l+1}) · L_{l+1}
+                # Eq. (18): L_l = W_{l+1}^T · diag(h'_{l+1}) · L_{l+1}
                 for l in range(self.num_layers - 2, -1, -1):
                     jac = h_prime[l + 1].unsqueeze(-1) * self.linear_layers[l + 1].weight.unsqueeze(0)
                     L[l] = torch.einsum("bi,bij->bj", L[l + 1], jac)

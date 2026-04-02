@@ -30,6 +30,7 @@ class FCSNN(BaseSNN):
         beta: float = 0.9,
         threshold: float = 1.0,
         spike_grad=None,
+        reset_mechanism: str = "subtract",
     ) -> None:
         super().__init__()
 
@@ -59,6 +60,7 @@ class FCSNN(BaseSNN):
                     beta=float(beta),
                     threshold=float(threshold),
                     spike_grad=spike_grad,
+                    reset_mechanism=reset_mechanism,
                     init_hidden=True,
                     output=True,
                 )
