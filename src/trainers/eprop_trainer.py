@@ -1,5 +1,5 @@
 """
-E-prop (Eligibility Propagation) trainer for snnTorch-based networks.
+E-prop (Eligibility Propagation) trainer for snnTorch-based RSNN networks.
 
 Implements the e-prop learning algorithm for recurrent spiking neural networks
 (RSNNs) using snnTorch neurons, following:
@@ -15,39 +15,94 @@ This module implements the *classification* variant of e-prop (Eq. 29) for
 LIF neurons only (Eqs. 6–7). ALIF eligibility traces (Eqs. 24–25) are
 included as commented-out code blocks, marked with [ALIF].
 
+Network interface contract (RSNN):
+───────────────────────────────────────────────────────────────────────
+  The trainer wraps an RSNN network that exposes:
+    - forward(x) → (spk_rec, mem_rec)   single-timestep forward pass
+        spk_rec[0]: recurrent spikes z_j^t  [batch, n_rec]  (Eq. 7)
+        mem_rec[0]: recurrent membrane v_j^t [batch, n_rec]  (Eq. 6)
+        spk_rec[1], mem_rec[1]: spiking output layer (IGNORED by e-prop)
+    - input_layers[0].weight             W^in  [n_rec, n_in]
+    - recurrent_layers[0].recurrent.weight   W^rec [n_rec, n_rec]
+    - fc_out.weight                      W^out [n_out, n_rec]
+    - reset(device=...)                  reset all internal states
+    - is_recurrent = True
+    - in_shape, recurrent_dim, n_classes
+
+  The trainer owns the analog readout (Eq. 11) and does NOT use the
+  network's spiking output layer. This keeps the network general-purpose
+  while the trainer implements e-prop-specific readout dynamics.
+───────────────────────────────────────────────────────────────────────
+
 Equation map (paper → code):
 ──────────────────────────────────────────────────────────────────────
-  Paper Eq.  │ Description                        │ Code location
+  Paper Eq.  │ Description                        │ Code variable
 ─────────────┼────────────────────────────────────┼──────────────────
-  Eq. 6      │ LIF membrane potential dynamics    │ network.step()
-  Eq. 7      │ Spike generation via Heaviside     │ network.step()
+  Eq. 6      │ LIF membrane dynamics              │ v_t  (from network)
+  Eq. 7      │ Spike generation z_j^t = H(v-θ)   │ z_t  (from network)
   Eq. 8–10   │ ALIF threshold adaptation          │ [ALIF] blocks
-  Eq. 11     │ Leaky readout neuron               │ network.step() → vo
-  Eq. 12     │ Low-pass filter F_α definition     │ x_in_bar, z_bar_prev
-  Eq. 13     │ Eligibility trace definition       │ e_in, e_rec
-  Eq. 14     │ Eligibility vector recursion        │ ε via x_in_bar, z_bar
-  Eq. 22     │ LIF elig. vector = F_α(z_i^t)     │ z_bar_prev
-  Eq. 23     │ LIF elig. trace = ψ_j · F_α(z_i)  │ e_in, e_rec
-  Eq. 24     │ ALIF slow elig. vector ε_{ji,a}   │ [ALIF] block
-  Eq. 25     │ ALIF elig. trace with β term       │ [ALIF] block
-  Eq. 28     │ Regression weight update + F_κ     │ trace_in/rec/out
+  Eq. 11     │ Leaky analog readout               │ vo   (in trainer)
+  Eq. 12     │ Low-pass filter F_α                │ x_in_bar, z_bar_prev
+  Eq. 13–14  │ Eligibility vector recursion       │ ε via x_in_bar, z_bar
+  Eq. 22     │ LIF ε_{ji} = F_α(z_i^t)           │ z_bar_prev
+  Eq. 23     │ LIF e_{ji} = ψ_j · F_α(z_i)      │ e_in, e_rec
+  Eq. 24     │ ALIF slow ε_{ji,a}                │ [ALIF] block
+  Eq. 25     │ ALIF e_{ji} with β term            │ [ALIF] block
+  Eq. 28     │ Kappa-smoothed traces F_κ(e)       │ trace_in/rec/out
   Eq. 29     │ Classification weight update       │ weight update block
-  Eq. 4      │ Learning signal L_j^t              │ L_t computation
+  Eq. 4      │ Learning signal L_j^t              │ L_t
   Methods    │ Pseudo-derivative ψ_j^t            │ _surrogate_gradient()
 ──────────────────────────────────────────────────────────────────────
+
+Where spikes z_t are used in the e-prop computation:
+──────────────────────────────────────────────────────────────────────
+  z_t (binary spikes from Eq. 7) feeds into three places:
+    1. Analog readout (Eq. 11):  vo = κ·vo + z_t @ W_out^T + b_out
+    2. Recurrent eligibility vector (Eq. 22):  z_bar_prev = F_α(z^{t-1})
+       → z_t is added to z_bar AFTER computing e_rec at this timestep,
+         so e_rec uses z^{t-1} as required by the paper.
+    3. Output trace (Eq. 28):  trace_out = F_κ(z_t)
+──────────────────────────────────────────────────────────────────────
+
+Known deviations from the paper:
+──────────────────────────────────────────────────────────────────────
+  D1. No refractory period. The paper (Methods, below Eq. 7) specifies
+      z_j^t = 0 for 2–5 ms after a spike, with ψ = 0 during that period.
+      snnTorch's RLeaky does NOT implement refractoriness — the neuron
+      can fire on consecutive timesteps. The pseudo-derivative naturally
+      goes toward zero after a subtract-reset (since |v - v_th| is large),
+      but this is not an exact refractory mask.
+
+  D2. Eq. 6 coherence depends on snnTorch RLeaky internals. Verified:
+      snnTorch RLeaky with reset_mechanism="subtract", reset_delay=False
+      implements v^{t+1} = α·v^t + W_rec·z^t + W_in·x^{t+1} - z^t·v_th,
+      which matches Eq. 6.
+
+  D3. update_last / update_every are implementation extensions not in the
+      paper. When active, the weight update deviates from the standard
+      Eq. 29 which sums over ALL timesteps. Traces are always accumulated
+      regardless, so the gradient direction is preserved but magnitude and
+      timing differ. Documented inline.
+
+  D4. Output weight gradient (Supp. Note 3). The paper derives
+      ΔW^out_{kj} in Supplementary Note 3. Our implementation
+      w_out_grad = err^T @ F_κ(z) follows the same structure as
+      the TU Graz reference code (dloss_dw_out).
+──────────────────────────────────────────────────────────────────────
 """
+
+import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from trainers.base_trainer import BaseTrainer
-from networks.benchmarking.r_snn import RSNN
 
 
 class EpropTrainer(BaseTrainer):
     """
-    E-prop trainer for recurrent SNNs, implementing online weight updates.
+    E-prop trainer for RSNN networks, implementing online weight updates.
 
     Currently supports:
       - LIF neurons (Eqs. 6–7) with eligibility traces from Eq. 22–23
@@ -60,103 +115,201 @@ class EpropTrainer(BaseTrainer):
       - Reward-based e-prop (Eq. 5, 36–37)
     """
 
+    # Reference values from Bellec et al. 2020 (Methods section).
+    # These define the e-prop algorithm's parameters independently of
+    # the network's own neuron parameters. The trainer overrides the
+    # network's threshold/decay for e-prop computations to ensure
+    # algorithmic consistency with the paper.
+    PAPER_DEFAULTS = {
+        "dt":      1.0,       # ms — simulation timestep
+        "tau_m":   20.0,      # ms — membrane time constant (Eq. 6)
+        "tau_out": 30.0,      # ms — readout time constant (Eq. 11)
+        "v_th":    0.03,      # threshold voltage (Methods; TU Graz code)
+        "gamma":   0.3,       # pseudo-derivative dampening (Methods)
+        # [ALIF]
+        "tau_a":   200.0,     # ms — adaptation time constant (Eq. 10)
+        "beta":    0.07,      # adaptation strength (Eq. 8)
+    }
+
     def __init__(
         self,
-        network: RSNN,
+        network,
         lr: float,
         batch_size: int,
-        gamma: float = 0.3,
-        tau_mem: float = 0.9,
-        tau_out: float = 0.9,
+        gamma: float = None,
+        dt: float = None,
+        tau_mem: float = None,
+        tau_out: float = None,
+        threshold: float = None,
         lr_layer_norm: tuple = (1.0, 1.0, 1.0),
         quant: bool = False,
-        use_optimizer: bool = False,
+        use_optimizer: bool = True,
         optimizer=None,
         update_last: bool = False,
         update_every: int = 1,
         seq_batch_size: int = 1,
         **kwargs,
     ):
+        """
+        Initialize e-prop trainer.
+
+        All e-prop algorithm parameters default to the paper's reference values
+        (PAPER_DEFAULTS) if not explicitly provided. The network is treated as
+        trainer-agnostic — its own beta/threshold are used only for forward
+        dynamics, while the trainer uses its own α, κ, v_th for eligibility
+        traces and pseudo-derivatives.
+
+        Args:
+            network:    RSNN network instance.
+            lr:         Learning rate η.
+            batch_size: Batch size.
+            gamma:      Pseudo-derivative dampening γ_pd (default: 0.3, Methods).
+            dt:         Simulation timestep δt in ms (default: 1.0, Methods).
+            tau_mem:    Membrane time constant τ_m in ms (default: 20.0, Eq. 6).
+            tau_out:    Readout time constant τ_out in ms (default: 30.0, Eq. 11).
+            threshold:  Firing threshold v_th (default: 0.03, Methods).
+            lr_layer_norm: Per-layer learning rate modulation (not in paper).
+            use_optimizer: If True, apply e-prop gradients through an optimizer (Adam by default). If False, apply pure online synaptic updates directly to the weight tensors.
+            optimizer:  Optional optimizer instance to use when use_optimizer=True.
+            update_last:  If True, only update weights at last timestep [D3].
+            update_every: Update weights every N timesteps [D3].
+        """
         super().__init__()
         self.network = network
         self.lr = lr
         self.batch_size = batch_size
-        # γ_pd in the paper (Methods, below Eq. 9): dampening factor for
-        # the pseudo-derivative. Bellec et al. use γ_pd = 0.3.
-        self.gamma = gamma
         self.quant = quant
         self.use_optimizer = use_optimizer
         self.update_last = update_last
         self.update_every = update_every
         self.seq_batch_size = seq_batch_size
 
+        # ── Validate network ──
         if not (hasattr(network, "is_recurrent") and network.is_recurrent):
             raise TypeError(
                 "EpropTrainer requires a recurrent RSNN; "
                 f"got network={type(network).__name__}."
             )
+        if hasattr(network, "hidden_dims") and len(network.hidden_dims) != 1:
+            raise ValueError(
+                "EpropTrainer currently supports only single-layer recurrent RSNNs."
+            )
 
-        # ── Decay factors from the paper ──
-        #
-        # Reference values from Bellec et al. 2020 (Methods section):
-        #   δt    = 1 ms           time step (used in all simulations)
-        #   τ_m   = 20 ms          membrane time constant
-        #   τ_out = 30 ms          readout time constant (TU Graz reference code)
-        #   v_th  = 0.03           threshold (TU Graz reference code)
-        #   γ_pd  = 0.3            pseudo-derivative dampening factor
-        #
-        # Derived reference values:
-        #   α  = exp(-δt/τ_m)   = exp(-1/20)  ≈ 0.9512
-        #   κ  = exp(-δt/τ_out) = exp(-1/30)  ≈ 0.9672
-        #
-        # [ALIF] reference values (Methods, Eqs. 8–10):
-        #   τ_a  = 100–2000 ms     adaptation time constant (task-dependent)
-        #   ρ    = exp(-δt/τ_a)    ≈ 0.995 (τ_a=200ms) to 0.9995 (τ_a=2000ms)
-        #   β    ≈ 0.07            adaptation strength
-        #
-        PAPER_REF = {
-            "dt":      1.0,       # ms
-            "tau_m":   20.0,      # ms  →  α ≈ 0.9512
-            "tau_out": 30.0,      # ms  →  κ ≈ 0.9672
-            "v_th":    0.03,      # arbitrary units
-            "gamma":   0.3,       # pseudo-derivative dampening
-            "alpha":   0.9512,    # exp(-dt/tau_m), from Eq. 6
-            "kappa":   0.9672,    # exp(-dt/tau_out), from Eq. 11
+        # ── E-prop algorithm parameters ──
+        # Default to PAPER_DEFAULTS; user can override any of them.
+        # These are the trainer's own parameters, independent of the network.
+        P = self.PAPER_DEFAULTS
+        _dt      = dt        if dt        is not None else P["dt"]
+        _tau_mem = tau_mem    if tau_mem   is not None else P["tau_m"]
+        _tau_out = tau_out    if tau_out   is not None else P["tau_out"]
 
-            # [ALIF]
-            "tau_a":   200.0,     # ms (task-dependent, 100–2000 ms)
-            "beta":    0.07,      # adaptation strength
-
-        }
-
-        # α = exp(-δt/τ_m) — membrane decay, Eq. 6
-        # α  = exp(-δt/τ_m)   = exp(-1/20)  ≈ 0.9512
-        self.alpha = PAPER_REF["alpha"]
-        # κ = exp(-δt/τ_out) — readout decay, Eq. 11
-        # κ  = exp(-δt/τ_out) = exp(-1/30)  ≈ 0.9672
-        self.kappa = PAPER_REF["kappa"]
-        # v_th — firing threshold, Eqs. 7, 9
-        self.threshold = PAPER_REF["v_th"]
+        # α = exp(-δt/τ_m) — membrane decay for eligibility vectors (Eq. 6, 22)
+        self.alpha = math.exp(-_dt / _tau_mem)
+        # κ = exp(-δt/τ_out) — readout decay for trace smoothing (Eq. 11, 28)
+        self.kappa = math.exp(-_dt / _tau_out)
+        # v_th — threshold for pseudo-derivative (Methods, below Eq. 9)
+        self.threshold = threshold if threshold is not None else P["v_th"]
+        # γ_pd — dampening factor for pseudo-derivative (Methods, below Eq. 9)
+        self.gamma = gamma if gamma is not None else P["gamma"]
 
         # [ALIF] Would also need:
-        # self.rho = float(network.rho)    # ρ = exp(-δt/τ_a), Eq. 10
-        # self.beta = float(network.beta)  # β, adaptation strength, Eq. 8
-        #
-        # Reference: ρ = exp(-1/200) ≈ 0.9950, β = 0.07
+        # _tau_a = tau_a if tau_a is not None else P["tau_a"]
+        # self.rho = math.exp(-_dt / _tau_a)  # ρ, Eq. 10
+        # self.beta = P["beta"]                # β, Eq. 8
 
-        # Per-layer learning rate modulation (not from paper, practical addition)
         self.lr_layer = lr_layer_norm
-        # Loss function for monitoring (actual gradients are computed analytically)
-        self.loss_fn = nn.MSELoss()
 
+        # ── Loss function for monitoring ──
+        # [Point 1] The paper uses cross-entropy E = -Σ_{t,k} π*_k log π_k
+        # for classification. The e-prop weight update (Eq. 29) uses the
+        # gradient (π_k - π*_k), which is implemented directly — the loss
+        # function here is only for monitoring/reporting, NOT for computing
+        # gradients. We use cross-entropy to match the paper's loss definition.
+        self.loss_fn = nn.CrossEntropyLoss()
+
+        # ── Resolve weight references from RSNN ──
+        self._w_in = network.input_layers[0].weight          # [n_rec, n_in]
+
+        rlif = network.recurrent_layers[0]
+        if hasattr(rlif, "recurrent") and hasattr(rlif.recurrent, "weight"):
+            self._w_rec = rlif.recurrent.weight               # [n_rec, n_rec]
+        else:
+            raise AttributeError(
+                f"Cannot find recurrent weight in {type(rlif).__name__}. "
+                f"Expected .recurrent.weight (snnTorch RLeaky)."
+            )
+
+        self._w_out = network.fc_out.weight                   # [n_out, n_rec]
+
+        # [Point 2] Output bias b_k^out from Eq. 11.
+        # If the network's fc_out has a bias, use it; otherwise default to 0.
+        if network.fc_out.bias is not None:
+            self._b_out = network.fc_out.bias                 # [n_out]
+        else:
+            self._b_out = None  # No bias — simplification noted in [D] section
+
+        # ── Optimizer / update mode ──
+        # If use_optimizer is False, weight updates are applied directly
+        # as pure online e-prop, i.e. W ← W - η·grad/batch_size per timestep.
+        # If use_optimizer is True, the computed gradients are injected into
+        # an optimizer step (Adam by default), which yields a hybrid training
+        # recipe rather than the paper's pure online rule.
         self._external_optimizer = optimizer
+        self.use_optimizer = use_optimizer
         if use_optimizer:
-            if optimizer is not None:
-                self.optimizer = optimizer
-            else:
-                self.optimizer = torch.optim.Adam(network.parameters(), lr=lr)
+            self.optimizer = optimizer or torch.optim.Adam(network.parameters(), lr=lr)
         else:
             self.optimizer = None
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  Single-timestep forward pass for e-prop
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _eprop_step(self, x: torch.Tensor, vo: torch.Tensor):
+        """
+        Run one timestep: recurrent dynamics via network, analog readout in trainer.
+
+        1. Calls network.forward(x) → recurrent spikes z_t and membrane v_t
+           (Eqs. 6–7). [Point 4: verified that snnTorch RLeaky with
+           reset_mechanism="subtract" and reset_delay=False matches Eq. 6.]
+           The network's spiking output layer also executes but is IGNORED.
+
+        2. Computes analog readout (Eq. 11):
+              y_k^t = κ · y_k^{t-1} + Σ_j W^out_{kj} · z_j^t + b_k^out
+
+        Args:
+            x:  Input [batch, n_in] (flattened)
+            vo: Previous analog output membrane [batch, n_out]
+
+        Returns:
+            z_t: Recurrent spikes z_j^t ∈ {0,1} [batch, n_rec]  (Eq. 7)
+            v_t: Recurrent membrane v_j^t [batch, n_rec]          (Eq. 6)
+            vo:  Updated analog readout y_k^t [batch, n_out]      (Eq. 11)
+        """
+        # Reshape flat input to network's expected in_shape if spatial
+        in_shape = self.network.in_shape
+        if len(in_shape) > 1:
+            x_net = x.view(x.shape[0], *in_shape)
+        else:
+            x_net = x
+
+        # [Point 4] Recurrent dynamics (Eqs. 6–7)
+        # snnTorch RLeaky (reset_mechanism="subtract", reset_delay=False):
+        #   v_j^{t+1} = α·v_j^t + W_rec·z^t + W_in·x^{t+1} - z_j^t·v_th
+        #   z_j^{t+1} = H(v_j^{t+1} - v_th)
+        # This matches Eq. 6–7. Note: NO refractory period [D1].
+        spk_rec, mem_rec = self.network.forward(x_net)
+
+        z_t = spk_rec[0]   # spikes z_j^t ∈ {0,1}  [batch, n_rec]
+        v_t = mem_rec[0]   # membrane v_j^t          [batch, n_rec]
+
+        # [Point 2] Analog readout (Eq. 11):
+        #   y_k^t = κ · y_k^{t-1} + Σ_j W^out_{kj} · z_j^t + b_k^out
+        vo_new = self.kappa * vo + z_t @ self._w_out.t()
+        if self._b_out is not None:
+            vo_new = vo_new + self._b_out
+
+        return z_t, v_t, vo_new
 
     # ══════════════════════════════════════════════════════════════════════
     #  Pseudo-derivative  (Methods section, between Eqs. 9 and 10)
@@ -164,32 +317,19 @@ class EpropTrainer(BaseTrainer):
 
     def _surrogate_gradient(self, mem: torch.Tensor) -> torch.Tensor:
         """
-        Compute the pseudo-derivative ψ_j^t (Methods, "Gradient descent for RSNNs").
+        Pseudo-derivative ψ_j^t (Methods, "Gradient descent for RSNNs"):
 
-        The paper defines (for LIF, where A_j^t = v_th):
+            ψ_j^t = (γ_pd / v_th) · max(0, 1 - |v_j^t - v_th| / v_th)
 
-            ψ_j^t = (1/v_th) · γ_pd · max(0, 1 - |v_j^t - v_th| / v_th)
+        Triangular surrogate centered at v_th, peak value γ_pd/v_th.
 
-        This is a triangular function centered at v_th with support [0, 2·v_th]
-        and peak value γ_pd / v_th at v = v_th.
-
-        The 1/v_th prefactor comes from ∂z_j^t/∂v_j^t: since z = H(v - v_th),
-        the surrogate replaces the Dirac delta δ(v - v_th) which has units 1/v_th.
-
-        In the TU Graz reference code:
-            v_scaled = (v - thr) / thr        # normalized: 0 at threshold, -1 at rest
-            post_term = pseudo_derivative(v_scaled, γ) / thr
-        which gives exactly (γ/thr) · max(0, 1 - |v - thr|/thr).
-
-        During the refractory period, ψ should be 0. This is handled implicitly
-        because snnTorch clamps the membrane potential after a spike, pushing
-        |v - v_th| > v_th and thus ψ = 0 via the max(0, ...) clamp.
-
-        Args:
-            mem: Membrane potential v_j^t, shape [batch, n_rec]
-
-        Returns:
-            ψ_j^t, shape [batch, n_rec]
+        [Point 3] Refractory mask: The paper specifies ψ = 0 during the
+        refractory period (2–5 ms after each spike). snnTorch's RLeaky does
+        NOT implement refractoriness [D1]. After a subtract-reset, the
+        membrane drops below threshold, so |v - v_th| is typically > v_th
+        and the max(0, ...) clamp gives ψ ≈ 0 naturally. This is approximate
+        — not an exact refractory mask — but functionally similar for the
+        subtract-reset mechanism used here.
         """
         return (self.gamma / self.threshold) * torch.clamp(
             1.0 - torch.abs((mem - self.threshold) / self.threshold),
@@ -200,310 +340,157 @@ class EpropTrainer(BaseTrainer):
     #  Entry point
     # ══════════════════════════════════════════════════════════════════════
 
+    def normalize_sequence(self, data: torch.Tensor, timesteps: int | None = None) -> torch.Tensor:
+        """Convert input sequence to trainer layout [T, B, n_in]."""
+        if data.dim() == 5:
+            if timesteps is not None:
+                if data.size(0) == timesteps:
+                    return data.flatten(start_dim=2)
+                if data.size(1) == timesteps:
+                    return data.transpose(0, 1).flatten(start_dim=2)
+            if data.size(0) == self.batch_size:
+                return data.transpose(0, 1).flatten(start_dim=2)
+            return data.flatten(start_dim=2)
+
+        if data.dim() == 4 and data.shape[2:] == self.network.in_shape:
+            if timesteps is not None:
+                if data.size(0) == timesteps:
+                    return data
+                if data.size(1) == timesteps:
+                    return data.transpose(0, 1)
+            if data.size(0) == self.batch_size:
+                return data.transpose(0, 1)
+            return data
+
+        if data.dim() == 3:
+            if timesteps is not None:
+                if data.size(0) == timesteps:
+                    return data
+                if data.size(1) == timesteps:
+                    return data.transpose(0, 1)
+            if data.size(0) == self.batch_size:
+                return data.transpose(0, 1)
+            return data
+
+        raise ValueError(
+            f"Unexpected data shape {tuple(data.shape)}; expected [T, B, ...] or [B, T, ...]."
+        )
+
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
         """
         Train on a single batch using recurrent e-prop with online updates.
 
         Args:
-            data:   Input tensor [num_timesteps, batch_size, n_in]
-            target: Target class labels [batch_size]  (integer indices)
+            data:   Input tensor [T, B, ...] — flattened to [T, B, n_in] if needed
+            target: Target class labels [B] (integer indices)
 
         Returns:
-            loss: Scalar loss tensor (for monitoring; not used for learning)
-            pred: Predicted class indices [batch_size, 1]
+            loss: Scalar cross-entropy loss (for monitoring, Eq. 29's loss)
+            pred: Predicted class indices [B, 1]
         """
+        data = self.normalize_sequence(data)
+        if data.ndim > 3:
+            data = data.flatten(start_dim=2)
 
-        
-        num_timesteps = int(data.shape[0])
-        batch_size = int(data.shape[1])
-        if data.dim() > 3:
-            data = data.flatten(2)
+        num_timesteps, batch_size, _ = data.shape
         device = data.device
-        n_out = self.network.n_out
+        n_out = self.network.n_classes
 
-        # One-hot encode targets for classification (Eq. 29 uses π*_k)
+        # One-hot encode targets for classification (Eq. 29: π*_k)
         tgt_onehot = torch.zeros(batch_size, n_out, device=device)
         tgt_onehot.scatter_(1, target.view(-1, 1), 1.0)
-        return self._train_recurrent_online(data, tgt_onehot)
+        return self._train_recurrent_online(data, tgt_onehot, target)
 
     # ══════════════════════════════════════════════════════════════════════
-    #  Core e-prop loop  (online, timestep-by-timestep)
+    #  Core e-prop loop
     # ══════════════════════════════════════════════════════════════════════
 
-    def _train_recurrent_online(self, data: torch.Tensor, tgt_onehot: torch.Tensor):
+    def _train_recurrent_online(
+        self,
+        data: torch.Tensor,
+        tgt_onehot: torch.Tensor,
+        target_indices: torch.Tensor,
+    ):
         """
-        Online recurrent e-prop for classification (LIF neurons).
+        Online recurrent e-prop for classification (LIF, Eq. 29).
 
-        Implements Eq. 29 from the paper:
+            ΔW_{ji} = -η Σ_t L_j^t · ē_{ji}^t
 
-            ΔW^rec_{ji} = -η Σ_t [ Σ_k B_{jk}(π_k^t - π*_k^t) ] · ē_{ji}^t
+        where L_j^t = Σ_k W^out_{kj} · (π_k^t - π*_k^t)  (Eq. 4, symmetric)
+        and   ē_{ji}^t = F_κ(ψ_j^t · F_α(z_i^{t-1}))     (Eqs. 22–23, 28)
 
-        where:
-            - π_k^t = softmax_k(y_1^t, ..., y_K^t)    predicted class probs
-            - π*_k^t                                    target one-hot
-            - B_{jk} = W^out_{kj}                      symmetric feedback
-            - ē_{ji}^t = F_κ(e_{ji}^t)                 kappa-smoothed elig. trace
-            - e_{ji}^t = ψ_j^t · ε_{ji}^t              eligibility trace (Eq. 23)
-            - ε_{ji}^t = F_α(z_i^{t-1})                eligibility vector (Eq. 22)
-                 [for input weights: ε_{ji}^t = F_α(x_i^t), see note below Eq. 23]
-
-        The kappa-smoothing (F_κ) arises because the readout neuron (Eq. 11)
-        applies a leaky filter to the spikes before computing the loss. As
-        derived in Supplementary Note 3, this transforms the eligibility trace
-        e_{ji}^t into ē_{ji}^t = F_κ(e_{ji}^t) in the weight update formula.
+        [Point 6] When update_last=True or update_every>1, weight updates
+        occur only at selected timesteps. This deviates from Eq. 29 which
+        sums over all t. Eligibility traces are ALWAYS accumulated to
+        preserve temporal information; only the weight modification step
+        is gated. This is an implementation extension [D3].
         """
-        if data.dim() > 3:
-            data = data.flatten(2)
-        num_timesteps = int(data.shape[0])
-        batch_size = int(data.shape[1])
+        num_timesteps, batch_size, _ = data.shape
         device = data.device
 
-        n_in = self.network.n_in
-        n_rec = self.network.n_rec
-        n_out = self.network.n_out
+        n_in = data.shape[2]
+        n_rec = self.network.recurrent_dim
+        n_out = self.network.n_classes
 
-        # ── Reset network state ──
-        # Sets v_j^0 = 0, z_j^0 = 0, y_k^0 = 0 (initial conditions)
+        # Reset all neuron states: v_j^0 = 0, z_j^0 = 0
         self.network.reset(device=device)
 
         if self.use_optimizer and self.optimizer is not None:
             self.optimizer.zero_grad()
 
-        # ══════════════════════════════════════════════════════════════════
-        #  State variables for eligibility computation
-        # ══════════════════════════════════════════════════════════════════
+        # ── Eligibility vectors (Eq. 22): pre-synaptic filtered traces ──
+        x_in_bar = torch.zeros(batch_size, n_in, device=device)    # F_α(x_i^t)
+        z_bar_prev = torch.zeros(batch_size, n_rec, device=device) # F_α(z_i^{t-1})
 
-        # ── Pre-synaptic filtered traces (= eligibility vectors, Eq. 14/22) ──
-        #
-        # For LIF neurons, the eligibility vector ε_{ji}^t (Eq. 13) reduces
-        # to a simple low-pass filter of the presynaptic activity (Eq. 22):
-        #
-        #   ε_{ji}^{t+1} = F_α(z_i^t)     for recurrent weights W^rec_{ji}
-        #   ε_{ji}^{t+1} = F_α(x_i^{t+1}) for input weights W^in_{ji}
-        #
-        # The asymmetry in time indices comes from Eq. 6: the membrane update
-        # at time t+1 depends on recurrent spikes z^t but input spikes x^{t+1}.
-        # (See the note below Eq. 23 in the paper.)
+        # ── Kappa-smoothed eligibility traces (Eq. 28) ──
+        trace_in = torch.zeros(batch_size, n_rec, n_in, device=device)   # F_κ(e^in)
+        trace_rec = torch.zeros(batch_size, n_rec, n_rec, device=device) # F_κ(e^rec)
+        trace_out = torch.zeros(batch_size, n_rec, device=device)        # F_κ(z_j^t)
 
-        # F_α(x_i^t): filtered input spikes. Eq. 12 applied to inputs.
-        x_in_bar = torch.zeros(batch_size, n_in, device=device)
+        # [ALIF] a_t = torch.zeros(batch_size, n_rec, device=device)
+        # [ALIF] eps_a = torch.zeros(batch_size, n_rec, n_rec, device=device)
+        # [ALIF] eps_a_in = torch.zeros(batch_size, n_rec, n_in, device=device)
 
-        # F_α(z_i^{t-1}): filtered PREVIOUS recurrent spikes.
-        # CRITICAL: must use z^{t-1}, not z^t. The TU Graz reference
-        # implements this via shift_by_one_time_step(z). In our online loop,
-        # we achieve this by computing e_rec BEFORE updating z_bar with z_t.
-        z_bar_prev = torch.zeros(batch_size, n_rec, device=device)
-
-        # ── Kappa-smoothed eligibility traces (Eq. 28, Supplementary Note 3) ──
-        #
-        # The readout neuron y_k^t = κ·y_k^{t-1} + Σ_j W^out_{kj} z_j^t (Eq. 11)
-        # introduces a low-pass filter between spikes and the loss. As shown in
-        # Supplementary Note 3, this means the weight update uses ē_{ji}^t = F_κ(e_{ji}^t)
-        # instead of e_{ji}^t directly:
-        #
-        #   ē_{ji}^t = κ · ē_{ji}^{t-1} + e_{ji}^t     (Eq. 12 with κ)
-        #
-        # For the output weights, the relevant trace is simply F_κ(z_j^t).
-
-        # F_κ(e^in_{ji}): smoothed input eligibility traces [batch, n_rec, n_in]
-        trace_in = torch.zeros(batch_size, n_rec, n_in, device=device)
-        # F_κ(e^rec_{ji}): smoothed recurrent eligibility traces [batch, n_rec, n_rec]
-        trace_rec = torch.zeros(batch_size, n_rec, n_rec, device=device)
-        # F_κ(z_j^t): smoothed spike train for output weight update
-        trace_out = torch.zeros(batch_size, n_rec, device=device)
-
-        # [ALIF] Additional state variables for adaptive threshold neurons:
-        # # a_j^t: adaptive threshold component, Eq. 10
-        # a_t = torch.zeros(batch_size, n_rec, device=device)
-        # # ε_{ji,a}^t: slow component of eligibility vector, Eq. 24
-        # eps_a = torch.zeros(batch_size, n_rec, n_rec, device=device)  # recurrent
-        # eps_a_in = torch.zeros(batch_size, n_rec, n_in, device=device)  # input
-
-        # ── Output membrane potential ──
-        # y_k^t from Eq. 11 (before softmax)
+        # Analog readout membrane y_k^t (Eq. 11, owned by trainer)
         vo = torch.zeros(batch_size, n_out, device=device)
-        # Accumulated output for final prediction (not part of e-prop per se)
         vo_sum = None
-
-        # ══════════════════════════════════════════════════════════════════
-        #  Main loop over timesteps
-        # ══════════════════════════════════════════════════════════════════
 
         for t in range(num_timesteps):
 
-            # ── Forward pass: Eqs. 6, 7, 11 ──
-            # network.step() computes:
-            #   v_j^{t+1} = α·v_j^t + Σ_{i≠j} W^rec_{ji}·z_i^t
-            #                + Σ_i W^in_{ji}·x_i^{t+1} - z_j^t·v_th    (Eq. 6)
-            #   z_j^{t+1} = H(v_j^{t+1} - v_th)                        (Eq. 7)
-            #   y_k^{t+1} = κ·y_k^t + Σ_j W^out_{kj}·z_j^{t+1} + b_k  (Eq. 11)
-            #
-            # Returns z_t = z^{t+1}, v_t = v^{t+1}, vo = y^{t+1} in paper notation.
-            # (The +1 offset is because network.step() advances one timestep.)
-            z_t, v_t, vo = self.network.step(data[t], vo)
+            # ── Forward: z_t (spikes, Eq. 7), v_t (membrane, Eq. 6), vo (Eq. 11) ──
+            z_t, v_t, vo = self._eprop_step(data[t], vo)
 
-            # ── Shape normalisation ──
-            # snnTorch may return [n_rec, batch] instead of [batch, n_rec]
-            if z_t.shape == (n_rec, batch_size):
-                z_t = z_t.t()
-            if v_t.shape == (n_rec, batch_size):
-                v_t = v_t.t()
-            if vo.shape == (n_out, batch_size):
-                vo = vo.t()
-
-            assert z_t.shape == (batch_size, n_rec), \
-                f"z_t shape {z_t.shape} != expected {(batch_size, n_rec)}"
-            assert v_t.shape == (batch_size, n_rec), \
-                f"v_t shape {v_t.shape} != expected {(batch_size, n_rec)}"
-            assert vo.shape == (batch_size, n_out), \
-                f"vo shape {vo.shape} != expected {(batch_size, n_out)}"
-
-            # Accumulate output for final prediction
             vo_sum = vo.clone() if vo_sum is None else (vo_sum + vo)
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 1: Pseudo-derivative ψ_j^t
-            #  (Methods, "Gradient descent for RSNNs", below Eq. 9)
-            #
-            #  ψ_j^t = (γ_pd / v_th) · max(0, 1 - |v_j^t - v_th| / v_th)
-            #
-            #  For LIF: A_j^t = v_th (constant threshold).
-            #  For ALIF: replace v_th with A_j^t = v_th + β·a_j^t (Eq. 8).
-            # ══════════════════════════════════════════════════════════════
+            # STEP 1: Pseudo-derivative ψ_j^t (Methods, below Eq. 9)
+            # [Point 3] No explicit refractory mask — see _surrogate_gradient docstring
+            h_t = self._surrogate_gradient(v_t)
 
-            h_t = self._surrogate_gradient(v_t)  # [batch, n_rec]
+            # [ALIF] A_t = self.threshold + self.beta * a_t  (Eq. 8)
 
-            # [ALIF] With adaptive threshold, ψ would use the dynamic threshold:
-            # A_t = self.threshold + self.beta * a_t             # Eq. 8
-            # h_t = (self.gamma / self.threshold) * torch.clamp(
-            #     1.0 - torch.abs((v_t - A_t) / self.threshold),
-            #     min=0.0,
-            # )
+            # STEP 2: Eligibility vectors (Eq. 22)
+            x_in_bar = self.alpha * x_in_bar + data[t]       # F_α(x_i^t)
+            # z_bar_prev holds F_α(z^{t-1}) — use BEFORE updating with z_t
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 2: Pre-synaptic filtered traces (eligibility vectors)
-            #  (Eqs. 12, 14, 22)
-            #
-            #  General recursion (Eq. 14):
-            #    ε_{ji}^t = (∂h_j^t / ∂h_j^{t-1}) · ε_{ji}^{t-1}
-            #               + ∂h_j^t / ∂W_{ji}
-            #
-            #  For LIF (Eq. 22), this simplifies to:
-            #    ε_{ji}^{t+1} = α · ε_{ji}^t + z_i^t       (recurrent)
-            #    ε_{ji}^{t+1} = α · ε_{ji}^t + x_i^{t+1}   (input)
-            #
-            #  because ∂v^{t+1}/∂v^t = α  and  ∂v^t/∂W^rec_{ji} = z_i^{t-1},
-            #  ∂v^t/∂W^in_{ji} = x_i^t  (see derivation below Eq. 23).
-            # ══════════════════════════════════════════════════════════════
+            # STEP 3: Eligibility traces (Eq. 23): e = ψ · ε
+            e_in = h_t.unsqueeze(2) * x_in_bar.unsqueeze(1)    # [B, n_rec, n_in]
+            e_rec = h_t.unsqueeze(2) * z_bar_prev.unsqueeze(1)  # [B, n_rec, n_rec]
 
-            # Input eligibility vector: F_α(x_i^t)
-            # Uses current input x^t (not x^{t-1}), per Eq. 6 convention
-            # where W^in appears with x^{t+1} in the update for v^{t+1}.
-            x_in_bar = self.alpha * x_in_bar + data[t]  # [batch, n_in]
+            # [ALIF] Eq. 24–25
 
-            # Recurrent eligibility vector: F_α(z_i^{t-1})
-            # z_bar_prev currently holds F_α accumulated up to z^{t-1}.
-            # We use it NOW, BEFORE updating with z_t.
-            # This matches the paper: ε_{ji}^{t+1} = F_α(z_i^t), meaning
-            # at the current computation step, the trace uses the spike
-            # from the PREVIOUS timestep (Eq. 22, and note below Eq. 23:
-            # "one needs to replace the network spikes z_i^{t-1}").
-            # z_bar_prev is ready to use as-is here.  [batch, n_rec]
+            # STEP 4: Update z_bar for next timestep
+            z_bar_prev = self.alpha * z_bar_prev + z_t
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 3: Eligibility traces e_{ji}^t  (Eq. 23)
-            #
-            #  For LIF:
-            #    e_{ji}^{t+1} = ψ_j^{t+1} · ε_{ji}^{t+1}
-            #                 = ψ_j^{t+1} · F_α(z_i^t)        (Eq. 23)
-            #
-            #  This is the product of the post-synaptic term (ψ) and the
-            #  pre-synaptic term (filtered spike train). It captures how
-            #  much the spike of neuron j at time t+1 depends on the
-            #  weight W_{ji}, locally and in a forward manner.
-            # ══════════════════════════════════════════════════════════════
+            # [ALIF] Eq. 10: a_t = ρ · a_t + z_t
 
-            # e^in_{ji}^t = ψ_j^t · F_α(x_i^t)
-            # Shape: [batch, n_rec, n_in] = [batch, n_rec, 1] * [batch, 1, n_in]
-            e_in = h_t.unsqueeze(2) * x_in_bar.unsqueeze(1)
+            # STEP 5: Kappa-smoothed traces (Eq. 28 / Supp. Note 3)
+            trace_in = self.kappa * trace_in + e_in
+            trace_rec = self.kappa * trace_rec + e_rec
+            # [Point 7] Output trace: F_κ(z_j^t) — matches TU Graz reference
+            # (pre_term_w_out = exp_convolve(z, decay=readout_decay))
+            trace_out = self.kappa * trace_out + z_t
 
-            # e^rec_{ji}^t = ψ_j^t · F_α(z_i^{t-1})
-            # Shape: [batch, n_rec, n_rec] = [batch, n_rec, 1] * [batch, 1, n_rec]
-            e_rec = h_t.unsqueeze(2) * z_bar_prev.unsqueeze(1)
-
-            # [ALIF] For ALIF neurons, the eligibility trace has an additional
-            # slow component from the adaptive threshold (Eq. 25):
-            #
-            #   e_{ji}^t = ψ_j^t · ( F_α(z_i^{t-1}) - β · ε_{ji,a}^t )
-            #
-            # where ε_{ji,a}^t is the slow eligibility vector (Eq. 24):
-            #
-            #   ε_{ji,a}^{t+1} = ψ_j^t · F_α(z_i^{t-1}) + (ρ - ψ_j^t · β) · ε_{ji,a}^t
-            #
-            # The term (ρ - ψ·β) causes the slow trace to decay with the
-            # adaptation time constant τ_a (via ρ), creating the "highways
-            # into the future" discussed in the paper (p. 6).
-            #
-            # For recurrent weights:
-            # eps_a = h_t.unsqueeze(2) * z_bar_prev.unsqueeze(1) \
-            #       + (self.rho - h_t.unsqueeze(2) * self.beta) * eps_a     # Eq. 24
-            # e_rec = h_t.unsqueeze(2) * (z_bar_prev.unsqueeze(1)
-            #                             - self.beta * eps_a)              # Eq. 25
-            #
-            # For input weights:
-            # eps_a_in = h_t.unsqueeze(2) * x_in_bar.unsqueeze(1) \
-            #          + (self.rho - h_t.unsqueeze(2) * self.beta) * eps_a_in
-            # e_in = h_t.unsqueeze(2) * (x_in_bar.unsqueeze(1)
-            #                            - self.beta * eps_a_in)
-
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 4: Update recurrent pre-synaptic trace for next timestep
-            #
-            #  After computing e_rec with z_bar_prev = F_α(z^{t-1}),
-            #  we now incorporate z_t so that at the NEXT iteration,
-            #  z_bar_prev will correctly hold F_α(z^t) = F_α(z^{(t+1)-1}).
-            # ══════════════════════════════════════════════════════════════
-
-            z_bar_prev = self.alpha * z_bar_prev + z_t  # [batch, n_rec]
-
-            # [ALIF] Update adaptive threshold for next timestep (Eq. 10):
-            # a_t = self.rho * a_t + z_t
-            # This feeds back into the dynamic threshold A_j^t (Eq. 8)
-            # and the pseudo-derivative computation at the next timestep.
-
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 5: Kappa-smoothed eligibility traces ē_{ji}^t
-            #  (Eq. 28 / Supplementary Note 3)
-            #
-            #  The readout y_k^t = κ·y_k^{t-1} + Σ_j W^out_{kj}·z_j^t
-            #  (Eq. 11) introduces a temporal filter between the spikes
-            #  and the loss. For regression (Eq. 28), this requires
-            #  convolving the eligibility traces with the same filter:
-            #
-            #    ē_{ji}^t = F_κ(e_{ji}^t) = κ · ē_{ji}^{t-1} + e_{ji}^t
-            #
-            #  For classification (Eq. 29) with cross-entropy loss, the
-            #  same smoothing applies (derived in Supplementary Note 3).
-            #
-            #  For the output weights W^out_{kj}, the gradient involves
-            #  F_κ(z_j^t) rather than F_κ(e_{ji}^t), since the output
-            #  weights don't go through the recurrent eligibility traces.
-            # ══════════════════════════════════════════════════════════════
-
-            # ē^in_{ji} = F_κ(e^in_{ji})
-            trace_in = self.kappa * trace_in + e_in      # [batch, n_rec, n_in]
-            # ē^rec_{ji} = F_κ(e^rec_{ji})
-            trace_rec = self.kappa * trace_rec + e_rec    # [batch, n_rec, n_rec]
-            # F_κ(z_j^t) for output weight gradient
-            trace_out = self.kappa * trace_out + z_t      # [batch, n_rec]
-
-            # ══════════════════════════════════════════════════════════════
-            #  Skip weight update if not at an update timestep
-            #
-            #  Traces are ALWAYS updated (steps 1–5 above) to preserve
-            #  temporal information. Only the weight modification is gated.
-            # ══════════════════════════════════════════════════════════════
-
+            # ── Skip weight update if not at update timestep [D3] ──
             do_update = True
             if self.update_last and t < num_timesteps - 1:
                 do_update = False
@@ -512,116 +499,69 @@ class EpropTrainer(BaseTrainer):
             if not do_update:
                 continue
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 6: Output probabilities and error signal
-            #
-            #  For classification (Eq. 29):
-            #    π_k^t = softmax_k(y_1^t, ..., y_K^t)
-            #    err_k^t = π_k^t - π*_k^t
-            #
-            #  where π*_k^t is the one-hot target vector.
-            # ══════════════════════════════════════════════════════════════
+            # STEP 6: Error signal (Eq. 29)
+            # π_k^t = softmax(y_k^t), err = π_k^t - π*_k^t
+            yo_t = F.softmax(vo, dim=1)
+            err_t = yo_t - tgt_onehot
 
-            # π_k^t: predicted class probabilities
-            yo_t = F.softmax(vo, dim=1)   # [batch, n_out]
-            # Error: (π_k^t - π*_k^t), appears in Eq. 29
-            err_t = yo_t - tgt_onehot     # [batch, n_out]
+            # STEP 7: Learning signal (Eq. 4, symmetric e-prop)
+            # L_j^t = Σ_k W^out_{kj} · (π_k^t - π*_k^t)
+            L_t = err_t @ self._w_out
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 7: Learning signal L_j^t  (Eq. 4)
-            #
-            #  L_j^t = Σ_k B_{jk} · (π_k^t - π*_k^t)
-            #
-            #  In *symmetric* e-prop, B_{jk} = W^out_{kj} (the transpose
-            #  of the output weight from neuron j to output k). This would
-            #  be exact if the network had no recurrent connections.
-            #
-            #  In *random* e-prop, B_{jk} are random fixed weights.
-            #  In *adaptive* e-prop, B_{jk} co-evolve with W^out_{kj}.
-            #  (See paper p.4 and Supplementary Note 2.)
-            #
-            #  Implementation: err_t @ W_out gives:
-            #    [batch, n_out] @ [n_out, n_rec] = [batch, n_rec]
-            #  which computes Σ_k err_k · W^out_{kj} = Σ_k B_{jk} · err_k
-            # ══════════════════════════════════════════════════════════════
-
-            L_t = err_t @ self.network.w_out  # [batch, n_rec]
-
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 8: Weight gradients  (Eq. 29)
-            #
-            #  The full weight update for classification is:
-            #
-            #    ΔW^rec_{ji} = -η Σ_t L_j^t · ē^rec_{ji}^t     (Eq. 29)
-            #    ΔW^in_{ji}  = -η Σ_t L_j^t · ē^in_{ji}^t      (same form)
-            #    ΔW^out_{kj} = -η Σ_t err_k^t · F_κ(z_j^t)     (Supp. Note 3)
-            #
-            #  Here we compute the per-timestep contribution (before
-            #  summation over t), averaged over the batch dimension.
-            #
-            #  The einsum "br,bri->ri" computes:
-            #    grad[r,i] = Σ_b L_t[b,r] · trace[b,r,i]
-            #  which is Σ_b L_j^t · ē_{ji}^t summed over the batch.
-            # ══════════════════════════════════════════════════════════════
-
-            # ΔW^in: gradient for input weights [n_rec, n_in]
-            w_in_grad_t = self.lr_layer[0] * torch.einsum(
-                "br,bri->ri", L_t, trace_in
-            )
-            # ΔW^rec: gradient for recurrent weights [n_rec, n_rec]
-            w_rec_grad_t = self.lr_layer[1] * torch.einsum(
-                "br,brj->rj", L_t, trace_rec
-            )
-            # ΔW^out: gradient for output weights [n_out, n_rec]
-            # = Σ_b err_k^t · F_κ(z_j^t) = err^T @ trace_out
+            # STEP 8: Weight gradients (Eq. 29)
+            w_in_grad_t = self.lr_layer[0] * torch.einsum("br,bri->ri", L_t, trace_in)
+            w_rec_grad_t = self.lr_layer[1] * torch.einsum("br,brj->rj", L_t, trace_rec)
+            # [Point 7] Output weight gradient (Supp. Note 3):
+            # ΔW^out_{kj} = Σ_b,t err_k · F_κ(z_j) = err^T @ trace_out
             w_out_grad_t = self.lr_layer[2] * (err_t.t() @ trace_out)
 
-            # ══════════════════════════════════════════════════════════════
-            #  STEP 9: Apply weight updates
-            #
-            #  Two modes:
-            #  (a) With optimizer: accumulate .grad, then optimizer.step()
-            #  (b) Manual SGD: W ← W - η · ΔW / batch_size
-            #
-            #  Note: the paper uses ΔW_{ji} = -η Σ_t L_j^t · ē_{ji}^t
-            #  (Eq. 27), so the update is W ← W + ΔW = W - η·(L·ē).
-            #  Since we compute grad = L·ē (positive), the manual update
-            #  subtracts: W.data -= lr * grad / batch_size.
-            # ══════════════════════════════════════════════════════════════
-
+            # STEP 9: Apply updates
             if self.use_optimizer and self.optimizer is not None:
-                self.network.w_in.grad = (
-                    w_in_grad_t
-                    if self.network.w_in.grad is None
-                    else self.network.w_in.grad + w_in_grad_t
+                self._w_in.grad = (
+                    w_in_grad_t if self._w_in.grad is None
+                    else self._w_in.grad + w_in_grad_t
                 )
-                self.network.w_rec.grad = (
-                    w_rec_grad_t
-                    if self.network.w_rec.grad is None
-                    else self.network.w_rec.grad + w_rec_grad_t
+                self._w_rec.grad = (
+                    w_rec_grad_t if self._w_rec.grad is None
+                    else self._w_rec.grad + w_rec_grad_t
                 )
-                self.network.w_out.grad = (
-                    w_out_grad_t
-                    if self.network.w_out.grad is None
-                    else self.network.w_out.grad + w_out_grad_t
+                self._w_out.grad = (
+                    w_out_grad_t if self._w_out.grad is None
+                    else self._w_out.grad + w_out_grad_t
                 )
                 self.optimizer.step()
                 self.optimizer.zero_grad()
             else:
-                self.network.w_in.data -= self.lr * w_in_grad_t / batch_size
-                self.network.w_rec.data -= self.lr * w_rec_grad_t / batch_size
-                self.network.w_out.data -= self.lr * w_out_grad_t / batch_size
+                self._w_in.data -= self.lr * w_in_grad_t / batch_size
+                self._w_rec.data -= self.lr * w_rec_grad_t / batch_size
+                self._w_out.data -= self.lr * w_out_grad_t / batch_size
 
-        # ── Final prediction (not part of e-prop, just for evaluation) ──
+        # ── Final prediction and monitoring loss ──
         with torch.no_grad():
             pred = vo_sum.argmax(dim=1, keepdim=True)
-            loss = self.loss_fn(vo_sum, tgt_onehot)
+            # [Point 1] Cross-entropy loss for monitoring, matching paper's
+            # E = -Σ_{t,k} π*_k log π_k. We compute it on the accumulated
+            # output vo_sum as a summary statistic. Note: the actual e-prop
+            # weight updates do NOT use this loss — they use (π_k - π*_k)
+            # directly from Eq. 29.
+            loss = self.loss_fn(vo_sum, target_indices)
 
         return loss.detach(), pred
 
-    def reset(self):
-        """Reset all LIF neuron states in the network."""
-        self.network.reset()
+    def set_optimizer_mode(self, use_optimizer: bool, optimizer=None):
+        """Switch between pure online updates and optimizer-based updates."""
+        self.use_optimizer = use_optimizer
+        self._external_optimizer = optimizer
+        if use_optimizer:
+            self.optimizer = optimizer or self.optimizer or torch.optim.Adam(
+                self.network.parameters(), lr=self.lr
+            )
+        else:
+            self.optimizer = None
+
+    def reset(self, device: torch.device | None = None):
+        """Reset all neuron states in the network, optionally moving them to a device."""
+        self.network.reset(device=device)
 
     def to(self, device):
         """Move trainer and network to device, recreating optimizer if needed."""

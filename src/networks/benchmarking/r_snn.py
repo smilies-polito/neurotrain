@@ -21,6 +21,7 @@ class RSNN(BaseSNN):
     Returns: (spk_rec, mem_rec) with one entry per spiking layer (hidden rec layers + output).
     """
     net_tags = frozenset({"fully_connected", "recurrent", "baseline"})
+    is_recurrent = True
 
     def __init__(
         self,
@@ -49,6 +50,8 @@ class RSNN(BaseSNN):
             spike_grad = surrogate.fast_sigmoid(slope=25)
 
         input_size = int(prod(self.in_shape))
+        self.input_size = input_size
+        self.hidden_size = list(hidden_sizes)
 
         self.input_layers = nn.ModuleList()
         self.recurrent_layers = nn.ModuleList()
@@ -119,7 +122,32 @@ class RSNN(BaseSNN):
     def n_classes(self) -> int:
         return self._n_classes
 
-    def reset(self) -> None:
+    @property
+    def input_dim(self) -> int:
+        """Flattened input dimension for the RSNN."""
+        return self.input_size
+
+    @property
+    def hidden_dims(self) -> list[int]:
+        """List of recurrent hidden layer sizes."""
+        return self.hidden_size
+
+    @property
+    def recurrent_dim(self) -> int:
+        """Recurrent hidden dimension for single-layer RSNNs."""
+        if len(self.hidden_size) != 1:
+            raise AttributeError(
+                "RSNN.recurrent_dim is only defined for single hidden-layer RSNNs."
+            )
+        return self.hidden_size[0]
+
+    @property
+    def output_dim(self) -> int:
+        """Number of output classes."""
+        return self._n_classes
+
+
+    def reset(self, device: torch.device | None = None) -> None:
         for rlif in self.recurrent_layers:
             rlif.reset_mem()
         self.lif_out.reset_mem()
