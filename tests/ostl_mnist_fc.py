@@ -37,7 +37,6 @@ DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
 # OSTL-specific defaults
-SURROGATE_SCALE = 5.0   # Scale factor for the logistic surrogate gradient.
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
 OUTPUT_MODE = "spike"   # Output signal used for prediction: "spike" or "mem".
 UPDATE_LAST = True      # If True, apply weight updates only at the last timestep.
@@ -81,7 +80,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=LR)
     p.add_argument("--beta", type=float, default=BETA)
     p.add_argument("--threshold", type=float, default=THRESHOLD)
-    p.add_argument("--surrogate-scale", type=float, default=SURROGATE_SCALE)
     p.add_argument("--grad-clip", type=float, default=GRAD_CLIP)
     p.add_argument("--output-mode", choices=("spike", "mem"), default=OUTPUT_MODE)
     p.add_argument("--update-last", action="store_true", default=UPDATE_LAST)
@@ -122,7 +120,6 @@ def run_training(
     threshold: float,
     epochs: int,
     lr: float,
-    surrogate_scale: float,
     grad_clip: float,
     output_mode: str,
     update_last: bool,
@@ -141,12 +138,11 @@ def run_training(
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = FCSNN(in_shape=(1, 28, 28), num_classes=10, beta=beta, threshold=threshold).to(device)
+    network = FCSNN(in_shape=(1, 28, 28), num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
     trainer = OSTLTrainer(
         network=network,
         lr=lr,
         batch_size=batch_size,
-        surrogate_scale=surrogate_scale,
         grad_clip=grad_clip,
         output_mode=output_mode,
         update_last=update_last,
@@ -257,7 +253,6 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
         lr = trial.suggest_float("lr", 1e-3, 5e-2, log=True)
         beta = trial.suggest_float("beta", 0.85, 0.99)
         threshold = trial.suggest_float("threshold", 0.5, 1.5)
-        surrogate_scale = trial.suggest_float("surrogate_scale", 1.0, 25.0, log=True)
         batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
 
         result = run_training(
@@ -267,7 +262,6 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             lr=lr,
             beta=beta,
             threshold=threshold,
-            surrogate_scale=surrogate_scale,
             grad_clip=args.grad_clip,
             output_mode=args.output_mode,
             update_last=args.update_last,
@@ -304,7 +298,6 @@ def main() -> None:
         lr=args.lr,
         beta=args.beta,
         threshold=args.threshold,
-        surrogate_scale=args.surrogate_scale,
         grad_clip=args.grad_clip,
         output_mode=args.output_mode,
         update_last=args.update_last,
