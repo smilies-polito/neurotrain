@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Single-file minimal integration test:
-DVS Gesture loader + RSNN + BPTTTrainer (+ optional Optuna).
+N-MNIST loader + RSNN + OSTLTrainer (+ optional Optuna).
 """
 
 from __future__ import annotations
@@ -22,28 +22,28 @@ import torch
 # -----------------------------------------------------------------------------
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
-TIMESTEPS = 10         # Number of temporal bins produced by the DVS Gesture loader.
-NUM_WORKERS = 32         # DataLoader worker processes for DVS Gesture loading.
-DATA_ROOT = ""          # Optional DVS Gesture root override; empty string uses the loader default.
+TIMESTEPS = 10          # Number of temporal bins produced by the N-MNIST loader.
+NUM_WORKERS = 8        # DataLoader worker processes for N-MNIST loading.
 
 # Network defaults
-BETA = 0.95             # LIF membrane leak/decay.
+BETA = 0.9              # LIF membrane decay.
 THRESHOLD = 1.0         # LIF spiking threshold.
-# Network specific defaults
 
-# Trainer defaults
 # General training defaults
-EPOCHS = 1             # Training epochs for the default non-Optuna run.
-LR = 1e-3               # BPTT optimizer learning rate.
+EPOCHS = 10             # Training epochs for the default non-Optuna run.
+LR = 1e-2               # OSTL learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
-# Trainer specific defaults
+
+# OSTL-specific defaults
+GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
+DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
 OPTUNA_EPOCHS = 1       # Epochs executed inside each Optuna trial.
-STUDY_NAME = "bptt_dvsgest_r"  # Optuna study name.
+STUDY_NAME = "ostl_nmnist_r"  # Optuna study name.
 OPTUNA_STORAGE = ""     # Optuna storage URL; empty string keeps the study in memory.
 
 # -----------------------------------------------------------------------------
@@ -53,43 +53,41 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = PROJECT_ROOT / "tests"
 SRC_DIR = PROJECT_ROOT / "src"
 
-# Ensure src/ and tests/ are importable.
-# (tests/ first so local test helpers would win if they exist)
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
-# Work around src/networks/__init__.py eager imports by creating a lightweight
-# namespace package so we can import only what we need.
 if "networks" not in sys.modules:
     networks_pkg = types.ModuleType("networks")
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = networks_pkg
 
-from datasets.dvsgesture_loader import DVSGestureLoader
+from datasets.nmnist_loader import NMNISTLoader
 from networks.benchmarking.r_snn import RSNN
-from trainers.bptt_trainer import BPTTTrainer
+from trainers.ostl_trainer import OSTLTrainer
 
 
 # -----------------------------------------------------------------------------
 # Tiny utilities (inlined to keep this file self-contained)
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Minimal DVSGesture+RSNN BPTT test.")
-    p.add_argument("--epochs", type=int, default=EPOCHS, help="Training epochs.")
-    p.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Batch size.")
-    p.add_argument("--timesteps", type=int, default=TIMESTEPS, help="Number of DVS Gesture time bins.")
-    p.add_argument("--lr", type=float, default=LR, help="Learning rate.")
-    p.add_argument("--beta", type=float, default=BETA, help="LIF beta.")
-    p.add_argument("--threshold", type=float, default=THRESHOLD, help="LIF threshold.")
-    p.add_argument("--seed", type=int, default=SEED, help="Random seed.")
-    p.add_argument("--device", choices=("auto", "cpu", "cuda"), default=DEVICE, help="Execution device.")
-    p.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS, help="Number of Optuna trials (0 disables).")
-    p.add_argument("--optuna-epochs", type=int, default=OPTUNA_EPOCHS, help="Epochs per Optuna trial.")
-    p.add_argument("--study-name", type=str, default=STUDY_NAME, help="Optuna study name.")
-    p.add_argument("--optuna-storage", type=str, default=OPTUNA_STORAGE, help="Optuna storage URL (empty=in-memory).")
-    p.add_argument("--hpc-prints", dest="hpc_prints", action="store_true", default=HPC_PRINTS, help="Disable incremental batch progress prints.",)
+    p = argparse.ArgumentParser(description="Minimal N-MNIST+RSNN OSTL test.")
+    p.add_argument("--epochs", type=int, default=EPOCHS)
+    p.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    p.add_argument("--timesteps", type=int, default=TIMESTEPS)
+    p.add_argument("--lr", type=float, default=LR)
+    p.add_argument("--beta", type=float, default=BETA)
+    p.add_argument("--threshold", type=float, default=THRESHOLD)
+    p.add_argument("--grad-clip", type=float, default=GRAD_CLIP)
+    p.add_argument("--deferred", action="store_true", default=DEFERRED)
+    p.add_argument("--seed", type=int, default=SEED)
+    p.add_argument("--device", choices=("auto", "cpu", "cuda"), default=DEVICE)
+    p.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS)
+    p.add_argument("--optuna-epochs", type=int, default=OPTUNA_EPOCHS)
+    p.add_argument("--study-name", type=str, default=STUDY_NAME)
+    p.add_argument("--optuna-storage", type=str, default=OPTUNA_STORAGE)
+    p.add_argument("--hpc-prints", dest="hpc_prints", action="store_true", default=HPC_PRINTS)
     return p.parse_args()
 
 
@@ -114,34 +112,37 @@ def get_device(requested: str) -> torch.device:
 # -----------------------------------------------------------------------------
 def run_training(
     *,
-    # Dataset parameters
     batch_size: int,
     timesteps: int,
-    # Network parameters
-    threshold: float,
     beta: float,
-    # General training parameters
+    threshold: float,
     epochs: int,
     lr: float,
+    grad_clip: float,
+    deferred: bool,
     seed: int,
     device: torch.device,
     hpc_prints: bool = False,
-    # Optuna parameters
     log_prefix: str = "",
     trial: "optuna.trial.Trial | None" = None,
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    # Create the objects
-    train_loader, test_loader = DVSGestureLoader(
+    train_loader, test_loader = NMNISTLoader(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = RSNN(in_shape=(2, 128, 128), num_classes=11, beta=beta, threshold=threshold).to(device)
-    trainer = BPTTTrainer(network=network, lr=lr, batch_size=batch_size).to(device)
+    network = RSNN(in_shape=(2, 34, 34), num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
+    trainer = OSTLTrainer(
+        network=network,
+        lr=lr,
+        batch_size=batch_size,
+        grad_clip=grad_clip,
+        deferred=deferred,
+    ).to(device)
 
     best_test_acc = 0.0
     final_test_acc = 0.0
@@ -149,17 +150,15 @@ def run_training(
 
     non_blocking = device.type == "cuda"
 
-    # Loop on epochs
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
 
-        # [TRAIN] one full epoch on training batches
+        # [TRAIN]
         trainer.network.train()
         total_loss = 0.0
         total_correct = 0
         total_samples = 0
         n_batches = len(train_loader)
-        print(f"{n_batches} batches in the training loader.")
 
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.to(device, non_blocking=non_blocking)
@@ -181,7 +180,7 @@ def run_training(
         train_loss = total_loss / total_samples if total_samples > 0 else 0.0
         train_acc = total_correct / total_samples if total_samples > 0 else 0.0
 
-        # [EVAL] one full pass on test batches
+        # [EVAL]
         network.eval()
         total = 0
         correct = 0
@@ -208,14 +207,11 @@ def run_training(
 
         test_acc = correct / total if total > 0 else 0.0
 
-        # [METRICS] track epoch outputs and best score
         final_train_loss = train_loss
         final_test_acc = test_acc
         best_test_acc = max(best_test_acc, test_acc)
 
         epoch_time_s = time.perf_counter() - epoch_start
-
-        # Print metrics
         print(
             f"{log_prefix}epoch={epoch}/{epochs} "
             f"train_loss={train_loss:.4f} "
@@ -224,7 +220,15 @@ def run_training(
             f"epoch_time_s={epoch_time_s:.2f}"
         )
 
-    # Return information on the complete run
+        if trial is not None:
+            try:
+                import optuna
+                trial.report(test_acc, epoch)
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
+            except ImportError:
+                pass
+
     return {
         "best_test_acc": best_test_acc,
         "final_test_acc": final_test_acc,
@@ -241,7 +245,7 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     storage = args.optuna_storage or None
     sampler = optuna.samplers.TPESampler(seed=args.seed)
     study = optuna.create_study(
-        direction="maximize",               # We want to maximize test accuracy.
+        direction="maximize",
         study_name=args.study_name,
         storage=storage,
         load_if_exists=storage is not None,
@@ -249,17 +253,20 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     )
 
     def objective(trial):
-        lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+        lr = trial.suggest_float("lr", 1e-3, 5e-2, log=True)
         beta = trial.suggest_float("beta", 0.85, 0.99)
         threshold = trial.suggest_float("threshold", 0.5, 1.5)
+        batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
 
         result = run_training(
             epochs=args.optuna_epochs,
-            batch_size=args.batch_size,
+            batch_size=batch_size,
             timesteps=args.timesteps,
             lr=lr,
             beta=beta,
             threshold=threshold,
+            grad_clip=args.grad_clip,
+            deferred=args.deferred,
             seed=args.seed + trial.number,
             device=device,
             hpc_prints=args.hpc_prints,
@@ -267,7 +274,6 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             trial=trial,
         )
         trial.set_user_attr("final_test_acc", result["final_test_acc"])
-        # The objective for our exploration is the best test accuracy
         return result["best_test_acc"]
 
     print(f"[Optuna] trials={args.optuna_trials} epochs_per_trial={args.optuna_epochs} study={args.study_name}")
@@ -294,6 +300,8 @@ def main() -> None:
         lr=args.lr,
         beta=args.beta,
         threshold=args.threshold,
+        grad_clip=args.grad_clip,
+        deferred=args.deferred,
         seed=args.seed,
         device=device,
         hpc_prints=args.hpc_prints,

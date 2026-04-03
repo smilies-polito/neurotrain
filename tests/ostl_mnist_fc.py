@@ -38,8 +38,7 @@ HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
 # OSTL-specific defaults
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
-OUTPUT_MODE = "spike"   # Output signal used for prediction: "spike" or "mem".
-UPDATE_LAST = True      # If True, apply weight updates only at the last timestep.
+DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
@@ -81,8 +80,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--beta", type=float, default=BETA)
     p.add_argument("--threshold", type=float, default=THRESHOLD)
     p.add_argument("--grad-clip", type=float, default=GRAD_CLIP)
-    p.add_argument("--output-mode", choices=("spike", "mem"), default=OUTPUT_MODE)
-    p.add_argument("--update-last", action="store_true", default=UPDATE_LAST)
+    p.add_argument("--deferred", action="store_true", default=DEFERRED)
     p.add_argument("--seed", type=int, default=SEED)
     p.add_argument("--device", choices=("auto", "cpu", "cuda"), default=DEVICE)
     p.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS)
@@ -121,8 +119,7 @@ def run_training(
     epochs: int,
     lr: float,
     grad_clip: float,
-    output_mode: str,
-    update_last: bool,
+    deferred: bool,
     seed: int,
     device: torch.device,
     hpc_prints: bool = False,
@@ -144,8 +141,7 @@ def run_training(
         lr=lr,
         batch_size=batch_size,
         grad_clip=grad_clip,
-        output_mode=output_mode,
-        update_last=update_last,
+        deferred=deferred,
     ).to(device)
 
     best_test_acc = 0.0
@@ -163,7 +159,6 @@ def run_training(
         total_correct = 0
         total_samples = 0
         n_batches = len(train_loader)
-        batch_start = time.perf_counter()
 
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.to(device, non_blocking=non_blocking)
@@ -176,10 +171,8 @@ def run_training(
             total_samples += batch_size_cur
 
             if not hpc_prints:
-                batch_time = time.perf_counter() - batch_start
                 f = int(28 * i / n_batches)
-                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  {batch_time:.3f}s/batch", end="", flush=True)
-                batch_start = time.perf_counter()
+                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  ", end="", flush=True)
 
         if not hpc_prints:
             print("\r" + " " * 40 + "\r", end="", flush=True)
@@ -273,8 +266,7 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             beta=beta,
             threshold=threshold,
             grad_clip=args.grad_clip,
-            output_mode=args.output_mode,
-            update_last=args.update_last,
+            deferred=args.deferred,
             seed=args.seed + trial.number,
             device=device,
             hpc_prints=args.hpc_prints,
@@ -309,8 +301,7 @@ def main() -> None:
         beta=args.beta,
         threshold=args.threshold,
         grad_clip=args.grad_clip,
-        output_mode=args.output_mode,
-        update_last=args.update_last,
+        deferred=args.deferred,
         seed=args.seed,
         device=device,
         hpc_prints=args.hpc_prints,

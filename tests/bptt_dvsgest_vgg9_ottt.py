@@ -177,7 +177,6 @@ def run_training(
         total_correct = 0
         total_samples = 0
         n_batches = len(train_loader)
-        batch_start = time.perf_counter()
 
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.to(device, non_blocking=non_blocking)
@@ -190,10 +189,8 @@ def run_training(
             total_samples += batch_size_cur
 
             if not hpc_prints:
-                batch_time = time.perf_counter() - batch_start
                 f = int(28 * i / n_batches)
-                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  {batch_time:.3f}s/batch", end="", flush=True)
-                batch_start = time.perf_counter()
+                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  ", end="", flush=True)
 
         if not hpc_prints:
             print("\r" + " " * 40 + "\r", end="", flush=True)
