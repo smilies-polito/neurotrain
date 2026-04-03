@@ -11,6 +11,24 @@ from trainers.base_trainer import BaseTrainer
 
 
 class OSTLTrainer(BaseTrainer):
+    """
+    Online Spatio-Temporal Learning (OSTL) — Bohnstingl et al. (2023).
+
+    Two optional variations (both off by default):
+
+    deferred (bool):
+        False → online updates: weights are updated at every timestep (Algorithm 1, online branch).
+        True  → deferred updates: gradients are accumulated over the full sequence and applied
+                once at the end (Algorithm 1, deferred branch). Equivalent to RTRL with deferred
+                updates; gradient-equivalent to BPTT for single-layer SNNs.
+
+    feedback_alignment (bool):
+        False → standard OSTL: the learning signal is backpropagated through the forward weights
+                W^{l+1} (Eq. 18–19).
+        True  → OSTL rnd: fixed random matrices B^{l+1} replace W^{l+1} in the learning signal
+                (Eq. 26–27). Removes the weight-transport requirement at the cost of approximate
+                gradients. Random matrices are drawn once at init and held fixed.
+    """
 
     def __init__(
         self,
@@ -18,33 +36,29 @@ class OSTLTrainer(BaseTrainer):
         lr: float,
         batch_size: int,
         grad_clip: float = 0.0,
-        update_last: bool = False,
-        update_every: int = 1,
         use_optimizer: bool = False,
         optimizer: Optional[torch.optim.Optimizer] = None,
         output_mode: str = "spike",
+        deferred: bool = False,
+        feedback_alignment: bool = False,
         **kwargs,
     ):
         super().__init__()
         del kwargs
 
-        # Save the parameters
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
         self.grad_clip = float(grad_clip)
-        self.update_last = bool(update_last)
-        self.update_every = int(update_every)
         self.use_optimizer = bool(use_optimizer)
         self.output_mode = str(output_mode).lower()
+        self.deferred = bool(deferred)
+        self.feedback_alignment = bool(feedback_alignment)
 
-        # Validate the parameters
         if self.lr <= 0.0:
             raise ValueError("OSTLTrainer requires lr > 0.")
         if self.grad_clip < 0.0:
             raise ValueError("OSTLTrainer requires grad_clip >= 0.")
-        if self.update_every <= 0:
-            raise ValueError("OSTLTrainer requires update_every >= 1.")
         if self.output_mode not in ("spike", "mem"):
             raise ValueError(f"Invalid output_mode '{output_mode}'. Use 'spike' or 'mem'.")
 
@@ -53,9 +67,13 @@ class OSTLTrainer(BaseTrainer):
         if len(self.linear_layers) == 0:
             raise TypeError("OSTLTrainer requires at least one Linear+Leaky layer pair.")
 
-        recurrent_layers = getattr(self.network, "recurrent_layers", None)
-        if recurrent_layers is not None and len(recurrent_layers) > 0:
-            raise TypeError("OSTLTrainer is feed-forward only and does not support recurrent layers.")
+        # Detect recurrent layers (OSTL w/o H approximation, Section III.C)
+        self.is_recurrent_layer = [isinstance(lif, snn.RLeaky) for lif in self.lif_layers]
+        self.has_recurrent = any(self.is_recurrent_layer)
+        self.rec_weights = [
+            lif.recurrent.weight if isinstance(lif, snn.RLeaky) else None
+            for lif in self.lif_layers
+        ]
 
         self.num_layers = len(self.linear_layers)
         self.n_classes = int(getattr(self.network, "n_classes"))
@@ -68,12 +86,25 @@ class OSTLTrainer(BaseTrainer):
 
         for idx, lif in enumerate(self.lif_layers):
             rm = getattr(lif, "reset_mechanism", None)
+            lif_type = type(lif).__name__
             if rm != "zero":
                 raise TypeError(
-                    f"OSTLTrainer requires reset_mechanism='zero' on all snn.Leaky layers "
-                    f"(layer {idx} has reset_mechanism={rm!r}). "
+                    f"OSTLTrainer requires reset_mechanism='zero' on all spiking layers "
+                    f"(layer {idx} ({lif_type}) has reset_mechanism={rm!r}). "
                     "Pass reset_mechanism='zero' when constructing the network."
                 )
+
+        # OSTL rnd (Eq. 26): fixed random feedback matrices B^{l+1} for l = 0 … K-2.
+        # Same shape as the corresponding forward weight W^{l+1}: [n_{l+1}, n_l].
+        # Only the hidden layers need a feedback matrix; the output layer uses Eq. (27) unchanged.
+        if self.feedback_alignment:
+            self.feedback_weights: Optional[List[torch.Tensor]] = [
+                torch.randn(self.linear_layers[l + 1].out_features,
+                            self.linear_layers[l + 1].in_features)
+                for l in range(self.num_layers - 1)
+            ]
+        else:
+            self.feedback_weights = None
 
         self._external_optimizer = optimizer
         if self.use_optimizer:
@@ -124,9 +155,9 @@ class OSTLTrainer(BaseTrainer):
                     raise TypeError(
                         f"OSTLTrainer expects nn.Linear in network.synapses, got {type(syn).__name__} at index {idx}."
                     )
-                if not isinstance(neu, snn.Leaky):
+                if not isinstance(neu, (snn.Leaky, snn.RLeaky)):
                     raise TypeError(
-                        f"OSTLTrainer expects snn.Leaky in network.neurons, got {type(neu).__name__} at index {idx}."
+                        f"OSTLTrainer expects snn.Leaky or snn.RLeaky in network.neurons, got {type(neu).__name__} at index {idx}."
                     )
                 linear_layers.append(syn)
                 lif_layers.append(neu)
@@ -147,9 +178,9 @@ class OSTLTrainer(BaseTrainer):
         lif_layers = []
         for idx in range(0, len(raw_layers), 2):
             lin, lif = raw_layers[idx], raw_layers[idx + 1]
-            if not isinstance(lin, nn.Linear) or not isinstance(lif, snn.Leaky):
+            if not isinstance(lin, nn.Linear) or not isinstance(lif, (snn.Leaky, snn.RLeaky)):
                 raise TypeError(
-                    "OSTLTrainer expects alternating [nn.Linear, snn.Leaky] entries in network.layers."
+                    "OSTLTrainer expects alternating [nn.Linear, snn.Leaky/snn.RLeaky] entries in network.layers."
                 )
             linear_layers.append(lin)
             lif_layers.append(lif)
@@ -158,6 +189,18 @@ class OSTLTrainer(BaseTrainer):
     # -------------------------------------------------------------------------
     # Training
     # -------------------------------------------------------------------------
+
+    def _apply_update(self, layer: nn.Linear, g: torch.Tensor,
+                      rec_w: Optional[torch.Tensor], g_r: Optional[torch.Tensor]) -> None:
+        """Apply (or accumulate for the optimizer) one gradient step for a layer."""
+        if self.use_optimizer and self.optimizer is not None:
+            layer.weight.grad = g if layer.weight.grad is None else layer.weight.grad.add_(g)
+            if rec_w is not None and g_r is not None:
+                rec_w.grad = g_r if rec_w.grad is None else rec_w.grad.add_(g_r)
+        else:
+            layer.weight.add_(-self.lr * g)
+            if rec_w is not None and g_r is not None:
+                rec_w.add_(-self.lr * g_r)
 
     @torch.no_grad()
     def train_sample(
@@ -172,28 +215,25 @@ class OSTLTrainer(BaseTrainer):
         Returns:
             loss: scalar, pred: [B, 1]
         """
-        # Control on input shape
         if data.dim() < 3:
             raise ValueError(
                 f"OSTLTrainer expects input shape [T, B, ...], got {tuple(data.shape)}."
             )
 
-        # Extract dimensions and device info for later use
         T = data.shape[0]
         B = data.shape[1]
         device = data.device
         dtype = data.dtype if data.is_floating_point() else torch.float32
-        # Quick check target shape and type
+
         if target.dim() != 1 or target.shape[0] != B:
             raise ValueError(
                 f"OSTLTrainer expects target shape [B], got {tuple(target.shape)} for batch size {B}."
             )
 
-        # One-hot targets for MSE output error (Eq. 19)
+        # One-hot targets for MSE output error (Eq. 19 / 27)
         target_oh = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
         target_oh.scatter_(1, target.long().unsqueeze(1), 1.0)
 
-        # Reset of the network and optimizer
         self.network.reset()
         if self.use_optimizer and self.optimizer is not None:
             self.optimizer.zero_grad(set_to_none=True)
@@ -201,63 +241,57 @@ class OSTLTrainer(BaseTrainer):
         # -----------------------------------------------------------------------
         # OSTL running state (reset at the start of each sample/sequence)
         # -----------------------------------------------------------------------
-        # elig_vec[l]: [B, out_l, in_l] — eligibility tensor ε^{t,W_l} (Eq. 14)
+        # elig_vec[l]: [B, out_l, in_l] — eligibility tensor ε^{t,W_l} (Eq. 15)
         elig_vec = [
             layer.weight.new_zeros(B, layer.out_features, layer.in_features)
             for layer in self.linear_layers
         ]
-        # elig_vec_bias[l]: [B, out_l] — eligibility tensor ε^{t,bias_l} (same recursion, injection=1)
-        elig_vec_bias = [
-            layer.weight.new_zeros(B, layer.out_features) if layer.bias is not None else None
-            for layer in self.linear_layers
-        ]
-        # Values from t-1 used in Eq. (16): stored membrane, spike, surrogate derivative
+        # Values from t-1 used in Eq. (17): stored membrane, spike, surrogate derivative
         prev_mem = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_spk = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_h_prime = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
 
-        # Gradient accumulation buffers (flushed according to update schedule)
-        grad_buf = [torch.zeros_like(layer.weight) for layer in self.linear_layers]
-        grad_buf_bias = [
-            torch.zeros_like(layer.bias) if layer.bias is not None else None
-            for layer in self.linear_layers
+        # Recurrent eligibility state (OSTL w/o H, Section III.C)
+        elig_vec_rec = [
+            layer.weight.new_zeros(B, layer.out_features, layer.out_features)
+            if self.is_recurrent_layer[l] else None
+            for l, layer in enumerate(self.linear_layers)
         ]
-        pending = 0   # number of timesteps accumulated in grad_buf since last flush
+
+        # Deferred mode: accumulate gradients here, apply once after the sequence.
+        if self.deferred:
+            grad_buf = [torch.zeros_like(layer.weight) for layer in self.linear_layers]
+            grad_buf_rec = [
+                torch.zeros_like(self.rec_weights[l]) if self.is_recurrent_layer[l] else None
+                for l in range(self.num_layers)
+            ]
 
         output_sum = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
         total_loss = torch.zeros((), device=device, dtype=dtype)
-        loss_count = 0
 
         # -----------------------------------------------------------------------
-        # LOOP OVER TIMESTEPS
+        # LOOP OVER TIMESTEPS — Algorithm 1 of Bohnstingl et al. (2023)
         # -----------------------------------------------------------------------
         for t in range(T):
 
-            # Forward pass for the network
+            # Forward pass
             spk_rec, mem_rec = self.network(data[t])
-            # Quinck sanity check
             if len(spk_rec) != self.num_layers or len(mem_rec) != self.num_layers:
                 raise ValueError(
                     "OSTLTrainer expects network(data[t]) to return spike/membrane lists "
                     f"of length {self.num_layers}."
                 )
 
-            # Handle different output modes: spike vs. membrane
             output_t = spk_rec[-1] if self.output_mode == "spike" else mem_rec[-1]
             output_sum.add_(output_t)
-
-            # Only compute loss / learning signal on supervised timesteps
-            is_supervised = (not self.update_last) or (t == T - 1)
-            if is_supervised:
-                total_loss = total_loss + F.mse_loss(output_t, target_oh)
-                loss_count += 1
+            total_loss = total_loss + F.mse_loss(output_t, target_oh)
 
             # -------------------------------------------------------------------
-            # Eq. (14, 12): build eligibility vector ε and trace e = h'·ε per layer
+            # Eq. (13, 15): build eligibility vector ε and trace e = h'·ε per layer
             # -------------------------------------------------------------------
-            h_prime: List[torch.Tensor] = []                    # surrogate derivative h'_l^t
-            elig_trace: List[torch.Tensor] = []                 # eligibility trace  e_l^{t,W}
-            elig_trace_bias: List[Optional[torch.Tensor]] = []  # eligibility trace  e_l^{t,bias}
+            h_prime: List[torch.Tensor] = []                   # surrogate derivative h'_l^t
+            elig_trace: List[torch.Tensor] = []                # eligibility trace  e_l^{t,W}
+            elig_trace_rec: List[Optional[torch.Tensor]] = []  # eligibility trace  e_l^{t,H}
 
             for l, layer in enumerate(self.linear_layers):
                 mem_t = mem_rec[l]
@@ -268,84 +302,83 @@ class OSTLTrainer(BaseTrainer):
                     pre_t = pre_t.flatten(1)
                 pre_t = pre_t.to(dtype=layer.weight.dtype)
 
-                # Surrogate derivative at the current membrane  h'_l^t = h'(V^t - θ)
-                # Section V: The pseudoderivative dh(x)/dx = 1 - tanh^2(x) is used.
+                # Surrogate derivative h'_l^t = 1 - tanh^2(V^t - θ)  (Section V)
                 h_prime_t = 1.0 - torch.tanh(mem_t - self.layer_threshold[l]).pow(2)
                 h_prime.append(h_prime_t)
 
                 # Eq. (17): diagonal state Jacobian  ∂s^t/∂s^{t-1} = d·((1-spk^{t-1}) - s^{t-1}·h'^{t-1})
-                # g' = 1 here (identity activation, see module docstring).
-                # With zero reset, prev_mem == V_pre at non-spike (exact) and 0 at spike
-                # (approximation; h' is near zero there so the error is negligible).
+                # g' = 1 (identity activation).
                 state_deriv = self.layer_decay[l] * (
                     (1.0 - prev_spk[l]) - prev_mem[l] * prev_h_prime[l]
                 )
 
-                # Eq. (15): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + g'·x^t  (g'=1)
+                # Eq. (15): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + x^t
                 elig_vec[l] = state_deriv.unsqueeze(-1) * elig_vec[l] + pre_t.unsqueeze(1)
 
                 # Eq. (13): e^{t,W} = h'^t · ε^{t,W}
                 elig_trace.append(h_prime_t.unsqueeze(-1) * elig_vec[l])
 
-                # Bias eligibility (Eq. 14 / Eq. 15 with injection term = 1)
-                if layer.bias is not None:
-                    elig_vec_bias[l] = state_deriv * elig_vec_bias[l] + 1.0
-                    elig_trace_bias.append(h_prime_t * elig_vec_bias[l])
+                # Recurrent weight eligibility (OSTL w/o H, Eq. 22)
+                # Injection term: y_l^{t-1} = prev_spk[l]
+                if self.is_recurrent_layer[l]:
+                    rec_pre = prev_spk[l].to(dtype=layer.weight.dtype)
+                    elig_vec_rec[l] = state_deriv.unsqueeze(-1) * elig_vec_rec[l] + rec_pre.unsqueeze(1)
+                    elig_trace_rec.append(h_prime_t.unsqueeze(-1) * elig_vec_rec[l])
                 else:
-                    elig_trace_bias.append(None)
-
-            if is_supervised:
-                # ---------------------------------------------------------------
-                # Eq. (18, 19): learning signals L_l^t propagated from output to input
-                # ---------------------------------------------------------------
-                L: List[torch.Tensor] = [torch.empty(0, device=device) for _ in range(self.num_layers)]
-
-                # Eq. (19): output layer error  L_K = ŷ - y*
-                L[-1] = output_t - target_oh
-
-                # Eq. (18): L_l = W_{l+1}^T · diag(h'_{l+1}) · L_{l+1}
-                for l in range(self.num_layers - 2, -1, -1):
-                    jac = h_prime[l + 1].unsqueeze(-1) * self.linear_layers[l + 1].weight.unsqueeze(0)
-                    L[l] = torch.einsum("bi,bij->bj", L[l + 1], jac)
-
-                # Eq. (11): Δθ_l = (1/B) Σ_b L_l^t · e_l^{t,θ}
-                for l, layer in enumerate(self.linear_layers):
-                    grad_buf[l].add_(torch.einsum("bi,bij->ij", L[l], elig_trace[l]) / B)
-                    if layer.bias is not None and elig_trace_bias[l] is not None:
-                        grad_buf_bias[l].add_(torch.einsum("bi,bi->i", L[l], elig_trace_bias[l]) / B)
-                pending += 1
+                    elig_trace_rec.append(None)
 
             # -------------------------------------------------------------------
-            # Update schedule: flush buffered gradients when the trigger fires
+            # Learning signals L_l^t propagated from output to input.
+            # Standard OSTL uses forward weights W^{l+1} (Eq. 18).
+            # OSTL rnd uses fixed random matrices B^{l+1} instead (Eq. 26).
+            # The output learning signal is identical in both cases (Eq. 19 / 27).
             # -------------------------------------------------------------------
-            if self.update_last:
-                do_update = t == T - 1
-            elif self.update_every > 1:
-                do_update = (t + 1) % self.update_every == 0
-            else:
-                do_update = True
+            L: List[torch.Tensor] = [torch.empty(0, device=device) for _ in range(self.num_layers)]
 
-            if do_update and pending > 0:
-                for l, layer in enumerate(self.linear_layers):
-                    g = grad_buf[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf[l]
-                    if self.use_optimizer and self.optimizer is not None:
-                        layer.weight.grad = g.clone() if layer.weight.grad is None else layer.weight.grad.add_(g)
-                    else:
-                        layer.weight.add_(-self.lr * g)
-                    grad_buf[l].zero_()
+            # Output layer error  L_K = ŷ^t - y*  (Eq. 19 / 27)
+            L[-1] = output_t - target_oh
 
-                    if layer.bias is not None and grad_buf_bias[l] is not None:
-                        g_b = grad_buf_bias[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf_bias[l]
-                        if self.use_optimizer and self.optimizer is not None:
-                            layer.bias.grad = g_b.clone() if layer.bias.grad is None else layer.bias.grad.add_(g_b)
-                        else:
-                            layer.bias.add_(-self.lr * g_b)
-                        grad_buf_bias[l].zero_()
+            # Hidden layer signals propagated backward through space
+            for l in range(self.num_layers - 2, -1, -1):
+                # Select feedback matrix: random (OSTL rnd) or forward weight (OSTL)
+                fb_weight = (
+                    self.feedback_weights[l].to(device)  # B^{l+1}  (Eq. 26)
+                    if self.feedback_alignment
+                    else self.linear_layers[l + 1].weight  # W^{l+1}  (Eq. 18)
+                )
+                jac = h_prime[l + 1].unsqueeze(-1) * fb_weight.unsqueeze(0)
+                L[l] = torch.einsum("bi,bij->bj", L[l + 1], jac)
 
-                pending = 0
-                if self.use_optimizer and self.optimizer is not None:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad(set_to_none=True)
+            # -------------------------------------------------------------------
+            # Eq. (11): Δθ_l = (1/B) Σ_b L_l^t · e_l^{t,θ}
+            # Online: apply immediately. Deferred: accumulate into grad_buf.
+            # -------------------------------------------------------------------
+            for l, layer in enumerate(self.linear_layers):
+                g = torch.einsum("bi,bij->ij", L[l], elig_trace[l]) / B
+
+                g_r = None
+                rec_w = None
+                if self.is_recurrent_layer[l] and elig_trace_rec[l] is not None:
+                    g_r = torch.einsum("bi,bij->ij", L[l], elig_trace_rec[l]) / B
+                    rec_w = self.rec_weights[l]
+
+                if self.deferred:
+                    # Accumulate; grad_clip is applied at the end on the full gradient.
+                    grad_buf[l].add_(g)
+                    if g_r is not None:
+                        grad_buf_rec[l].add_(g_r)
+                else:
+                    # Online: clip and apply now.
+                    if self.grad_clip > 0.0:
+                        g = g.clamp(-self.grad_clip, self.grad_clip)
+                        if g_r is not None:
+                            g_r = g_r.clamp(-self.grad_clip, self.grad_clip)
+                    self._apply_update(layer, g, rec_w, g_r)
+
+            # Optimizer step after each timestep (online mode only)
+            if not self.deferred and self.use_optimizer and self.optimizer is not None:
+                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
 
             # Advance stored state to t for use at t+1
             for l in range(self.num_layers):
@@ -353,30 +386,30 @@ class OSTLTrainer(BaseTrainer):
                 prev_spk[l] = spk_rec[l]
                 prev_h_prime[l] = h_prime[l]
 
-        # Flush any remaining gradients (non-divisible update_every windows)
-        if pending > 0:
+        # -----------------------------------------------------------------------
+        # Deferred mode: apply the full accumulated gradient after the sequence.
+        # -----------------------------------------------------------------------
+        if self.deferred:
             for l, layer in enumerate(self.linear_layers):
-                g = grad_buf[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf[l]
-                if self.use_optimizer and self.optimizer is not None:
-                    layer.weight.grad = g.clone() if layer.weight.grad is None else layer.weight.grad.add_(g)
-                else:
-                    layer.weight.add_(-self.lr * g)
+                g = grad_buf[l]
+                if self.grad_clip > 0.0:
+                    g = g.clamp(-self.grad_clip, self.grad_clip)
 
-                if layer.bias is not None and grad_buf_bias[l] is not None:
-                    g_b = grad_buf_bias[l].clamp(-self.grad_clip, self.grad_clip) if self.grad_clip > 0.0 else grad_buf_bias[l]
-                    if self.use_optimizer and self.optimizer is not None:
-                        layer.bias.grad = g_b.clone() if layer.bias.grad is None else layer.bias.grad.add_(g_b)
-                    else:
-                        layer.bias.add_(-self.lr * g_b)
+                g_r = None
+                rec_w = None
+                if self.is_recurrent_layer[l] and grad_buf_rec[l] is not None:
+                    g_r = grad_buf_rec[l]
+                    if self.grad_clip > 0.0:
+                        g_r = g_r.clamp(-self.grad_clip, self.grad_clip)
+                    rec_w = self.rec_weights[l]
+
+                self._apply_update(layer, g, rec_w, g_r)
 
             if self.use_optimizer and self.optimizer is not None:
                 self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
 
-        if loss_count == 0:
-            raise RuntimeError("OSTLTrainer: no supervised step was processed.")
-
-        loss = total_loss / float(loss_count)
+        loss = total_loss / float(T)
         pred = output_sum.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
@@ -387,6 +420,9 @@ class OSTLTrainer(BaseTrainer):
 
     def to(self, device):
         super().to(device)
+        # Move fixed random feedback matrices to the target device.
+        if self.feedback_weights is not None:
+            self.feedback_weights = [w.to(device) for w in self.feedback_weights]
         if self.use_optimizer and self._external_optimizer is None:
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         return self

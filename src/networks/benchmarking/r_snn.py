@@ -30,6 +30,7 @@ class RSNN(BaseSNN):
         beta: float = 0.9,
         threshold: float = 1.0,
         spike_grad=None,
+        reset_mechanism: str = "subtract",
     ) -> None:
         super().__init__()
 
@@ -59,12 +60,13 @@ class RSNN(BaseSNN):
             self.recurrent_layers.append(
                 snn.RLeaky(
                     beta=float(beta),
-                    linear_features=int(layer_features),  # needed by RLeaky to size recurrent weights
+                    linear_features=int(layer_features),
                     threshold=float(threshold),
                     spike_grad=spike_grad,
                     all_to_all=True,
                     learn_recurrent=True,
                     reset_delay=False,
+                    reset_mechanism=reset_mechanism,
                     init_hidden=True,
                     output=True,
                 )
@@ -77,6 +79,7 @@ class RSNN(BaseSNN):
             beta=float(beta),
             threshold=float(threshold),
             spike_grad=spike_grad,
+            reset_mechanism=reset_mechanism,
             init_hidden=True,
             output=True,
         )
