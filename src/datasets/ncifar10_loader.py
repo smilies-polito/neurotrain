@@ -6,10 +6,10 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 
+from tonic.datasets import CIFAR10DVS
 from tonic import transforms as tonic_transforms, DiskCachedDataset
-from tonic.datasets import SHD
 
 from datasets.rate import time_major_collate
 
@@ -24,22 +24,21 @@ def _seed_worker(worker_id: int) -> None:
     torch.initial_seed() is set by the DataLoader using its generator (if provided).
     We derive a 32-bit seed from it and seed numpy + random so everything is aligned.
     """
-    del worker_id
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
 
-# SHD (Spiking Heidelberg Digits) is a neuromorphic audio dataset for spoken-digit
-# recognition. It contains utterances of digits 0–9 converted into spike trains,
-# typically using 700 input channels that represent a cochlea-like auditory encoding.
-# Each sample is an event sequence rather than a dense image: spikes are defined by
-# neuron/channel indices and spike times over a fixed recording window (commonly 1 s).
-# In practice, the data is often represented either as:
-#   - sparse events: (times, units), one variable-length spike list per sample, or
-#   - dense tensors after binning: [T, 700], where T is the number of time bins.
-# Labels are single digit classes in the range 0–9.
-def SHDLoader(
+# N-CIFAR10 (a.k.a. CIFAR10-DVS) is the neuromorphic counterpart of CIFAR-10.
+# It was recorded by pointing a DVS camera at CIFAR-10 images displayed on a monitor
+# while the camera was moved in smooth circles, generating ~9000 samples across 10
+# classes. Each sample is a raw event stream; we bin it into T frames of shape
+# [2, 128, 128] (ON/OFF polarities at the original 128×128 DVS resolution).
+#
+# NOTE: tonic does NOT split the dataset into train/test sets — all 9000 samples are
+# in a single pool. We apply a deterministic 90/10 split (stratification not guaranteed).
+# Override `train_fraction` if you prefer a different split ratio.
+def NCifar10Loader(
     batch_size: int,
     T: int,
     pin_memory: bool = False,
@@ -48,49 +47,58 @@ def SHDLoader(
     data_root: str | Path | None = None,
     download: bool = True,  # kept for API consistency; tonic downloads as needed
     use_cache: bool = True,  # cache preprocessed frames alongside the dataset
+    train_fraction: float = 0.9,  # fraction of data used for training
 ):
     """
-    Build train/test DataLoaders for SHD with fixed-bin spike-count frames.
+    Build train/test DataLoaders for N-CIFAR10 (CIFAR10-DVS) with binned event frames.
 
     Output batch shapes:
-      - data:   [T, B, 700]
+      - data:   [T, B, 2, 128, 128]   (2 channels = ON/OFF polarities)
       - target: [B]
 
     Notes:
-      - SHD samples are native spike trains over 700 cochlear channels.
-      - Like the other event loaders in this repo, we discretize them into a fixed
-        number of bins `T` so batches stay rectangular.
-      - We clamp counts to [0, 1] to keep inputs binary per bin/channel.
+      - tonic's CIFAR10DVS has no official train/test split; we do a random 90/10 split.
+        Pass `seed` to make this split reproducible.
+      - We do NOT flatten here; models that need flattened inputs should do it in forward().
+      - We clamp counts to [0, 1] (binary activity per polarity). Remove clamp_ to use counts.
       - Caching is enabled by default; set use_cache=False to disable.
     """
-    del download
-
     if data_root is None:
-        data_root = os.environ.get("SHD_ROOT", str(DEFAULT_DATA_ROOT))
+        data_root = os.environ.get("NCIFAR10_ROOT", str(DEFAULT_DATA_ROOT))
 
-    sensor_size = SHD.sensor_size  # (700, 1, 1)
+    sensor_size = CIFAR10DVS.sensor_size  # (128, 128, 2)
 
     def to_torch_and_postprocess(frames: np.ndarray) -> torch.Tensor:
-        # ToFrame -> [T, 1, 700, 1] for SHD. Squeeze singleton dims to [T, 700].
+        # ToFrame -> [T, 2, 128, 128] (counts per polarity)
         x = torch.from_numpy(frames).to(torch.float32)
-        x = x.clamp_(0, 1).squeeze(1).squeeze(-1)
+        x = x.clamp_(0, 1)  # binarize activity per polarity (optional)
         return x
 
     transform = tonic_transforms.Compose(
         [
+            tonic_transforms.Denoise(filter_time=10000),
             tonic_transforms.ToFrame(sensor_size=sensor_size, n_time_bins=T),
             to_torch_and_postprocess,
         ]
     )
 
-    train_ds = SHD(save_to=str(Path(data_root) / "SHD"), train=True, transform=transform)
-    test_ds = SHD(save_to=str(Path(data_root) / "SHD"), train=False, transform=transform)
+    full_ds = CIFAR10DVS(
+        save_to=str(Path(data_root) / "NCIFAR10"),
+        transform=transform,
+    )
 
-    # Wrap with disk cache to avoid re-processing raw events on every access.
+    # Wrap with disk cache before splitting so both subsets share the same cache.
     if use_cache:
-        cache_path = Path(data_root) / "SHD" / "cache"
-        train_ds = DiskCachedDataset(train_ds, cache_path=str(cache_path / f"train_T{T}"))
-        test_ds = DiskCachedDataset(test_ds, cache_path=str(cache_path / f"test_T{T}"))
+        cache_path = Path(data_root) / "NCIFAR10" / "cache" / f"T{T}"
+        full_ds = DiskCachedDataset(full_ds, cache_path=str(cache_path))
+
+    # Deterministic train/test split.
+    n_total = len(full_ds)
+    n_train = int(n_total * train_fraction)
+    n_test = n_total - n_train
+
+    split_generator = torch.Generator().manual_seed(seed if seed is not None else 0)
+    train_ds, test_ds = random_split(full_ds, [n_train, n_test], generator=split_generator)
 
     g = None
     worker_init_fn = None
@@ -102,6 +110,7 @@ def SHDLoader(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
+        drop_last=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
         generator=g,
@@ -116,7 +125,6 @@ def SHDLoader(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
         collate_fn=time_major_collate,

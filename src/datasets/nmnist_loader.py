@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from tonic import transforms as tonic_transforms
+from tonic import transforms as tonic_transforms, DiskCachedDataset
 from tonic.datasets import NMNIST
 
 from datasets.rate import time_major_collate
@@ -35,19 +35,20 @@ def NMNISTLoader(
     num_workers: int = 4,
     data_root: str | Path | None = None,
     download: bool = True,  # kept for API consistency; tonic downloads as needed
+    use_cache: bool = True,  # cache preprocessed frames alongside the dataset
 ):
     """
     Build train/test DataLoaders for N-MNIST with binned event frames (2 polarities).
 
     Output batch shapes:
-      - data:   [B, T, 2, 34, 34]   (2 channels = ON/OFF polarities)
+      - data:   [T, B, 2, 34, 34]   (2 channels = ON/OFF polarities)
       - target: [B]
 
     Notes:
       - We do NOT flatten here; models that need flattened inputs should do it in forward().
       - Setting `seed` makes train shuffle and worker RNG deterministic.
-      - If you want binary frames (0/1), we clamp counts to [0,1].
-        Remove clamp_ if you prefer event counts per bin.
+      - We clamp counts to [0, 1] (binary activity per polarity). Remove clamp_ if you want counts.
+      - Caching is enabled by default; set use_cache=False to disable.
     """
     if data_root is None:
         data_root = os.environ.get("NMNIST_ROOT", str(DEFAULT_DATA_ROOT))
@@ -69,7 +70,13 @@ def NMNISTLoader(
     )
 
     train_ds = NMNIST(save_to=str(Path(data_root) / "NMNIST"), train=True, transform=transform)
-    test_ds  = NMNIST(save_to=str(Path(data_root) / "NMNIST"), train=False, transform=transform)
+    test_ds = NMNIST(save_to=str(Path(data_root) / "NMNIST"), train=False, transform=transform)
+
+    # Wrap with disk cache to avoid re-processing raw events on every access.
+    if use_cache:
+        cache_path = Path(data_root) / "NMNIST" / "cache"
+        train_ds = DiskCachedDataset(train_ds, cache_path=str(cache_path / f"train_T{T}"))
+        test_ds = DiskCachedDataset(test_ds, cache_path=str(cache_path / f"test_T{T}"))
 
     g = None
     worker_init_fn = None
@@ -81,6 +88,7 @@ def NMNISTLoader(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
+        drop_last=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
         generator=g,
@@ -95,7 +103,6 @@ def NMNISTLoader(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
         collate_fn=time_major_collate,
