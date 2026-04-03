@@ -14,7 +14,7 @@ class OSTLTrainer(BaseTrainer):
     """
     Online Spatio-Temporal Learning (OSTL) — Bohnstingl et al. (2023).
 
-    Two optional variations (both off by default):
+    Optional variations (all off by default):
 
     deferred (bool):
         False → online updates: weights are updated at every timestep (Algorithm 1, online branch).
@@ -28,6 +28,14 @@ class OSTLTrainer(BaseTrainer):
         True  → OSTL rnd: fixed random matrices B^{l+1} replace W^{l+1} in the learning signal
                 (Eq. 26–27). Removes the weight-transport requirement at the cost of approximate
                 gradients. Random matrices are drawn once at init and held fixed.
+
+    ostl_complete (bool):
+        False → OSTL w/o H (Section III.C): the state Jacobian ds^t/ds^{t-1} is diagonal (Eq. 17),
+                ignoring the recurrent weight H. O(Kn²) complexity.
+        True  → OSTL complete (Section III.B): the state Jacobian includes the full H·diag(h'^{t-1})
+                term (Eq. 24), making it a full [n,n] matrix. Eligibility tensors become rank-3.
+                Gradient-equivalent to BPTT for single-layer recurrent SNNs. O(Kn⁴) complexity.
+                Only affects recurrent (RLeaky) layers; FF layers are unchanged.
     """
 
     def __init__(
@@ -40,6 +48,7 @@ class OSTLTrainer(BaseTrainer):
         optimizer: Optional[torch.optim.Optimizer] = None,
         deferred: bool = False,
         feedback_alignment: bool = False,
+        ostl_complete: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -52,6 +61,7 @@ class OSTLTrainer(BaseTrainer):
         self.use_optimizer = bool(use_optimizer)
         self.deferred = bool(deferred)
         self.feedback_alignment = bool(feedback_alignment)
+        self.ostl_complete = bool(ostl_complete)
 
         if self.lr <= 0.0:
             raise ValueError("OSTLTrainer requires lr > 0.")
@@ -63,7 +73,7 @@ class OSTLTrainer(BaseTrainer):
         if len(self.linear_layers) == 0:
             raise TypeError("OSTLTrainer requires at least one Linear+Leaky layer pair.")
 
-        # Detect recurrent layers (OSTL w/o H approximation, Section III.C)
+        # Detect recurrent layers (Section III.B / III.C)
         self.is_recurrent_layer = [isinstance(lif, snn.RLeaky) for lif in self.lif_layers]
         self.has_recurrent = any(self.is_recurrent_layer)
         self.rec_weights = [
@@ -186,6 +196,29 @@ class OSTLTrainer(BaseTrainer):
     # Training
     # -------------------------------------------------------------------------
 
+    def _compute_jacobian(
+        self, l: int, prev_mem: torch.Tensor, prev_spk: torch.Tensor, prev_h_prime: torch.Tensor
+    ) -> torch.Tensor:
+        """Compute the state Jacobian ds^t/ds^{t-1} for layer l.
+
+        Returns:
+            [B, n] diagonal vector   — FF layers or OSTL w/o H (Eq. 17)
+            [B, n, n] full matrix    — OSTL complete on recurrent layers (Eq. 24)
+        """
+        # Diagonal part (always computed): d · ((1 - y^{t-1}) - s^{t-1} · h'^{t-1})
+        diag_part = self.layer_decay[l] * (
+            (1.0 - prev_spk) - prev_mem * prev_h_prime
+        )
+
+        if self.ostl_complete and self.is_recurrent_layer[l]:
+            # Eq. (24): ds^t/ds^{t-1} = H · diag(h'^{t-1}) + d · diag((1-y^{t-1}) - s^{t-1}·h'^{t-1})
+            # g' = 1 (identity activation), so diag(g') = I and drops out.
+            H = self.rec_weights[l]                                  # [n, n]
+            H_term = H.unsqueeze(0) * prev_h_prime.unsqueeze(1)      # [B, n, n]
+            return H_term + torch.diag_embed(diag_part)              # [B, n, n]
+        else:
+            return diag_part  # [B, n]
+
     def _apply_update(self, layer: nn.Linear, g: torch.Tensor,
                       rec_w: Optional[torch.Tensor], g_r: Optional[torch.Tensor]) -> None:
         """Apply (or accumulate for the optimizer) one gradient step for a layer."""
@@ -237,22 +270,36 @@ class OSTLTrainer(BaseTrainer):
         # -----------------------------------------------------------------------
         # OSTL running state (reset at the start of each sample/sequence)
         # -----------------------------------------------------------------------
-        # elig_vec[l]: [B, out_l, in_l] — eligibility tensor ε^{t,W_l} (Eq. 15)
-        elig_vec = [
-            layer.weight.new_zeros(B, layer.out_features, layer.in_features)
-            for layer in self.linear_layers
-        ]
-        # Values from t-1 used in Eq. (17): stored membrane, spike, surrogate derivative
+        # elig_vec[l]: eligibility tensor ε^{t,W_l}
+        #   FF / w/o H:  [B, out_l, in_l]          (Eq. 15, rank-2)
+        #   complete:     [B, out_l, out_l, in_l]   (Eq. 15 with full Jacobian, rank-3)
+        elig_vec = []
+        for l, layer in enumerate(self.linear_layers):
+            if self.ostl_complete and self.is_recurrent_layer[l]:
+                elig_vec.append(layer.weight.new_zeros(
+                    B, layer.out_features, layer.out_features, layer.in_features))
+            else:
+                elig_vec.append(layer.weight.new_zeros(
+                    B, layer.out_features, layer.in_features))
+
+        # Values from t-1 used in Eq. (17)/(24): stored membrane, spike, surrogate derivative
         prev_mem = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_spk = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
         prev_h_prime = [layer.weight.new_zeros(B, layer.out_features) for layer in self.linear_layers]
 
-        # Recurrent eligibility state (OSTL w/o H, Section III.C)
-        elig_vec_rec = [
-            layer.weight.new_zeros(B, layer.out_features, layer.out_features)
-            if self.is_recurrent_layer[l] else None
-            for l, layer in enumerate(self.linear_layers)
-        ]
+        # Recurrent eligibility state
+        #   w/o H:    [B, out_l, out_l]          (Section III.C, rank-2)
+        #   complete: [B, out_l, out_l, out_l]   (Section III.B / Eq. 22, rank-3)
+        elig_vec_rec = []
+        for l, layer in enumerate(self.linear_layers):
+            if not self.is_recurrent_layer[l]:
+                elig_vec_rec.append(None)
+            elif self.ostl_complete:
+                elig_vec_rec.append(layer.weight.new_zeros(
+                    B, layer.out_features, layer.out_features, layer.out_features))
+            else:
+                elig_vec_rec.append(layer.weight.new_zeros(
+                    B, layer.out_features, layer.out_features))
 
         # Deferred mode: accumulate gradients here, apply once after the sequence.
         if self.deferred:
@@ -298,30 +345,59 @@ class OSTLTrainer(BaseTrainer):
                     pre_t = pre_t.flatten(1)
                 pre_t = pre_t.to(dtype=layer.weight.dtype)
 
-                # Surrogate derivative h'_l^t = 1 - tanh^2(V^t - θ)  (Section V)
+                # Surrogate derivative h'_l^t = 1 - tanh²(mem_t - θ).
+                # mem_t is s^t: the fully updated membrane (decay + input) before any future reset.
+                # The zero-reset of s^{t-1} is applied at the start of the s^t computation inside
+                # snntorch, so mem_t already reflects correct dynamics with no pre/post-reset ambiguity.
                 h_prime_t = 1.0 - torch.tanh(mem_t - self.layer_threshold[l]).pow(2)
                 h_prime.append(h_prime_t)
 
-                # Eq. (17): diagonal state Jacobian  ∂s^t/∂s^{t-1} = d·((1-spk^{t-1}) - s^{t-1}·h'^{t-1})
-                # g' = 1 (identity activation).
-                state_deriv = self.layer_decay[l] * (
-                    (1.0 - prev_spk[l]) - prev_mem[l] * prev_h_prime[l]
-                )
+                # State Jacobian ds^t/ds^{t-1}:
+                #   Eq. (17) diagonal [B, n]    — FF / w/o H
+                #   Eq. (24) full [B, n, n]     — OSTL complete on recurrent layers
+                jac = self._compute_jacobian(l, prev_mem[l], prev_spk[l], prev_h_prime[l])
 
-                # Eq. (15): ε^{t,W} = (∂s^t/∂s^{t-1}) · ε^{t-1,W} + x^t
-                elig_vec[l] = state_deriv.unsqueeze(-1) * elig_vec[l] + pre_t.unsqueeze(1)
+                if self.ostl_complete and self.is_recurrent_layer[l]:
+                    # --- OSTL complete: rank-3 eligibility tensors (Section III.B) ---
+                    n_out = layer.out_features
 
-                # Eq. (13): e^{t,W} = h'^t · ε^{t,W}
-                elig_trace.append(h_prime_t.unsqueeze(-1) * elig_vec[l])
+                    # Eq. (15) with full Jacobian:
+                    # ε^{t,W} = jac @ ε^{t-1,W} + injection_W
+                    # jac: [B,n,n], elig_vec[l]: [B,n,n,in]
+                    # injection_W[b,o,p,q] = δ_{o,p} · x^t_q
+                    eye_n = torch.eye(n_out, device=device, dtype=dtype)
+                    injection_W = eye_n.unsqueeze(0).unsqueeze(-1) * pre_t.unsqueeze(1).unsqueeze(1)
+                    elig_vec[l] = torch.einsum('bij,bjkl->bikl', jac, elig_vec[l]) + injection_W
 
-                # Recurrent weight eligibility (OSTL w/o H, Eq. 22)
-                # Injection term: y_l^{t-1} = prev_spk[l]
-                if self.is_recurrent_layer[l]:
+                    # Eq. (13): e^{t,W} = diag(h'^t) · ε^{t,W}  → h' broadcasts over last two dims
+                    elig_trace.append(h_prime_t.unsqueeze(-1).unsqueeze(-1) * elig_vec[l])
+
+                    # Eq. (22): ε^{t,H} = jac @ ε^{t-1,H} + injection_H
+                    # injection_H[b,o,p,q] = δ_{o,p} · y^{t-1}_q
                     rec_pre = prev_spk[l].to(dtype=layer.weight.dtype)
-                    elig_vec_rec[l] = state_deriv.unsqueeze(-1) * elig_vec_rec[l] + rec_pre.unsqueeze(1)
-                    elig_trace_rec.append(h_prime_t.unsqueeze(-1) * elig_vec_rec[l])
+                    injection_H = eye_n.unsqueeze(0).unsqueeze(-1) * rec_pre.unsqueeze(1).unsqueeze(1)
+                    elig_vec_rec[l] = torch.einsum('bij,bjkl->bikl', jac, elig_vec_rec[l]) + injection_H
+
+                    # Eq. (21): e^{t,H} = diag(h'^t) · ε^{t,H}
+                    elig_trace_rec.append(h_prime_t.unsqueeze(-1).unsqueeze(-1) * elig_vec_rec[l])
                 else:
-                    elig_trace_rec.append(None)
+                    # --- OSTL w/o H (default): rank-2 eligibility tensors ---
+                    # jac is [B, n] diagonal vector
+
+                    # Eq. (15): ε^{t,W} = jac · ε^{t-1,W} + x^t
+                    elig_vec[l] = jac.unsqueeze(-1) * elig_vec[l] + pre_t.unsqueeze(1)
+
+                    # Eq. (13): e^{t,W} = h'^t · ε^{t,W}
+                    elig_trace.append(h_prime_t.unsqueeze(-1) * elig_vec[l])
+
+                    # Recurrent weight eligibility (OSTL w/o H, Eq. 22)
+                    # Injection term: y_l^{t-1} = prev_spk[l]
+                    if self.is_recurrent_layer[l]:
+                        rec_pre = prev_spk[l].to(dtype=layer.weight.dtype)
+                        elig_vec_rec[l] = jac.unsqueeze(-1) * elig_vec_rec[l] + rec_pre.unsqueeze(1)
+                        elig_trace_rec.append(h_prime_t.unsqueeze(-1) * elig_vec_rec[l])
+                    else:
+                        elig_trace_rec.append(None)
 
             # -------------------------------------------------------------------
             # Learning signals L_l^t propagated from output to input.
@@ -350,12 +426,19 @@ class OSTLTrainer(BaseTrainer):
             # Online: apply immediately. Deferred: accumulate into grad_buf.
             # -------------------------------------------------------------------
             for l, layer in enumerate(self.linear_layers):
-                g = torch.einsum("bi,bij->ij", L[l], elig_trace[l]) / B
+                if self.ostl_complete and self.is_recurrent_layer[l]:
+                    # Rank-3 traces: L:[B,n], e:[B,n,n,in] → contract over b,i → [n,in]
+                    g = torch.einsum("bi,bijk->jk", L[l], elig_trace[l]) / B
+                else:
+                    g = torch.einsum("bi,bij->ij", L[l], elig_trace[l]) / B
 
                 g_r = None
                 rec_w = None
                 if self.is_recurrent_layer[l] and elig_trace_rec[l] is not None:
-                    g_r = torch.einsum("bi,bij->ij", L[l], elig_trace_rec[l]) / B
+                    if self.ostl_complete:
+                        g_r = torch.einsum("bi,bijk->jk", L[l], elig_trace_rec[l]) / B
+                    else:
+                        g_r = torch.einsum("bi,bij->ij", L[l], elig_trace_rec[l]) / B
                     rec_w = self.rec_weights[l]
 
                 if self.deferred:

@@ -39,6 +39,7 @@ HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 # OSTL-specific defaults
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
 DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
+OSTL_COMPLETE = False   # If True, use OSTL complete (rank-3 eligibility tensors).
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
@@ -79,8 +80,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=LR)
     p.add_argument("--beta", type=float, default=BETA)
     p.add_argument("--threshold", type=float, default=THRESHOLD)
-    p.add_argument("--grad-clip", type=float, default=GRAD_CLIP)
-    p.add_argument("--deferred", action="store_true", default=DEFERRED)
     p.add_argument("--seed", type=int, default=SEED)
     p.add_argument("--device", choices=("auto", "cpu", "cuda"), default=DEVICE)
     p.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS)
@@ -118,8 +117,6 @@ def run_training(
     threshold: float,
     epochs: int,
     lr: float,
-    grad_clip: float,
-    deferred: bool,
     seed: int,
     device: torch.device,
     hpc_prints: bool = False,
@@ -135,13 +132,14 @@ def run_training(
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = RSNN(in_shape=(2, 34, 34), num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
+    network = RSNN(in_shape=(2, 34, 34), hidden_sizes=[HIDDEN_SIZE], num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
     trainer = OSTLTrainer(
         network=network,
         lr=lr,
         batch_size=batch_size,
-        grad_clip=grad_clip,
-        deferred=deferred,
+        grad_clip=GRAD_CLIP,
+        deferred=DEFERRED,
+        ostl_complete=OSTL_COMPLETE,
     ).to(device)
 
     best_test_acc = 0.0
@@ -312,8 +310,6 @@ def main() -> None:
         lr=args.lr,
         beta=args.beta,
         threshold=args.threshold,
-        grad_clip=args.grad_clip,
-        deferred=args.deferred,
         seed=args.seed,
         device=device,
         hpc_prints=args.hpc_prints,
