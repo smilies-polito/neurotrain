@@ -106,7 +106,7 @@ local_config.yaml
 .env.local
 .cursor
 .zed
-CLAUDE.md
+.claude
 
 # HPC outputs
 hpc/slurm_outputs/*

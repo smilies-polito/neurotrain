@@ -152,6 +152,13 @@ def run_training(
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
+        
+        # RECURRENT WEIGHTS TRACKING
+        init_rec_wgts = {
+            name: p.clone().detach()
+            for name, p in network.recurrent_layers.named_parameters()
+            if p.requires_grad
+        }
 
         # [TRAIN]
         trainer.network.train()
@@ -219,6 +226,11 @@ def run_training(
             f"test_acc={test_acc:.4f} "
             f"epoch_time_s={epoch_time_s:.2f}"
         )
+        # RECURRENT WEIGHTS TRACKING
+        for name, p in network.recurrent_layers.named_parameters():
+            if p.requires_grad:
+                delta = torch.norm(p.detach() - init_rec_wgts[name]).item()
+                print(f"  -> \u0394w ({name}): {delta:.6f}")
 
         if trial is not None:
             try:

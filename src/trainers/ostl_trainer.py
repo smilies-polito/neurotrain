@@ -38,7 +38,6 @@ class OSTLTrainer(BaseTrainer):
         grad_clip: float = 0.0,
         use_optimizer: bool = False,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        output_mode: str = "spike",
         deferred: bool = False,
         feedback_alignment: bool = False,
         **kwargs,
@@ -51,7 +50,6 @@ class OSTLTrainer(BaseTrainer):
         self.batch_size = int(batch_size)
         self.grad_clip = float(grad_clip)
         self.use_optimizer = bool(use_optimizer)
-        self.output_mode = str(output_mode).lower()
         self.deferred = bool(deferred)
         self.feedback_alignment = bool(feedback_alignment)
 
@@ -59,8 +57,6 @@ class OSTLTrainer(BaseTrainer):
             raise ValueError("OSTLTrainer requires lr > 0.")
         if self.grad_clip < 0.0:
             raise ValueError("OSTLTrainer requires grad_clip >= 0.")
-        if self.output_mode not in ("spike", "mem"):
-            raise ValueError(f"Invalid output_mode '{output_mode}'. Use 'spike' or 'mem'.")
 
         # Resolve the layers
         self.linear_layers, self.lif_layers = self._resolve_layers(self.network)
@@ -282,7 +278,7 @@ class OSTLTrainer(BaseTrainer):
                     f"of length {self.num_layers}."
                 )
 
-            output_t = spk_rec[-1] if self.output_mode == "spike" else mem_rec[-1]
+            output_t = spk_rec[-1]
             output_sum.add_(output_t)
             total_loss = total_loss + F.mse_loss(output_t, target_oh)
 
