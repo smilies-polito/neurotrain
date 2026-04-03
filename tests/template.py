@@ -180,6 +180,7 @@ def run_training(
         total_correct = 0
         total_samples = 0
         n_batches = len(train_loader)
+        batch_start = time.perf_counter()
 
         for i, (data, target) in enumerate(train_loader, 1):
             data = data.to(device, non_blocking=non_blocking)
@@ -192,8 +193,10 @@ def run_training(
             total_samples += batch_size_cur
 
             if not hpc_prints:
+                batch_time = time.perf_counter() - batch_start
                 f = int(28 * i / n_batches)
-                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%", end="", flush=True)
+                print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / n_batches):3d}%  {batch_time:.3f}s/batch", end="", flush=True)
+                batch_start = time.perf_counter()
 
         if not hpc_prints:
             print("\r" + " " * 40 + "\r", end="", flush=True)
@@ -206,7 +209,7 @@ def run_training(
         total = 0
         correct = 0
         with torch.no_grad():
-            for data, target in test_loader:
+            for i, (data, target) in enumerate(test_loader, 1):
                 data = data.to(device, non_blocking=non_blocking)
                 target = target.to(device, non_blocking=non_blocking)
                 network.reset()
@@ -218,6 +221,13 @@ def run_training(
                 preds = spike_sum.argmax(dim=1)
                 correct += preds.eq(target).sum().item()
                 total += target.size(0)
+
+                if not hpc_prints:
+                    f = int(28 * i / len(test_loader))
+                    print(f"\r  [{'#' * f}{'-' * (28 - f)}] {int(100 * i / len(test_loader)):3d}% eval", end="", flush=True)
+
+        if not hpc_prints:
+            print("\r" + " " * 45 + "\r", end="", flush=True)
 
         test_acc = correct / total if total > 0 else 0.0
 
