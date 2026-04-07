@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Single-file minimal integration test:
-MNIST loader + FCSNN + OSTLTrainer (+ optional Optuna).
+Experiment aimed at emulation of paper provided results:
+
 """
 
 from __future__ import annotations
@@ -28,18 +28,20 @@ NUM_WORKERS = 8         # DataLoader worker processes for MNIST loading.
 # Network defaults
 BETA = 0.9              # LIF membrane decay.
 THRESHOLD = 1.0         # LIF spiking threshold.
+HIDDEN_SIZES = [256, 256]  # Hidden layer sizes for the FCSNN (list of integers).
+
 
 # General training defaults
-EPOCHS = 10             # Training epochs for the default non-Optuna run.
-LR = 1e-2               # OSTL learning rate (higher than BPTT; no adaptive optimizer by default).
+EPOCHS = 100            # Training epochs for the default non-Optuna run.
+LR = 0.2                # OSTL learning rate (higher than BPTT; no adaptive optimizer by default).
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
 # OSTL-specific defaults
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
-DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
-OSTL_COMPLETE = True    # If True, use OSTL complete (rank-3 eligibility tensors).
+DEFERRED = False        # If True, apply weight updates only at the end of the sequence.
+OSTL_COMPLETE = False   # If True, use OSTL complete (rank-3 eligibility tensors).
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
@@ -132,7 +134,14 @@ def run_training(
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = FCSNN(in_shape=(1, 28, 28), num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
+    network = FCSNN(
+        in_shape=(1, 28, 28),
+        num_classes=10,
+        beta=beta,
+        threshold=threshold,
+        reset_mechanism="zero",
+        hidden_sizes=HIDDEN_SIZES,
+    ).to(device)
     trainer = OSTLTrainer(
         network=network,
         lr=lr,

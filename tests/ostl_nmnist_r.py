@@ -22,24 +22,24 @@ import torch
 # -----------------------------------------------------------------------------
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
-TIMESTEPS = 10          # Number of temporal bins produced by the N-MNIST loader.
-NUM_WORKERS = 8        # DataLoader worker processes for N-MNIST loading.
+TIMESTEPS = 25          # Number of temporal bins produced by the N-MNIST loader.
+NUM_WORKERS = 24        # DataLoader worker processes for N-MNIST loading.
 
 # Network defaults
 BETA = 0.9              # LIF membrane decay.
 THRESHOLD = 1.0         # LIF spiking threshold.
-HIDDEN_SIZE = 128       # Number of hidden neurons in the RSNN.
+HIDDEN_SIZE = 256       # Number of hidden neurons in the RSNN.
 
 # General training defaults
 EPOCHS = 200             # Training epochs for the default non-Optuna run.
-LR = 1e-3               # OSTL learning rate.
+LR = 0.2                # OSTL learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
 # OSTL-specific defaults
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
-DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
+DEFERRED = False         # If True, apply weight updates only at the end of the sequence.
 OSTL_COMPLETE = False   # If True, use OSTL complete (rank-3 eligibility tensors).
 
 # Optuna defaults
