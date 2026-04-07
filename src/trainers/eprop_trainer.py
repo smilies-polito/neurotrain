@@ -190,7 +190,7 @@ class EpropTrainer(BaseTrainer):
                 "EpropTrainer requires a recurrent RSNN; "
                 f"got network={type(network).__name__}."
             )
-        if hasattr(network, "hidden_dims") and len(network.hidden_dims) != 1:
+        if hasattr(network, "hidden_size") and len(network.hidden_size) != 1:
             raise ValueError(
                 "EpropTrainer currently supports only single-layer recurrent RSNNs."
             )
@@ -429,7 +429,7 @@ class EpropTrainer(BaseTrainer):
         device = data.device
 
         n_in = data.shape[2]
-        n_rec = self.network.recurrent_dim
+        n_rec = self.network.hidden_size[0]
         n_out = self.network.n_classes
 
         # Reset all neuron states: v_j^0 = 0, z_j^0 = 0

@@ -75,7 +75,7 @@ class RSNN(BaseSNN):
             prev_features = int(layer_features)
 
         # Output head
-        self.fc_out = nn.Linear(prev_features, self._n_classes, bias=False)
+        self.fc_out = nn.Linear(prev_features, self.n_classes, bias=False)
         self.lif_out = snn.Leaky(
             beta=float(beta),
             threshold=float(threshold),
@@ -117,37 +117,15 @@ class RSNN(BaseSNN):
         mem_rec.append(mem_out)
 
         return spk_rec, mem_rec
-
+    
     @property
     def n_classes(self) -> int:
         return self._n_classes
 
-    @property
-    def input_dim(self) -> int:
-        """Flattened input dimension for the RSNN."""
-        return self.input_size
-
-    @property
-    def hidden_dims(self) -> list[int]:
-        """List of recurrent hidden layer sizes."""
-        return self.hidden_size
-
-    @property
-    def recurrent_dim(self) -> int:
-        """Recurrent hidden dimension for single-layer RSNNs."""
-        if len(self.hidden_size) != 1:
-            raise AttributeError(
-                "RSNN.recurrent_dim is only defined for single hidden-layer RSNNs."
-            )
-        return self.hidden_size[0]
-
-    @property
-    def output_dim(self) -> int:
-        """Number of output classes."""
-        return self._n_classes
 
 
     def reset(self, device: torch.device | None = None) -> None:
         for rlif in self.recurrent_layers:
             rlif.reset_mem()
         self.lif_out.reset_mem()
+
