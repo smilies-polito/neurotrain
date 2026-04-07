@@ -68,10 +68,18 @@ class ConvSNN(BaseSNN):
         # Minimal registry list (synapses + neurons)
         self.layers = nn.ModuleList([self.conv1, self.lif1, self.conv2, self.lif2, self.fc, self.lif_out])
 
-        print(
-            f"[Net][ConvSNN] in_shape={self.in_shape} "
-            f"conv=[12(k5),32(k5)] pools=MP2 head=[{flat_features}->{self._n_classes}]"
-        )
+        # Print initialization summary
+        print(f"\n{'='*60}")
+        print(f"  ConvSNN")
+        print(f"{'='*60}")
+        print(f"  {'Input Shape':<25} {self.in_shape}")
+        print(f"  {'Num Classes':<25} {self._n_classes}")
+        print(f"  {'Conv Filters':<25} [12(k5), 32(k5)]")
+        print(f"  {'Pools':<25} MaxPool(2,2)")
+        print(f"  {'Flat Features':<25} {flat_features}")
+        print(f"  {'Beta':<25} {beta}")
+        print(f"  {'Threshold':<25} {threshold}")
+        print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
         if x.dim() != 4 or tuple(x.shape[1:]) != self.in_shape:

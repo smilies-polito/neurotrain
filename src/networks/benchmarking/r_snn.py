@@ -92,7 +92,17 @@ class RSNN(BaseSNN):
         self.layers.append(self.fc_out)
         self.layers.append(self.lif_out)
 
-        print(f"[Net][RSNN] in_shape={self.in_shape} recurrent_hidden={hidden_sizes} out={self._n_classes}")
+        # Print initialization summary
+        print(f"\n{'='*60}")
+        print(f"  RSNN")
+        print(f"{'='*60}")
+        print(f"  {'Input Shape':<25} {self.in_shape}")
+        print(f"  {'Recurrent Hidden':<25} {hidden_sizes}")
+        print(f"  {'Num Classes':<25} {self._n_classes}")
+        print(f"  {'Beta':<25} {beta}")
+        print(f"  {'Threshold':<25} {threshold}")
+        print(f"  {'Reset Mechanism':<25} {reset_mechanism}")
+        print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
         if x.dim() != len(self.in_shape) + 1 or tuple(x.shape[1:]) != self.in_shape:

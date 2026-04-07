@@ -184,29 +184,33 @@ class DVSGEST_VGG9(nn.Module):
 
         self._initialize_weights()
 
+        # Print initialization summary
+        pool_strs = []
+        for _, pool_sz, pool_type in self.VGG9_CFG:
+            if pool_type == 'none':
+                pool_strs.append('—')
+            elif pool_type == 'max':
+                pool_strs.append(f'max{pool_sz}')
+            elif pool_type == 'aavg':
+                pool_strs.append(f'aavg{pool_sz}x{pool_sz}')
+        channels = [ch for ch, _, _ in self.VGG9_CFG]
+        n_params = sum(p.numel() for p in self.parameters())
+        sg_name = type(spike_grad).__name__ if spike_grad is not None else 'ATanSurrogate'
+        sg_scale = getattr(spike_grad, 'scale', 1.0)
+
         if verbose:
-            pool_strs = []
-            for _, pool_sz, pool_type in self.VGG9_CFG:
-                if pool_type == 'none':
-                    pool_strs.append('—')
-                elif pool_type == 'max':
-                    pool_strs.append(f'max{pool_sz}')
-                elif pool_type == 'aavg':
-                    pool_strs.append(f'aavg{pool_sz}x{pool_sz}')
-            channels = [ch for ch, _, _ in self.VGG9_CFG]
-            n_params = sum(p.numel() for p in self.parameters())
-            sg_name = type(spike_grad).__name__ if spike_grad is not None else 'ATanSurrogate'
-            sg_scale = getattr(spike_grad, 'scale', 1.0)
-            print(
-                f"\n[VERBOSE] PRINTING NETWORK INFORMATIONS\n"
-                f"DVSGEST_VGG9  in_ch={in_channels}  classes={num_classes}"
-                f"  beta={beta}  threshold={threshold}"
-                f"  params={n_params:,}\n"
-                f"  channels : {channels}\n"
-                f"  pool     : {pool_strs}\n"
-                f"  head     : LeakyIntegrator({channels[-1]*2*2}->{num_classes}, leak=1.0)  WS(scale=1.8)\n"
-                f"  surrogate: {sg_name}(scale={sg_scale})  reset=subtract\n"
-            )
+            print(f"\n{'='*60}")
+            print(f"  DVSGEST_VGG9")
+            print(f"{'='*60}")
+            print(f"  {'Input Channels':<25} {in_channels}")
+            print(f"  {'Num Classes':<25} {num_classes}")
+            print(f"  {'Channels':<25} {channels}")
+            print(f"  {'Pooling':<25} {pool_strs}")
+            print(f"  {'Beta':<25} {beta}")
+            print(f"  {'Threshold':<25} {threshold}")
+            print(f"  {'Surrogate':<25} {sg_name}(scale={sg_scale})")
+            print(f"  {'Parameters':<25} {n_params:,}")
+            print(f"{'='*60}\n")
 
     def forward(self, x):
         spk_list = []

@@ -478,17 +478,20 @@ class OTTT_VGG9(nn.Module):
         """Print a one-time config summary with per-layer weight statistics."""
         import math
         conv_type = type(getattr(self, 'conv1')).__name__
-        print(f"[OTTT_VGG9] conv={conv_type}  beta={getattr(self, 'lif1').beta.item():.3f}"
-              f"  threshold={getattr(self, 'lif1').threshold.item():.3f}"
-              f"  ws_scale={self.ws_scale}  ws={'yes' if conv_type == 'ScaledWSConv2d' else 'no'}")
-        for i in range(1, self._num_blocks + 1):
-            w = getattr(self, f'conv{i}').weight
-            fan_in = w.shape[1] * w.shape[2] * w.shape[3]
-            fan_out = w.shape[0] * w.shape[2] * w.shape[3]
-            expected_output_std = math.sqrt(w.var().item() * fan_in * 0.136)  # 0.136 = typical DVS activity
-            print(f"  conv{i}: shape={tuple(w.shape)}  w_std={w.std().item():.4f}"
-                  f"  fan_in={fan_in}  fan_out={fan_out}"
-                  f"  expected_L{i}_output_std(dvs)≈{expected_output_std:.4f}")
+        n_params = sum(p.numel() for p in self.parameters())
+
+        print(f"\n{'='*60}")
+        print(f"  OTTT_VGG9")
+        print(f"{'='*60}")
+        print(f"  {'Conv Type':<25} {conv_type}")
+        print(f"  {'Channels':<25} {self._channels}")
+        print(f"  {'Pooling After':<25} {sorted(self._pool_after)}")
+        print(f"  {'Beta':<25} {getattr(self, 'lif1').beta.item():.3f}")
+        print(f"  {'Threshold':<25} {getattr(self, 'lif1').threshold.item():.3f}")
+        print(f"  {'WS Scale':<25} {self.ws_scale}")
+        print(f"  {'Weight Standardization':<25} {'yes' if conv_type == 'ScaledWSConv2d' else 'no'}")
+        print(f"  {'Parameters':<25} {n_params:,}")
+        print(f"{'='*60}\n")
 
     def _initialize_weights(self):
         """
