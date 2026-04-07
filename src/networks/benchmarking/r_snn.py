@@ -21,6 +21,7 @@ class RSNN(BaseSNN):
     Returns: (spk_rec, mem_rec) with one entry per spiking layer (hidden rec layers + output).
     """
     net_tags = frozenset({"fully_connected", "recurrent", "baseline"})
+    is_recurrent = True
 
     def __init__(
         self,
@@ -50,6 +51,8 @@ class RSNN(BaseSNN):
             spike_grad = surrogate.fast_sigmoid(slope=25)
 
         input_size = int(prod(self.in_shape))
+        self.input_size = input_size
+        self.hidden_size = list(hidden_sizes)
 
         self.input_layers = nn.ModuleList()
         self.recurrent_layers = nn.ModuleList()
@@ -74,7 +77,7 @@ class RSNN(BaseSNN):
             prev_features = int(layer_features)
 
         # Output head
-        self.fc_out = nn.Linear(prev_features, self._n_classes, bias=False)
+        self.fc_out = nn.Linear(prev_features, self.n_classes, bias=False)
         self.lif_out = snn.Leaky(
             beta=float(beta),
             threshold=float(threshold),
@@ -127,12 +130,15 @@ class RSNN(BaseSNN):
         mem_rec.append(mem_out)
 
         return spk_rec, mem_rec
-
+    
     @property
     def n_classes(self) -> int:
         return self._n_classes
 
-    def reset(self) -> None:
+
+
+    def reset(self, device: torch.device | None = None) -> None:
         for rlif in self.recurrent_layers:
             rlif.reset_mem()
         self.lif_out.reset_mem()
+
