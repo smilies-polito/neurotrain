@@ -60,7 +60,7 @@ class OSTTPTrainer(BaseTrainer):
         feedback_scale: float = 1.0,
         feedback_seed: int = 42,
         grad_clip: float = 0.0,
-        use_optimizer: bool = False,
+        use_optimizer: bool = True,
         optimizer: Optional[torch.optim.Optimizer] = None,
         **kwargs,
     ):
@@ -130,6 +130,21 @@ class OSTTPTrainer(BaseTrainer):
             self.optimizer = optimizer or torch.optim.Adam(network.parameters(), lr=self.lr)
         else:
             self.optimizer = None
+
+        # Print initialization summary
+        optimizer_name = type(self.optimizer).__name__ if self.optimizer else "None"
+        print(f"\n{'='*60}")
+        print(f"  OSTTPTrainer")
+        print(f"{'='*60}")
+        print(f"  {'Learning Rate':<25} {self.lr}")
+        print(f"  {'Batch Size':<25} {self.batch_size}")
+        print(f"  {'Pseudo Derivative':<25} {self.pseudo}")
+        print(f"  {'Output Loss':<25} {self.output_loss}")
+        print(f"  {'Feedback Scale':<25} {self.feedback_scale}")
+        print(f"  {'Use Optimizer':<25} {self.use_optimizer}")
+        print(f"  {'Optimizer':<25} {optimizer_name}")
+        print(f"  {'Gradient Clipping':<25} {self.grad_clip}")
+        print(f"{'='*60}\n")
 
     # -------------------------------------------------------------------------
     # Static helpers
@@ -374,8 +389,10 @@ class OSTTPTrainer(BaseTrainer):
 
             # Output readout: membrane of the last spiking layer
             y_out = mem_rec[-1]
-            output_sum.add_(y_out)
-            total_loss = total_loss + self._loss_value(y_out, y_star)
+            spk_out = spk_rec[-1]  # Extract the actual spikes
+            
+            output_sum.add_(spk_out)  # Accumulate spikes for the prediction metric
+            total_loss = total_loss + self._loss_value(y_out, y_star) # Keep using membrane for the loss
 
             # -------------------------------------------------------------------
             # Per-layer eligibility update (Eqs. 8–9)

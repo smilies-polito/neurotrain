@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Single-file minimal integration test:
-N-MNIST loader + RSNN + OSTLTrainer (+ optional Optuna).
+MNIST loader + FCSNN + OSTTPTrainer (+ optional Optuna).
 """
 
 from __future__ import annotations
@@ -22,30 +22,27 @@ import torch
 # -----------------------------------------------------------------------------
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
-TIMESTEPS = 10          # Number of temporal bins produced by the N-MNIST loader.
-NUM_WORKERS = 8        # DataLoader worker processes for N-MNIST loading.
+TIMESTEPS = 25          # Number of rate-coding steps produced by the MNIST loader.
+NUM_WORKERS = 8         # DataLoader worker processes for MNIST loading.
 
 # Network defaults
 BETA = 0.9              # LIF membrane decay.
 THRESHOLD = 1.0         # LIF spiking threshold.
-HIDDEN_SIZE = 128       # Number of hidden neurons in the RSNN.
 
 # General training defaults
-EPOCHS = 200             # Training epochs for the default non-Optuna run.
-LR = 1e-3               # OSTL learning rate.
+EPOCHS = 10             # Training epochs for the default non-Optuna run.
+LR = 1e-2               # OSTTP learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
-# OSTL-specific defaults
+# OSTTP-specific defaults
 GRAD_CLIP = 0.0         # Gradient clipping (0 = disabled).
-DEFERRED = True         # If True, apply weight updates only at the end of the sequence.
-OSTL_COMPLETE = False   # If True, use OSTL complete (rank-3 eligibility tensors).
 
 # Optuna defaults
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
 OPTUNA_EPOCHS = 1       # Epochs executed inside each Optuna trial.
-STUDY_NAME = "ostl_nmnist_r"  # Optuna study name.
+STUDY_NAME = "osttp_mnist_fc"  # Optuna study name.
 OPTUNA_STORAGE = ""     # Optuna storage URL; empty string keeps the study in memory.
 
 # -----------------------------------------------------------------------------
@@ -65,16 +62,16 @@ if "networks" not in sys.modules:
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = networks_pkg
 
-from datasets.nmnist_loader import NMNISTLoader
-from networks.benchmarking.r_snn import RSNN
-from trainers.ostl_trainer import OSTLTrainer
+from datasets.mnist_loader import MNISTLoader
+from networks.benchmarking.fc_snn import FCSNN
+from trainers.osttp_trainer import OSTTPTrainer
 
 
 # -----------------------------------------------------------------------------
 # Tiny utilities (inlined to keep this file self-contained)
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Minimal N-MNIST+RSNN OSTL test.")
+    p = argparse.ArgumentParser(description="Minimal MNIST+FCSNN OSTTP test.")
     p.add_argument("--epochs", type=int, default=EPOCHS)
     p.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     p.add_argument("--timesteps", type=int, default=TIMESTEPS)
@@ -126,22 +123,19 @@ def run_training(
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    train_loader, test_loader = NMNISTLoader(
+    train_loader, test_loader = MNISTLoader(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = RSNN(in_shape=(2, 34, 34), hidden_sizes=[HIDDEN_SIZE], num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
-    trainer = OSTLTrainer(
+    network = FCSNN(in_shape=(1, 28, 28), num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
+    trainer = OSTTPTrainer(
         network=network,
         lr=lr,
         batch_size=batch_size,
         grad_clip=GRAD_CLIP,
-        deferred=DEFERRED,
-        ostl_complete=OSTL_COMPLETE,
-        use_optimizer=False,
     ).to(device)
 
     best_test_acc = 0.0
@@ -152,13 +146,6 @@ def run_training(
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
-        
-        # RECURRENT WEIGHTS TRACKING
-        init_rec_wgts = {
-            name: p.clone().detach()
-            for name, p in network.recurrent_layers.named_parameters()
-            if p.requires_grad
-        }
 
         # [TRAIN]
         trainer.network.train()
@@ -226,11 +213,6 @@ def run_training(
             f"test_acc={test_acc:.4f} "
             f"epoch_time_s={epoch_time_s:.2f}"
         )
-        # RECURRENT WEIGHTS TRACKING
-        for name, p in network.recurrent_layers.named_parameters():
-            if p.requires_grad:
-                delta = torch.norm(p.detach() - init_rec_wgts[name]).item()
-                print(f"  -> \u0394w ({name}): {delta:.6f}")
 
         if trial is not None:
             try:
@@ -277,8 +259,6 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
             lr=lr,
             beta=beta,
             threshold=threshold,
-            grad_clip=args.grad_clip,
-            deferred=args.deferred,
             seed=args.seed + trial.number,
             device=device,
             hpc_prints=args.hpc_prints,

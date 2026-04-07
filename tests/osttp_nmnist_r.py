@@ -31,7 +31,7 @@ THRESHOLD = 1.0         # LIF spiking threshold.
 HIDDEN_SIZE = 128       # Number of hidden neurons in the RSNN.
 
 # General training defaults
-EPOCHS = 200             # Training epochs for the default non-Optuna run.
+EPOCHS = 200            # Training epochs for the default non-Optuna run.
 LR = 1e-3               # OSTL learning rate.
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
@@ -67,7 +67,7 @@ if "networks" not in sys.modules:
 
 from datasets.nmnist_loader import NMNISTLoader
 from networks.benchmarking.r_snn import RSNN
-from trainers.ostl_trainer import OSTLTrainer
+from trainers.osttp_trainer import OSTTPTrainer
 
 
 # -----------------------------------------------------------------------------
@@ -134,14 +134,11 @@ def run_training(
         num_workers=NUM_WORKERS,
     )
     network = RSNN(in_shape=(2, 34, 34), hidden_sizes=[HIDDEN_SIZE], num_classes=10, beta=beta, threshold=threshold, reset_mechanism="zero").to(device)
-    trainer = OSTLTrainer(
+    trainer = OSTTPTrainer(
         network=network,
         lr=lr,
         batch_size=batch_size,
         grad_clip=GRAD_CLIP,
-        deferred=DEFERRED,
-        ostl_complete=OSTL_COMPLETE,
-        use_optimizer=False,
     ).to(device)
 
     best_test_acc = 0.0

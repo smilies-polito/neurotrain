@@ -118,6 +118,21 @@ class OSTLTrainer(BaseTrainer):
         else:
             self.optimizer = None
 
+        # Print initialization summary
+        optimizer_name = type(self.optimizer).__name__ if self.optimizer else "None"
+        print(f"\n{'='*60}")
+        print(f"  OSTLTrainer")
+        print(f"{'='*60}")
+        print(f"  {'Learning Rate':<25} {self.lr}")
+        print(f"  {'Batch Size':<25} {self.batch_size}")
+        print(f"  {'Gradient Clipping':<25} {self.grad_clip}")
+        print(f"  {'Use Optimizer':<25} {self.use_optimizer}")
+        print(f"  {'Optimizer':<25} {optimizer_name}")
+        print(f"  {'Deferred':<25} {self.deferred}")
+        print(f"  {'Feedback Alignment':<25} {self.feedback_alignment}")
+        print(f"  {'OSTL Complete':<25} {self.ostl_complete}")
+        print(f"{'='*60}\n")
+
     # -------------------------------------------------------------------------
     # Static helpers
     # -------------------------------------------------------------------------
