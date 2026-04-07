@@ -76,14 +76,16 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 
 | Test | Network | Dataset | Result (Epoch: train/test) | Commit |
 |------|---------|---------|--------|--------|
-| `bptt_mnist_fc.py` | FC-SNN | MNIST |  |  |
-| `bptt_fmnist_conv.py` | Conv-SNN | Fashion-MNIST |  |  |
-| `bptt_cifar10_vgg9.py` | VGG9 | CIFAR-10 | 10: 0.8685/0.7212 | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
-| `bptt_dvsgest_vgg9.py` | VGG9 | DVSGesture | 10: 0.9179/0.8864 <br> 40: 1.0/0.9356 | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
-| `bptt_dvsgest_r.py` | R-SNN | DVSGesture |  |  |
-| `bptt_svhn_vgg9.py` | VGG9 | SVHN |  |  |
-| `bptt_svhn_r.py` | R-SNN | SVHN |  |  |
-| `bptt_nmnist_r.py` | R-SNN | NMNIST |  |  |
+| `bptt_mnist_fc.py`      | FC-SNN    | MNIST         |  |  |
+| `bptt_fmnist_conv.py`   | Conv-SNN  | Fashion-MNIST |  |  |
+| `bptt_cifar10_vgg9.py`  | VGG9      | CIFAR-10      | 10: 0.8685/0.7212                   | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
+| `bptt_dvsgest_vgg9.py`  | VGG9      | DVSGesture    | 10: 0.9179/0.8864 40: 1.0/0.9356    | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
+| `bptt_dvsgest_r.py`     | R-SNN     | DVSGesture    | |  |
+| `bptt_svhn_vgg9.py`     | VGG9      | SVHN          |  |  |
+| `bptt_svhn_r.py`        | R-SNN     | SVHN          |  |  |
+| `bptt_nmnist_r.py`      | R-SNN     | NMNIST        |  |  |
+| `ostl_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.9960/0.9753 25: 0.9984/0.9765 | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
+| `ostl_nmnist_r.py`      | R-SNN     | NMNIST        | 10: 0.9137/0.8961                   | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
 
 **Dataset Smoke Tests** — Minimal tests verifying dataloaders work correctly:
 
