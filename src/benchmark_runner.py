@@ -37,7 +37,7 @@ from trainers.decolle_trainer import DECOLLETrainer
 from trainers.drtp_trainer import DRTPTrainer
 from trainers.ell_trainer import ELLTrainer
 from trainers.eprop_trainer import EpropTrainer
-from trainers.esd_rtrl_trainer import ESDRTRLTrainer
+from src.trainers.es_d_rtrl_trainer import ESDRTRLTrainer
 from trainers.etlp_trainer import ETLPTrainer
 from trainers.fell_trainer import FELLTrainer
 from trainers.ostl_trainer import OSTLTrainer
