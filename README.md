@@ -31,7 +31,7 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | NMNIST | Event-based | 🟢 |  |
 | DVSGesture | Event-based | 🟢 | Works with caching |
 | SHD | Event-based | 🟡 | Noticed a few issues that seems related to dataset itself, need to check them |
-| DVS-CIFAR10 | Event-based | 🔴 | Not implemented yet |
+| DVS-CIFAR10 | Event-based | 🟢 |  |
 
 
 ### Networks
@@ -44,7 +44,6 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | VGG9 (CIFAR-10) | Convolutional | `benchmarking/vgg9_cifar10.py` | 🟢 | VGG-inspired, tuned for CIFAR-10 |
 | VGG9 (DVSGesture) | Convolutional | `benchmarking/vgg9_dvsgest.py` | 🟢 | VGG-inspired, for event-based gestures |
 | VGG9 (SVHN) | Convolutional | `benchmarking/vgg9_svhn.py` | 🟢 | VGG-inspired, for street view data |
-| Paper-specific | Various | `reproducibility/` | 🟢 | Algorithm-specific implementations (DECOLLE, DRTP, E-prop, etc.) |
 
 ### Trainers
 
@@ -55,11 +54,10 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | OTTT | `ottt_trainer.py` | 🔴 | Convolutional |
 | OSTTP | `osttp_trainer.py` | 🟢 | Recurrent (SHD-tuned) |
 | OTPE | `otpe_trainer.py` | 🔴 | All |
-| DRTP | `drtp_trainer.py` | 🔴 | All |
 | DECOLLE | `decolle_trainer.py` | 🔴 | All |
 | E-prop | `eprop_trainer.py` | 🟢 | Recurrent |
 | ESD-RTRL | `esd_rtrl_trainer.py` | 🟢 | Recurrent |
-| ETLP | `etlp_trainer.py` | 🔴 | All |
+| ETLP | `etlp_trainer.py` | 🟢 | All |
 | STOP | `stop_trainer.py` | 🔴 | All |
 | TP | `tp_trainer.py` | 🔴 | All |
 | ELL | `ell_trainer.py` | 🔴 | Feedforward |
