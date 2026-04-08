@@ -23,9 +23,9 @@ import torch
 # Hardcoded Defaults (from STSF paper: He et al. 2025)
 # -----------------------------------------------------------------------------
 # Dataset defaults
-BATCH_SIZE = 100        # Batch size for consistency with MNIST experiments
+BATCH_SIZE = 256        # Batch size for consistency with MNIST experiments
 TIMESTEPS = 30          # Paper: time-window length T=30 for N-MNIST
-NUM_WORKERS = 32        # DataLoader worker processes for N-MNIST loading (event data is slower to load).
+NUM_WORKERS = 8        # DataLoader worker processes for N-MNIST loading (event data is slower to load).
 DATA_ROOT = ""          # Optional N-MNIST root override; empty string uses the loader default.
 
 # Network defaults
@@ -36,7 +36,7 @@ HIDDEN_SIZE = 500       # Paper: hidden layer size 500 for N-MNIST
 # Trainer defaults
 # General training defaults
 EPOCHS = 10             # Training epochs for the default non-Optuna run.
-LR = 5e-5               # Paper: η = 5×10^-5 for N-MNIST (lower LR for noisy DVS data)
+LR = 5e-3               # Paper: η = 5×10^-5 for N-MNIST (lower LR for noisy DVS data)
 SEED = 42               # Global random seed for Python, NumPy, and PyTorch.
 DEVICE = "auto"         # Runtime device selection: auto, cpu, or cuda.
 HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.

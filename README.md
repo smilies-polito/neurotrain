@@ -92,6 +92,7 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | Test | Network | Dataset | Result (Epoch: train/test) | Commit |
 |------|---------|---------|--------|--------|
 | `stsf_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.9327/0.9340 50: 0.9657/0.9627 | f788ee28695039e4c337d989876577f201136b9d |
+| `stsf_nmnist_fc.py`      | FC-SNN    | NMNIST         | 10: 0.9128/0.9076 |  |
 
 
 **Dataset Smoke Tests** — Minimal tests verifying dataloaders work correctly:
