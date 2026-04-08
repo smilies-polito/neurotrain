@@ -1,218 +1,198 @@
+from __future__ import annotations
+
 import math
-import numpy as np
+from typing import Optional
+
 import torch
 import torch.nn as nn
 
 from trainers.base_trainer import BaseTrainer
-from networks.fc_network import FCNetwork
-from utils.quantizer import fixed_point, check_range, clamp_int_
-from utils.parameters import FP_DEC, BW  # adjust if constants live elsewhere
 
-def SFMatrix(size: tuple, lr: float, batch_size: int, loss_value: float, quant: bool = False, optimizer: bool = False, layer_idx: int = None) -> torch.Tensor:
+
+def SFMatrix(n_classes: int, n_hidden: int) -> torch.Tensor:
+    """Sparse feedback matrix [n_classes, n_hidden] per STSF paper (He et al. 2025).
+
+    Connectivity: each output class (row) is connected to a random subset of hidden
+    neurons, with the guarantee that every hidden neuron (column) has at least one
+    non-zero entry — no hidden neuron is left without a feedback signal.
+
+    Init bound follows the reference implementation:
+        bd = sqrt(n_hidden / n_classes)
+    Values are drawn uniformly from [-bd, +bd] at non-zero positions.
     """
-    Generates a sparse, fixed-connectivity feedback matrix for DFA.
-    Returns a tensor of shape [n_classes, n_hidden].
-    Ensures each row and column of the output has at least one non-zero element.
-    Each element is multiplied:
-    - multiplied by the learning rate (lr)
-    - multiplied by the batch size (batch_size)
-    - multiplied by the loss value (loss_value) (for 10 classes, this is 0.2), we can do that since with the actual loss we can have 0.2, -0.2 or 0 with an easy multiplication.
-    """
-    n_classes, n_hidden = size
-    
-    # Permutate randomly the hidden neurons indexes and take the first n_classes, those are the feedback connections
-    perm = torch.randperm(math.ceil((n_classes // n_hidden) + 1) * n_hidden)
-    index = (perm % n_hidden)[:n_classes]
-    # Create a the matrix with random values for those connections
-    mask = torch.zeros(size, device=perm.device).scatter_(1, index.unsqueeze(1), 1)
-    # Ensure each column of mask has at least one non-zero element
-    zero_cols = (mask.sum(dim=0) == 0).nonzero().squeeze(1)
-    if len(zero_cols) > 0:
+    # One random hidden-neuron index per class → [n_classes] indices into [0, n_hidden)
+    perm = torch.randperm(math.ceil(n_classes / n_hidden + 1) * n_hidden)
+    index = (perm % n_hidden)[:n_classes]                   # [n_classes]
+    mat = torch.zeros(n_classes, n_hidden)
+    mat.scatter_(1, index.unsqueeze(1), 1)                  # [n_classes, n_hidden] connectivity mask
+
+    # Guarantee every column (hidden neuron) has at least one non-zero entry.
+    zero_cols = (mat.sum(dim=0) == 0).nonzero(as_tuple=False).squeeze(1)
+    if zero_cols.numel() > 0:
         for col in zero_cols:
-            row = torch.randint(0, n_classes, (1,), device=perm.device)
-            mask[row, col] = 1
-    
-    bd = np.sqrt(n_hidden / n_classes)
-    mat = (2 * bd * torch.rand(size, device=perm.device) - bd) * mask
+            row = torch.randint(0, n_classes, (1,))
+            mat[row, col] = 1.0
 
-    # Weight each element by the learning rate and batch size
-    # @TODO: implement batch_size also quantized (now only supports batch_size=1), probably I can just divide and everything would be alright
-    if not optimizer:
-        mat *= (lr)*loss_value
-        if quant:
-            mat = fixed_point(mat, FP_DEC, BW)
-            # In columns with all zeros add a 1 in a random row
-            zero_cols = (mat.sum(dim=0) == 0).nonzero().squeeze(1)
-            if len(zero_cols) > 0:
-                for col in zero_cols:
-                    row = torch.randint(0, n_classes, (1,), device=perm.device)
-                    mat[row, col] = 1
-        else:
-            mat /= batch_size  # Normalize by batch size if not quantized
+    bd = math.sqrt(n_hidden / n_classes)                    # reference bound
+    mat = (2 * bd * torch.rand_like(mat) - bd) * mat        # uniform in [-bd, +bd]
+    return mat                                               # [n_classes, n_hidden]
 
-    # Print and save feedback matrix if run_dir is provided
-    nonzero_indices = torch.nonzero(mat)
-    list_val = []
-    for idx in nonzero_indices:
-        value = (mat[idx[0], idx[1]], idx[0], idx[1])
-        list_val.append(value)
-    list_val.sort(key=lambda x: x[2])  # Sort only by column index
-    
-    return mat
-    
+
 class STSFTrainer(BaseTrainer):
-    """
-    Trainer for Spiking Time Sparse Feedback (STSF). ASSUMES AT LEAST 1 HIDDEN LAYER.
-    - network     : FCNetwork
-    - lr          : learning rate
-    - beta        : LIF beta for local classifiers
-    - batch_size  : batch size for the training
-    - quant       : use quantization
-    - use_optimizer: whether to use optimizer
-    - optimizer   : optimizer instance
-    - update_last : update only on last timestep
-    - update_every: update every N timesteps
+    """Spiking Time Sparse Feedback (STSF) — He et al. 2025.
+
+    Hybrid local/global learning rule for feedforward SNNs:
+      - Local term  (Vanilla STDP): e_stdp(t) = s_post(t) * s_pre(t)
+      - Global term (sparse DFA):   δ_h(t)    = G_h @ (s_o(t) - s_d(t))
+      - Weight update:              Δw(t)      = δ(t) * e_stdp(t)
+
+    The output layer uses the "s_o = 1" trick from the paper: the post-synaptic
+    output spike is assumed to be 1 so only the pre-synaptic (hidden) spike
+    gates the update. This allows weight changes even when the output is silent.
+
+    Requires at least one hidden layer.
     """
 
     def __init__(
         self,
-        network: FCNetwork,
+        network: nn.Module,
         lr: float,
         batch_size: int,
-        quant: bool = False,
         use_optimizer: bool = False,
-        optimizer=None,
-        update_last: bool = False,
-        update_every: int = 1,
-        seq_batch_size: int = 1,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        **kwargs,          # absorbs unknown args from the benchmark runner (e.g. quant=False)
     ):
         super().__init__()
-        self.network        = network
-        self.lr             = lr
-        self.loss_fn        = nn.MSELoss()
-        self.loss_value     = 2/network.n_classes
-        self.quant          = quant
-        self.use_optimizer  = use_optimizer
-        self.optimizer      = optimizer
-        self.update_last    = update_last
-        self.update_every   = update_every
-        self.seq_batch_size = seq_batch_size
-        
-        self.stop_requested = False
-        
-        # For seq_batch_size > 1, accumulate weight updates before applying
-        if self.seq_batch_size > 1:
-            # Accumulators for hidden and output layer weight updates
-            self.dw_hidden_accum = torch.zeros_like(self.network.layers[-4].weight.data)
-            self.dw_out_accum = torch.zeros_like(self.network.layers[-2].weight.data)
-            self.accum_count = 0
 
-        # fixed feedback matrices
-        n_out            = network.n_classes
-        hidden_sizes     = network.hidden_size
-        self.feedback    = nn.ParameterList([
-            nn.Parameter(SFMatrix((n_out, h), lr, batch_size, self.loss_value, self.quant, self.use_optimizer, i), requires_grad=False)
-            for i, h in enumerate(hidden_sizes)
+        self.network       = network
+        self.lr            = float(lr)
+        self.batch_size    = int(batch_size)
+        self.loss_fn       = nn.MSELoss()
+        self.use_optimizer = bool(use_optimizer)
+
+        # Combined scaling factor applied to every weight update (manual SGD path):
+        #   lr * (2 / n_classes) / batch_size
+        # The (2 / n_classes) term matches the MSE gradient scale so that the
+        # hidden and output layers share the same effective step size.
+        self.scale = self.lr * (2.0 / network.n_classes) / self.batch_size
+
+        # Fixed sparse feedback matrices, one per hidden layer.
+        # Shape: [n_classes, n_hidden_l] — not updated during training.
+        n_out         = network.n_classes
+        hidden_sizes  = network.hidden_size
+        self.feedback = nn.ParameterList([
+            nn.Parameter(SFMatrix(n_out, h), requires_grad=False)
+            for h in hidden_sizes
         ])
 
+        # Optimizer setup — mirrors OSTLTrainer convention:
+        #   use_optimizer=False  → manual weight.data updates (original paper SGD)
+        #   use_optimizer=True, optimizer=None  → Adam created internally
+        #   use_optimizer=True, optimizer=<obj> → caller-supplied optimizer used as-is
+        self._external_optimizer = optimizer
+        if self.use_optimizer:
+            self.optimizer = optimizer or torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        else:
+            self.optimizer = None
+
+        # Print initialization summary
+        optimizer_name = type(self.optimizer).__name__ if self.optimizer else "None"
+        print(f"\n{'='*60}")
+        print(f"  STSFTrainer")
+        print(f"{'='*60}")
+        print(f"  {'Learning Rate':<25} {self.lr}")
+        print(f"  {'Batch Size':<25} {self.batch_size}")
+        print(f"  {'Use Optimizer':<25} {self.use_optimizer}")
+        print(f"  {'Optimizer':<25} {optimizer_name}")
+        print(f"{'='*60}\n")
+
+    @torch.no_grad()
     def train_sample(self, data: torch.Tensor, target: torch.Tensor):
-        """
-        data:   [num_timesteps, batch_size, in_features]
-        target: [batch_size] labels
+        """Train on one mini-batch.
+
+        Args:
+            data:   [T, B, ...] time-major tensor (time, batch, then any shape)
+            target: [B]         (class labels)
+
         Returns:
-            loss: torch scalar
-            pred: [batch_size,1] predictions
+            loss: scalar MSE loss over accumulated output spikes
+            pred: [B, 1] predicted class indices
         """
-        # PREPARATION
-        num_timesteps, batch_size, _    = data.shape
-        num_classes                     = self.network.n_classes
-        device                          = data.device
-        # one-hot encode target
-        tgt = torch.zeros(batch_size, num_classes, device=device)
+        T, B = data.shape[:2]
+        n_classes  = self.network.n_classes
+        device     = data.device
+
+        # One-hot target: [B, n_classes]
+        tgt = torch.zeros(B, n_classes, device=device)
         tgt.scatter_(1, target.unsqueeze(1), 1.0)
-        # RESET
+
         self.network.reset()
-        if self.use_optimizer: self.optimizer.zero_grad()
+        if self.use_optimizer:
+            self.optimizer.zero_grad()
+            # Initialise gradient accumulators to zero (shape not yet known).
+            for p in self.network.parameters():
+                p.grad = None
+
         spk_sum = None
 
-        for t in range(num_timesteps):
-            
-            # Always do forward pass regardless of update conditions
-            spks, mems = self.network(data[t])                                  # Forward pass through the network to obtain the output spikes and membrane potentials
-            spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]       # Accumulate the output spikes over time
-            error   = spks[-1] - tgt    # TODO: here is where I could try to change the error function used
-            
-            # UPDATE LAST
-            if self.update_last and (t<num_timesteps-1):
-                # If not the last time step, continue to the next time step
-                continue
-            # UPDATE EVERY N
-            if not ((t+1) % self.update_every == 0):
-                 continue  # Skip weight updates if not at the specified update interval
-            # QUANTIZATION CHECK
-            if self.quant:
-                check_range(self.network.layers[-2].weight.data, BW, "hidden layer weights")
-                check_range(self.network.layers[-4].weight.data, BW, "output layer weights")
+        for t in range(T):
+            spks, _ = self.network(data[t])         # spks: list of [B, hidden_l] per layer
+            spk_sum = spks[-1] if spk_sum is None else spk_sum + spks[-1]
 
-            for current_layer in range(len(self.network.hidden_size)):
-                # DATA EXTRACTION ----------------------------------------------------------------------------------
-                x_pre     = data[t] if current_layer == 0 else spks[current_layer - 1]  # Input spikes for the hidden layer
-                x_post    = spks[current_layer]                                         # Output spikes for the current hidden layer
+            # Output error: δ_o = s_o - s_d   [B, n_classes]
+            error = spks[-1] - tgt
 
-                # HIDDEN LAYER WEIGTH UPDATE -----------------------------------------------------------------------
-                loss_hidden = error @ self.feedback[current_layer]  # Direct‐feedback into hidden: [batch_size, hidden_k]
-                dw = (loss_hidden * x_post).T @ x_pre               # Combine loss with local plasticity
+            # --- Hidden layer updates ---
+            for l in range(len(self.network.hidden_size)):
+                x_pre  = data[t].reshape(data[t].shape[0], -1) if l == 0 else spks[l - 1]  # pre-synaptic spikes (flattened for l=0)
+                x_post = spks[l]                               # post-synaptic spikes
+
+                # Sparse feedback projects output error into hidden space (DFA)
+                delta_h = error @ self.feedback[l]             # [B, hidden_l]
+
+                # Local × global: Δw = (δ_h ⊙ s_post)ᵀ @ s_pre   [hidden_l, in_l]
+                dw = (delta_h * x_post).T @ x_pre
+
                 if self.use_optimizer:
-                    self.network.layers[current_layer*2].weight.grad = dw  # Weight update for optimizer
-                elif self.seq_batch_size > 1:
-                    # Accumulate weight updates
-                    self.dw_hidden_accum += dw
-                    if t==num_timesteps-1:  # If last time step, apply accumulated updates
-                        self.accum_count += 1
-                        # Apply accumulated updates when we reach seq_batch_size
-                        if self.accum_count >= self.seq_batch_size:
-                            self.network.layers[current_layer*2].weight.data -= self.dw_hidden_accum
-                            self.dw_hidden_accum.zero_()
-                            self.accum_count = 0
+                    # Accumulate mean gradient over B*T; overwriting was the bug.
+                    w = self.network.layers[l * 2].weight
+                    if w.grad is None:
+                        w.grad = dw / (B * T)
+                    else:
+                        w.grad += dw / (B * T)
                 else:
-                    self.network.layers[current_layer*2].weight.data += dw   # Weight update
-                if self.quant: clamp_int_(self.network.layers[current_layer*2].weight.data, BW)  # Saturate the weights to ensure no overflow
+                    self.network.layers[l * 2].weight.data -= self.scale * dw
 
-            # OUTPUT LAYER WEIGHT UPDATE -----------------------------------------------------------------------
+            # --- Output layer update (s_o = 1 trick) ---
+            # Pre-synaptic = last hidden spikes; post-synaptic treated as 1.
+            # Δw_out = δ_o.T @ s_h_last   [n_classes, hidden_last]
+            dw_out = error.T @ spks[len(self.network.hidden_size) - 1]
+
             if self.use_optimizer:
-                 loss_grad = error * self.loss_value
-            else:
-                if self.quant:
-                    loss_grad = fixed_point(error * self.loss_value * self.lr, FP_DEC, BW)
+                w_out = self.network.layers[-2].weight
+                if w_out.grad is None:
+                    w_out.grad = dw_out / (B * T)
                 else:
-                    loss_grad = error * self.loss_value * self.lr / batch_size  # Compute output gradient
-            dw_out = loss_grad.T @ x_post  # Combine loss with local plasticity
-            if self.use_optimizer:
-                self.network.layers[-2].weight.grad = dw_out
-            elif self.seq_batch_size > 1:
-                # Accumulate output layer weight updates
-                self.dw_out_accum += dw_out
-                # Apply accumulated updates when we reach seq_batch_size (only need to check once)
-                if t==num_timesteps-1:  # If last time step, apply accumulated updates
-                    if self.accum_count == 0:  # We already reset in the hidden layer code
-                        self.network.layers[-2].weight.data -= self.dw_out_accum
-                        self.dw_out_accum.zero_()
+                    w_out.grad += dw_out / (B * T)
             else:
-                self.network.layers[-2].weight.data -= dw_out  # Weight update
-            # QUANTIZATION CLAMP
-            if self.quant:
-                clamp_int_(self.network.layers[-2].weight.data, BW)  # Saturate weights to prevent overflow
+                self.network.layers[-2].weight.data -= self.scale * dw_out
 
-        # OPTIMIZER STEP
-        if self.use_optimizer: self.optimizer.step()
+        if self.use_optimizer:
+            self.optimizer.step()
 
-        # LOSS AND PREDICTION
-        loss = self.loss_fn(spk_sum, tgt)
+        # Compare accumulated spike counts against the rate-scaled target (tgt * T).
+        # Without this scaling the loss *increases* as the correctly-firing class
+        # accumulates more spikes than the one-hot 1.0 target.
+        loss = self.loss_fn(spk_sum, tgt * T)
         pred = spk_sum.argmax(dim=1, keepdim=True)
-            
         return loss, pred
 
-
     def reset(self):
-        """Reset all LIF states and zero gradients."""
+        """Reset all LIF membrane states."""
         self.network.reset()
+
+    def to(self, device):
+        super().to(device)
+        if self.use_optimizer and self._external_optimizer is None:
+            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
+        return self
