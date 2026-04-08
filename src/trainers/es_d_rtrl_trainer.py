@@ -37,14 +37,13 @@ class ESDRTRLTrainer(BaseTrainer):
       - RSNN
       - FCSNN
       - ConvSNN
+      - VGG9-style DVSGesture SNN
 
     Paper correspondence:
     - Eq. (2): online gradient accumulation over time
     - Eq. (6): eps^t ≈ eps_f^t ⊗ eps_x^t
     - Eq. (7): eps_x^t = alpha * eps_x^(t-1) + x^t
     - Eq. (8): eps_f^t = alpha * diag(D^t) ∘ eps_f^(t-1) + (1-alpha) * diag(D_f^t)
-
-    This is a manual restricted implementation, not the full BrainScale compiler.
     """
 
     def __init__(
@@ -89,22 +88,45 @@ class ESDRTRLTrainer(BaseTrainer):
     # ============================================================
 
     def _detect_model_kind(self, net) -> str:
-        if hasattr(net, "input_layers") and hasattr(net, "recurrent_layers") and hasattr(net, "fc_out"):
+        probe = getattr(net, "core", net)
+
+        if hasattr(probe, "input_layers") and hasattr(probe, "recurrent_layers") and hasattr(probe, "fc_out"):
             return "rsnn"
-        if hasattr(net, "synapses") and hasattr(net, "neurons"):
+        if hasattr(probe, "synapses") and hasattr(probe, "neurons"):
             return "fcsnn"
-        if all(hasattr(net, name) for name in ("conv1", "pool1", "lif1", "conv2", "pool2", "lif2", "fc", "lif_out")):
+        if all(hasattr(probe, name) for name in ("conv1", "pool1", "lif1", "conv2", "pool2", "lif2", "fc", "lif_out")):
             return "convsnn"
+        if (
+            hasattr(probe, "conv1")
+            and hasattr(probe, "lif1")
+            and hasattr(probe, "head")
+            and hasattr(probe, "VGG9_CFG")
+        ):
+            return "vgg9"
+
         raise TypeError(
             f"Unsupported network type: {type(net).__name__}. "
-            "Expected RSNN, FCSNN, or ConvSNN-style attributes."
+            "Expected RSNN, FCSNN, ConvSNN, or VGG9-style attributes."
         )
 
     def _reset_network(self, device: torch.device | None = None) -> None:
-        try:
-            self.network.reset(device=device)
-        except TypeError:
-            self.network.reset()
+        target = self.network
+        if hasattr(target, "reset"):
+            try:
+                target.reset(device=device)
+            except TypeError:
+                target.reset()
+            return
+
+        target = getattr(self.network, "core", None)
+        if target is not None and hasattr(target, "reset"):
+            try:
+                target.reset(device=device)
+            except TypeError:
+                target.reset()
+            return
+
+        raise AttributeError(f"Network {type(self.network).__name__} has no reset() method.")
 
     def _detach_internal_state_(self) -> None:
         if not self.detach_state_each_step:
@@ -121,6 +143,17 @@ class ESDRTRLTrainer(BaseTrainer):
                     val = getattr(module, name)
                     if isinstance(val, torch.Tensor):
                         setattr(module, name, val.detach())
+
+        core = getattr(self.network, "core", None)
+        if core is not None:
+            for name in dir(core):
+                if name.startswith("mem"):
+                    val = getattr(core, name, None)
+                    if isinstance(val, torch.Tensor):
+                        setattr(core, name, val.detach())
+            if hasattr(core, "head") and hasattr(core.head, "mem"):
+                if isinstance(core.head.mem, torch.Tensor):
+                    core.head.mem = core.head.mem.detach()
 
     # ============================================================
     # Surrogate / Jacobian diagonal
@@ -275,6 +308,64 @@ class ESDRTRLTrainer(BaseTrainer):
         )
         return layers
 
+    def _forward_step_layers_vgg9(self, x_t: torch.Tensor) -> list[StepLayer]:
+        net = getattr(self.network, "core", self.network)
+
+        if x_t.dim() != 4:
+            raise ValueError(f"Expected VGG9 input [B, C, H, W], got shape {tuple(x_t.shape)}")
+
+        layers: list[StepLayer] = []
+        x = x_t
+
+        for i, (_, _, pool_type) in enumerate(net.VGG9_CFG, start=1):
+            syn_in = x
+            conv = getattr(net, f"conv{i}")
+            lif = getattr(net, f"lif{i}")
+            mem_prev = getattr(net, f"mem{i}")
+
+            preact = conv(syn_in)
+            spk, mem = lif(preact, mem_prev)
+            setattr(net, f"mem{i}", mem)
+
+            # IMPORTANT:
+            # - store spk BEFORE pooling in StepLayer so spk and mem match in shape
+            # - use pooled output only for propagation to next layer
+            x_next = spk
+            if pool_type != "none":
+                x_next = getattr(net, f"pool{i}")(x_next)
+
+            layers.append(
+                StepLayer(
+                    name=f"conv{i}",
+                    synapse=conv,
+                    neuron=lif,
+                    syn_input=syn_in,
+                    preact=preact,
+                    spk=spk,      # pre-pooling spike
+                    mem=mem,      # same shape as spk
+                    is_recurrent=False,
+                )
+            )
+
+            x = x_next
+
+        syn_in_out = x.flatten(1)
+        preact_out = net.head(syn_in_out)
+
+        layers.append(
+            StepLayer(
+                name="output",
+                synapse=net.head.fc,
+                neuron=net.lif8,
+                syn_input=syn_in_out,
+                preact=preact_out,
+                spk=preact_out,
+                mem=preact_out,
+                is_recurrent=False,
+            )
+        )
+        return layers
+
     def _forward_step_layers(self, x_t: torch.Tensor) -> list[StepLayer]:
         if self.model_kind == "rsnn":
             return self._forward_step_layers_rsnn(x_t)
@@ -282,6 +373,8 @@ class ESDRTRLTrainer(BaseTrainer):
             return self._forward_step_layers_fcsnn(x_t)
         if self.model_kind == "convsnn":
             return self._forward_step_layers_convsnn(x_t)
+        if self.model_kind == "vgg9":
+            return self._forward_step_layers_vgg9(x_t)
         raise RuntimeError(f"Unknown model kind: {self.model_kind}")
 
     def _forward_step(self, x_t: torch.Tensor, vo: torch.Tensor | None = None):
@@ -293,16 +386,6 @@ class ESDRTRLTrainer(BaseTrainer):
 
         Legacy API expected by some tests:
             _forward_step(x_t, vo) -> (z_t, v_t, vo)
-
-        Compatibility behavior:
-        - for RSNN:
-            z_t = spike of last recurrent hidden layer
-            v_t = membrane of last recurrent hidden layer
-            vo  = membrane of output layer
-        - for FCSNN / ConvSNN:
-            z_t = spike of penultimate spiking layer if present, else output spike
-            v_t = membrane of penultimate spiking layer if present, else output mem
-            vo  = output membrane
         """
         layers = self._forward_step_layers(x_t)
 
@@ -426,16 +509,16 @@ class ESDRTRLTrainer(BaseTrainer):
             ]
 
             for i, layer in enumerate(layers):
-                D_f_diag = self._surrogate_gradient(layer.mem, layer.neuron).detach()
-                D_diag = self._hidden_jacobian_diag(z_prev[i], layer.neuron).detach()
+                if self.model_kind == "vgg9" and layer.name == "output":
+                    D_f_diag = torch.ones_like(layer.mem)
+                    D_diag = torch.ones_like(layer.mem)
+                else:
+                    D_f_diag = self._surrogate_gradient(layer.mem, layer.neuron).detach()
+                    D_diag = self._hidden_jacobian_diag(z_prev[i], layer.neuron).detach()
 
-                # Eq. (7): eps_x^t = alpha * eps_x^(t-1) + x^t
                 eps_x[i] = alpha * eps_x[i] + layer.syn_input.detach()
-
-                # Eq. (8): eps_f^t = alpha * diag(D^t) ∘ eps_f^(t-1) + (1-alpha) * diag(D_f^t)
                 eps_f[i] = alpha * D_diag * eps_f[i] + (1.0 - alpha) * D_f_diag
 
-                # Eq. (2) + Eq. (6): fuse learning signal with postsynaptic trace
                 Lf = learning_signals[i].detach() * eps_f[i]
                 Lf = self._group_lr_scale(layer) * Lf
 
@@ -462,7 +545,6 @@ class ESDRTRLTrainer(BaseTrainer):
                             f"z_prev={tuple(z_prev[i].shape)}"
                         )
 
-                    # cleaner recurrent presynaptic trace
                     eps_x_rec[i] = alpha * eps_x_rec[i] + z_prev[i]
                     grad_rec = self.lr_layer[1] * (Lf.t() @ eps_x_rec[i])
                     self._accumulate_param_grad(layer.rec_weight, grad_rec)
