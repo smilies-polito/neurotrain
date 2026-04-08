@@ -33,7 +33,7 @@ DATA_ROOT = ""
 BETA = 0.95
 THRESHOLD = 1.0
 
-EPOCHS = 10
+EPOCHS = 20
 LR = 1e-4
 SEED = 42
 DEVICE = "auto"

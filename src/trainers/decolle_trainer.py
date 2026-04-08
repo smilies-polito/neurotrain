@@ -440,15 +440,15 @@ class DECOLLETrainer(nn.Module):
 
     @staticmethod
     def _update_conv(weight: torch.Tensor, mod_map: torch.Tensor,
-                     p_map: torch.Tensor, lr: float, bs: int,
-                     stride: Tuple[int, ...], padding: Tuple[int, ...],
-                     dilation: Tuple[int, ...] = (1, 1)) -> float:
+                    p_map: torch.Tensor, lr: float, bs: int,
+                    stride: Tuple[int, ...], padding: Tuple[int, ...],
+                    dilation: Tuple[int, ...] = (1, 1)) -> float:
         """
         Conv2d weight update via im2col.
 
-        [PAPER Eq.7/Eq.8] Same local rule, implemented for convolution.
-        [IMPLEMENTATION] The paper does not spell out unfold/im2col; this is the
-        computational realization of the same local cross-correlation update.
+        The conv DECOLLE update requires the modulation map and the unfolded
+        pre-synaptic trace to refer to the same number of spatial output
+        positions. If they do not, raise a detailed error.
         """
         C_out, C_in, kH, kW = weight.shape
 
@@ -458,8 +458,20 @@ class DECOLLETrainer(nn.Module):
             stride=stride,
             padding=padding,
             dilation=dilation,
-        )
-        mod_flat = mod_map.flatten(2)
+        )  # (B, C_in*kH*kW, L)
+
+        mod_flat = mod_map.flatten(2)  # (B, C_out, L)
+
+        if mod_flat.shape[-1] != col.shape[-1]:
+            raise RuntimeError(
+                "Conv DECOLLE update spatial mismatch: "
+                f"mod positions={mod_flat.shape[-1]} vs unfold positions={col.shape[-1]}. "
+                f"mod_map shape={tuple(mod_map.shape)}, "
+                f"p_map shape={tuple(p_map.shape)}, "
+                f"weight shape={tuple(weight.shape)}, "
+                f"stride={stride}, padding={padding}, dilation={dilation}"
+            )
+
         dw_flat = torch.einsum("bcl,bkl->ck", mod_flat, col) / bs
         dw = dw_flat.view(C_out, C_in, kH, kW)
 
@@ -789,44 +801,82 @@ class DECOLLETrainer(nn.Module):
                     syn = info.synapse
                     mod_for_conv = mod
 
-                    # Pooling mismatch compensation.
-                    # [DIVERGENCE] Needed because the wrapped network may pool before the neuron,
-                    # while the paper's conv pipeline applies the spiking nonlinearity after pooling.
-                    if info.pool is not None and mod.dim() == 4:
-                        pool = info.pool
-                        ks = pool.kernel_size if isinstance(pool.kernel_size, int) else pool.kernel_size[0]
-                        pre_pool_h = mod.shape[2] * ks
-                        pre_pool_w = mod.shape[3] * ks
-                        mod_for_conv = F.interpolate(
-                            mod, size=(pre_pool_h, pre_pool_w), mode="nearest"
-                        ) / (ks * ks)
+                    if mod.dim() != 4:
+                        raise RuntimeError(
+                            f"Expected 4D modulation for conv layer, got shape {tuple(mod.shape)}"
+                        )
 
-                    # Conv weight update.
-                    # [PAPER Eq.7/Eq.8] Same local three-factor logic in conv form.
+                    # Compute the conv-output spatial grid expected by the weight update.
+                    # This is derived directly from p_k and the conv geometry, so it
+                    # remains correct even if pooling is not explicitly exposed in
+                    # network.layers.
+                    kH, kW = syn.weight.shape[2], syn.weight.shape[3]
+
+                    col = F.unfold(
+                        p_k,
+                        kernel_size=(kH, kW),
+                        stride=syn.stride,
+                        padding=syn.padding,
+                        dilation=syn.dilation,
+                    )
+                    expected_positions = col.shape[-1]
+                    got_positions = mod.flatten(2).shape[-1]
+
+                    if got_positions != expected_positions:
+                        H_in, W_in = p_k.shape[2], p_k.shape[3]
+
+                        stride_h, stride_w = (
+                            syn.stride if isinstance(syn.stride, tuple)
+                            else (syn.stride, syn.stride)
+                        )
+                        pad_h, pad_w = (
+                            syn.padding if isinstance(syn.padding, tuple)
+                            else (syn.padding, syn.padding)
+                        )
+                        dil_h, dil_w = (
+                            syn.dilation if isinstance(syn.dilation, tuple)
+                            else (syn.dilation, syn.dilation)
+                        )
+
+                        H_out = (H_in + 2 * pad_h - dil_h * (kH - 1) - 1) // stride_h + 1
+                        W_out = (W_in + 2 * pad_w - dil_w * (kW - 1) - 1) // stride_w + 1
+
+                        if H_out * W_out != expected_positions:
+                            raise RuntimeError(
+                                f"Internal conv shape mismatch: expected_positions={expected_positions}, "
+                                f"but computed H_out={H_out}, W_out={W_out}"
+                            )
+
+                        # Resample the modulation map to the conv-output grid.
+                        # The division keeps the overall scale roughly stable when
+                        # broadcasting a pooled modulation back to a finer grid.
+                        scale = expected_positions / float(got_positions)
+                        mod_for_conv = F.interpolate(
+                            mod, size=(H_out, W_out), mode="nearest"
+                        ) / scale
+
                     dw_norm = self._update_conv(
                         syn.weight, mod_for_conv, p_k, layer_lr, B,
                         stride=syn.stride, padding=syn.padding, dilation=syn.dilation,
                     )
 
-                    # Conv bias update.
-                    # [PAPER Sec.2.3.4] Biases were trained.
                     if syn.bias is not None:
-                        db_norm = self._update_conv_bias(syn.bias, mod_for_conv, layer_lr, B)
+                        db_norm = self._update_conv_bias(
+                            syn.bias, mod_for_conv, layer_lr, B
+                        )
                         diag_db[k] += db_norm / T
 
                 else:
                     syn = info.synapse
 
-                    # Linear weight update.
-                    # [PAPER Eq.7/Eq.8]
                     dw_norm = self._update_linear(
                         syn.weight, mod, p_k, layer_lr, B,
                     )
 
-                    # Linear bias update.
-                    # [PAPER Sec.2.3.4]
                     if syn.bias is not None:
-                        db_norm = self._update_linear_bias(syn.bias, mod, layer_lr, B)
+                        db_norm = self._update_linear_bias(
+                            syn.bias, mod, layer_lr, B
+                        )
                         diag_db[k] += db_norm / T
 
                 diag_dw[k] += dw_norm / T

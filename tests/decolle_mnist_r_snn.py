@@ -39,7 +39,7 @@ THRESHOLD = 1.0
 HIDDEN_SIZE = 100
 
 # Trainer defaults
-EPOCHS = 10
+EPOCHS = 30
 LR = 1e-4
 SEED = 42
 DEVICE = "auto"
