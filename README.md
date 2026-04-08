@@ -51,14 +51,14 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | Algorithm | Trainer File | Status | Supported Networks |
 |-----------|--------------|--------|-------------------|
 | BPTT | `bptt_trainer.py` | 🟢 | All |
-| OSTL | `ostl_trainer.py` | 🔴 | Recurrent |
+| OSTL | `ostl_trainer.py` | 🟢 | Recurrent |
 | OTTT | `ottt_trainer.py` | 🔴 | Convolutional |
-| OSTTP | `osttp_trainer.py` | 🔴 | Recurrent (SHD-tuned) |
+| OSTTP | `osttp_trainer.py` | 🟢 | Recurrent (SHD-tuned) |
 | OTPE | `otpe_trainer.py` | 🔴 | All |
 | DRTP | `drtp_trainer.py` | 🔴 | All |
 | DECOLLE | `decolle_trainer.py` | 🔴 | All |
-| E-prop | `eprop_trainer.py` | 🔴 | Recurrent |
-| ESD-RTRL | `esd_rtrl_trainer.py` | 🔴 | Recurrent |
+| E-prop | `eprop_trainer.py` | 🟢 | Recurrent |
+| ESD-RTRL | `esd_rtrl_trainer.py` | 🟢 | Recurrent |
 | ETLP | `etlp_trainer.py` | 🔴 | All |
 | STOP | `stop_trainer.py` | 🔴 | All |
 | TP | `tp_trainer.py` | 🔴 | All |
@@ -73,7 +73,6 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 **Integration & Trainer Validation** — Full training loops testing trainer × network × dataset combinations:
 
 ##### BPTT
-
 | Test | Network | Dataset | Result (Epoch: train/test) | Commit |
 |------|---------|---------|--------|--------|
 | `bptt_mnist_fc.py`      | FC-SNN    | MNIST         |  |  |
@@ -84,8 +83,18 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | `bptt_svhn_vgg9.py`     | VGG9      | SVHN          |  |  |
 | `bptt_svhn_r.py`        | R-SNN     | SVHN          |  |  |
 | `bptt_nmnist_r.py`      | R-SNN     | NMNIST        |  |  |
+
+##### OSTL
+| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
+|------|---------|---------|--------|--------|
 | `ostl_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.9960/0.9753 25: 0.9984/0.9765 | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
 | `ostl_nmnist_r.py`      | R-SNN     | NMNIST        | 10: 0.9137/0.8961                   | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
+
+##### ETLP
+| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
+|------|---------|---------|--------|--------|
+| `etlp_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.8247/0.8321 100: 0.8512/0.8507 | |
+| `etlp_nmnist_r.py`      | FC-SNN    | MNIST         | 2: 0.3636/0.4436 | |
 
 **Dataset Smoke Tests** — Minimal tests verifying dataloaders work correctly:
 
