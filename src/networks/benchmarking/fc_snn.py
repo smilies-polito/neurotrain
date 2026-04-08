@@ -49,6 +49,8 @@ class FCSNN(BaseSNN):
             spike_grad = surrogate.fast_sigmoid(slope=25)
 
         layer_sizes = [input_size, *hidden_sizes, self._n_classes]
+        self.input_size = input_size
+        self.hidden_size = list(hidden_sizes)
 
         self.synapses = nn.ModuleList()
         self.neurons = nn.ModuleList()
