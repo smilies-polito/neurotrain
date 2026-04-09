@@ -19,6 +19,14 @@ class RSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, *in_shape)` input.
     State reset is external via `reset()`.
     Returns: (spk_rec, mem_rec) with one entry per spiking layer (hidden rec layers + output).
+
+    Args:
+        out_integrator: If True, the output layer neuron (lif_out) is configured as a
+            pure Leaky Integrator (beta=1.0, threshold=1e9 so it never fires).
+            The output neuron computes mem += W·spk at each step without spiking.
+            Use mem_rec[-1] at the final timestep for prediction (do not accumulate
+            over timesteps — the membrane already accumulates internally).
+            If False (default), lif_out uses the same beta/threshold as hidden layers.
     """
     net_tags = frozenset({"fully_connected", "recurrent", "baseline"})
     is_recurrent = True
@@ -32,6 +40,7 @@ class RSNN(BaseSNN):
         threshold: float = 1.0,
         spike_grad=None,
         reset_mechanism: str = "subtract",
+        out_integrator: bool = False,
     ) -> None:
         super().__init__()
 
@@ -76,16 +85,28 @@ class RSNN(BaseSNN):
             )
             prev_features = int(layer_features)
 
-        # Output head
+        # Output head — pure Leaky Integrator when out_integrator=True
         self.fc_out = nn.Linear(prev_features, self.n_classes, bias=False)
-        self.lif_out = snn.Leaky(
-            beta=float(beta),
-            threshold=float(threshold),
-            spike_grad=spike_grad,
-            reset_mechanism=reset_mechanism,
-            init_hidden=True,
-            output=True,
-        )
+        if out_integrator:
+            # beta=1.0 (no decay), threshold=1e9 (never fires) → mem += W*spk each step.
+            # Use mem_rec[-1] at the final timestep for prediction during eval.
+            self.lif_out = snn.Leaky(
+                beta=1.0,
+                threshold=1e9,
+                spike_grad=spike_grad,
+                reset_mechanism=reset_mechanism,
+                init_hidden=True,
+                output=True,
+            )
+        else:
+            self.lif_out = snn.Leaky(
+                beta=float(beta),
+                threshold=float(threshold),
+                spike_grad=spike_grad,
+                reset_mechanism=reset_mechanism,
+                init_hidden=True,
+                output=True,
+            )
 
         # Minimal alternating list (Linear, RLeaky, ..., Linear, Leaky)
         self.layers = nn.ModuleList()
@@ -105,6 +126,7 @@ class RSNN(BaseSNN):
         print(f"  {'Beta':<25} {beta}")
         print(f"  {'Threshold':<25} {threshold}")
         print(f"  {'Reset Mechanism':<25} {reset_mechanism}")
+        print(f"  {'Out Integrator':<25} {out_integrator}")
         print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
@@ -130,15 +152,12 @@ class RSNN(BaseSNN):
         mem_rec.append(mem_out)
 
         return spk_rec, mem_rec
-    
+
     @property
     def n_classes(self) -> int:
         return self._n_classes
-
-
 
     def reset(self, device: torch.device | None = None) -> None:
         for rlif in self.recurrent_layers:
             rlif.reset_mem()
         self.lif_out.reset_mem()
-

@@ -1,40 +1,57 @@
 """
 Trace Propagation (TP) Trainer.
 
-Implements Algorithm 1 from:
-    Pes et al. (2026) - "Traces propagation: memory-efficient and scalable
-    forward-only learning in spiking neural networks"
-
-Supports FCSNN, RSNN, and DVSGEST_VGG9 in a single unified class.
+Supports FCSNN, RSNN, and generic CNN architectures (e.g. VGG9) in a single unified class.
 
 Architecture detection (duck-typing):
   FCSNN        → hasattr(network, 'synapses')
   RSNN         → hasattr(network, 'input_layers')
-  DVSGEST_VGG9 → hasattr(network, 'VGG9_CFG')
+  VGG9 (CNN)   → hasattr(network, 'VGG9_CFG')
 
-Design note — network/trainer separation:
-  The trainer maintains its OWN membrane potentials, spikes, and eligibility
-  traces for both the student (green) and target (purple) paths.
-  The network is used as a weight container only; its snntorch state is
-  never touched during train_sample().
+Design note — student path via network.forward():
+  The TP algorithm requires two forward paths through the same weight matrices:
+    • Student path (green): input x_t propagated through W_l → produces s_l^t
+    • Target path  (purple): one-hot c* projected via S → propagated through W_l → s̃_l^t
+  The STUDENT path is computed by calling network(data[t]) at each timestep — the
+  network's own snntorch dynamics (beta, reset mechanism, surrogate) are adopted.
+  The TARGET path is emulated by the trainer using the network's weight matrices
+  directly, with the trainer's own alpha/vth/ArcTan-surrogate dynamics.
 
-Design note — output layer:
-  Paper Sec 3.1: all architectures use a simple integrator as output
-  (no threshold, no spike, leak=1.0): mem_out^t = mem_out^{t-1} + W_out*s_{L-1}^t.
-  The trainer always does this, regardless of the network's last snntorch layer.
+  TBPTT is naturally prevented: torch.autograd.grad(..., retain_graph=False) frees
+  the computation graph after each timestep's gradient computation.  snntorch's
+  internal state (lif.mem) still holds the correct VALUE for the next forward pass,
+  but its grad_fn is gone — so the next timestep's gradient only flows through the
+  current-step computation, not through time.
 
-Design note — evaluation with snntorch networks:
-  During eval the test loop calls network(data[t]) and accumulates spk_rec[-1].
-  For VGG9: spk_rec[-1] IS the membrane (LeakyIntegrator returns mem, no spikes) — exact.
-  For FCSNN/RSNN: spk_rec[-1] is spike count. Since neurons fire in proportion to
-  their input, argmax(spike_sum) ≈ argmax(integrated membrane). This is standard
-  SNN practice and works reliably in practice.
-  Using snn.Leaky with a very high threshold as a leaky integrator would require
-  different thresholds per layer (hidden must fire, output must not), which
-  FCSNN/RSNN don't support directly. Hence we use the spike-count approximation.
+Design note — target path dynamics:
+  The target path uses the trainer's own ArcTan surrogate (_spike) applied to:
+    ṽ_l^t = α·ṽ_l^{t-1} + W_l·s̃_{l-1}^t - V_th·s̃_l^{t-1}   (Eq 1)
+  This gives the trainer independent control over the target path regardless of
+  the network's snntorch configuration.
+
+Design note — output layer (paper Sec 3.1):
+  During training the TP algorithm uses a pure Leaky Integrator at the output:
+    mem_out^t = mem_out^{t-1} + W_out · s_{L-1}^t
+  No alpha decay, no threshold, no spike.  The trainer always applies this rule.
+
+  For evaluation to be CONSISTENT with training, configure the network with:
+    out_integrator=True  (parameter available in FCSNN and RSNN)
+  which sets beta=1.0 and threshold=1e9 on the output neuron so it never fires.
+  VGG9 networks already have a correct Leaky Integrator head (leak=1.0, no fire).
+
+  During eval, use mem_rec[-1] at the FINAL timestep only — do NOT accumulate it
+  over timesteps.  The integrator already accumulates internally (mem += W·spk each
+  step); summing over timesteps gives a triangular sum, not a pure integral.
+
+Design note — batch size constraint (paper Sec 3.2):
+  TP requires batch_size >= 2.  The contrastive loss (Eq 13-15) computes a [B,B]
+  inter-sample similarity matrix z_l = ε_l @ ε̃_l^T.  With B=1 this is a 1×1
+  scalar, log_softmax([x]) = 0 always, and all gradients vanish — learning is
+  impossible.  This is a fundamental algorithmic requirement, not a limitation of
+  this implementation.
 """
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -45,16 +62,22 @@ from trainers.base_trainer import BaseTrainer
 
 class TPTrainer(BaseTrainer):
     """
-    Unified Trace Propagation trainer for FCSNN, RSNN, and DVSGEST_VGG9.
+    Unified Trace Propagation trainer for FCSNN, RSNN, and VGG9-based CNNs.
 
     Args:
-        network:                  The SNN (weight container during training).
+        network:                  The SNN.  Its forward() provides the student path.
         lr:                       Learning rate for SGD.
-        batch_size:               Must be >= 2 (contrastive loss requires pairs).
-        alpha:                    Membrane decay (α in paper Eq 1).
+        batch_size:               Must be >= 2.  The contrastive loss computes a
+                                  [B,B] similarity matrix; with B=1 log_softmax
+                                  collapses to 0 and all gradients vanish
+                                  (paper Sec 3.2, fundamental algorithmic requirement).
+        alpha:                    TARGET-PATH membrane decay (α in paper Eq 1).
+                                  The student path uses the network's own snntorch beta.
         beta:                     Eligibility trace decay (β in paper Eq 11-12).
-        vth:                      Spike threshold (V_th in paper).
-        surrogate_scale:          ArcTan surrogate gradient scale (paper uses 1.0).
+        vth:                      TARGET-PATH spike threshold (V_th in paper Eq 2).
+                                  The student path uses the network's own threshold.
+        surrogate_scale:          ArcTan surrogate gradient scale for the TARGET path.
+                                  The student path uses the network's own surrogate.
         train_target_propagator:  Whether to train the projection matrix S.
         use_optimizer:            If True, create an internal SGD optimizer.
         optimizer:                External optimizer (overrides use_optimizer).
@@ -80,14 +103,19 @@ class TPTrainer(BaseTrainer):
         super().__init__()
 
         if batch_size < 2:
-            raise ValueError("TP requires batch_size >= 2 for contrastive loss.")
+            raise ValueError(
+                "TP requires batch_size >= 2: the contrastive loss (Eq 14) computes a "
+                "[B,B] inter-sample similarity matrix; with B=1 log_softmax collapses "
+                "to 0 and all gradients vanish.  This is a fundamental algorithmic "
+                "constraint (paper Sec 3.2)."
+            )
 
         self.network = network
         self.lr = lr
         self.batch_size = batch_size
-        self.alpha = alpha           # α: membrane decay (Eq 1)
+        self.alpha = alpha           # α: target-path membrane decay (Eq 1)
         self.beta = beta             # β: trace decay (Eq 11, 12)
-        self.vth = vth               # V_th: spike threshold (Eq 2)
+        self.vth = vth               # V_th: target-path spike threshold (Eq 2)
         self.surrogate_scale = surrogate_scale
         self.train_target_propagator = train_target_propagator
 
@@ -98,16 +126,15 @@ class TPTrainer(BaseTrainer):
         # S projects the one-hot target c* ∈ R^C to the first hidden layer's space
         self.S = self._init_S(input_shape)
 
-        # Optimizer: includes all network params + S
+        # Optimizer: includes all network params + S.
+        # network.parameters() already covers recurrent weights for RSNN.
         if optimizer is not None:
             self.optimizer = optimizer
         elif use_optimizer:
             params = list(self.network.parameters())
             if self.train_target_propagator:
                 params.append(self.S.weight)
-            if self.recurrent_weights:
-                params.extend(w.weight for w in self.recurrent_weights)
-            self.optimizer = torch.optim.SGD(params, lr=lr)
+            self.optimizer = torch.optim.Adam(params, lr=lr)
         else:
             self.optimizer = None
 
@@ -122,45 +149,45 @@ class TPTrainer(BaseTrainer):
         blocks: list of (weight_layer, pool_fn_or_None) for each hidden block.
           - weight_layer is nn.Linear for FC/Rec, WSConv2d for CNN.
           - pool_fn is None for FC/Rec, MaxPool/AdaptiveAvgPool for CNN.
-        output_layer: the final nn.Linear (pure integrator during training).
-        recurrent_weights: list of nn.Linear (RSNN only; empty otherwise).
+            For VGG9: pool_fn is stored for the TARGET path (the student path
+            already has pooling applied by network.forward()).
+        output_layer: the final nn.Linear (used as pure integrator during training).
+        recurrent_weights: list of nn.Linear recurrent modules (RSNN only; empty otherwise).
+          Needed so the trainer can explicitly request their gradient via autograd.grad().
         """
         if hasattr(self.network, 'synapses'):          # FCSNN
-            # synapses = [W_1, W_2, ..., W_L]
-            # hidden blocks: all but the last synapse
             self.blocks = [(w, None) for w in self.network.synapses[:-1]]
             self.output_layer = self.network.synapses[-1]
-            self.recurrent_weights = []
+            self.recurrent_weights: List[nn.Linear] = []
 
         elif hasattr(self.network, 'input_layers'):    # RSNN
-            # input_layers = [W_1, ..., W_{L-1}]  (hidden linear layers)
-            # recurrent_layers = [RLeaky_1, ..., RLeaky_{L-1}]
-            #   each RLeaky carries .recurrent (nn.Linear) for R_l (Eq 1)
+            # Recurrent weights (rlif.recurrent) are used inside network.forward().
+            # _detach_network_hidden() detaches rlif.spk before each timestep so
+            # the gradient for recurrent.weight uses the current-step spike only (no TBPTT).
             self.blocks = [(w, None) for w in self.network.input_layers]
             self.output_layer = self.network.fc_out
             self.recurrent_weights = [
                 rlif.recurrent for rlif in self.network.recurrent_layers
             ]
 
-        elif hasattr(self.network, 'VGG9_CFG'):        # DVSGEST_VGG9
-            # Each VGG block: (WSConv2d, optional pool)
+        elif hasattr(self.network, 'VGG9_CFG'):        # VGG9 CNN architecture
+            # pool_fn stored for the TARGET path; network.forward() already applies
+            # pool before returning spk_list[l] (student path).
             self.blocks = []
             for i, (_, _, _) in enumerate(self.network.VGG9_CFG, start=1):
                 conv = getattr(self.network, f'conv{i}')
                 pool = getattr(self.network, f'pool{i}', None)
                 self.blocks.append((conv, pool))
-            # Output: fc inside the LeakyIntegrator head
             self.output_layer = self.network.head.fc
             self.recurrent_weights = []
 
         else:
             raise ValueError(
                 "TPTrainer supports FCSNN (synapses), RSNN (input_layers), "
-                "or DVSGEST_VGG9 (VGG9_CFG). Unknown network type."
+                "or VGG9-based CNNs (VGG9_CFG). Unknown network type."
             )
 
         self.n_blocks = len(self.blocks)
-        # Derive n_classes from the output layer's out_features
         self.n_classes = self.output_layer.out_features
 
     def _init_S(self, input_shape: Optional[Tuple]) -> nn.Linear:
@@ -172,17 +199,16 @@ class TPTrainer(BaseTrainer):
         layer, pool_fn = self.blocks[0]
 
         if isinstance(layer, nn.Linear):
-            # FC / Recurrent: output size is known directly
             s_out_size = layer.out_features
         else:
-            # CNN: output size depends on spatial dimensions of first conv block
             if input_shape is None:
                 raise ValueError(
                     "TPTrainer requires input_shape=(C, H, W) for CNN networks "
                     "(e.g. input_shape=(2, 128, 128) for DVSGesture)."
                 )
             with torch.no_grad():
-                dummy = torch.zeros(1, *input_shape)
+                dev = next(self.network.parameters()).device
+                dummy = torch.zeros(1, *input_shape, device=dev)
                 out = layer(dummy)                            # (1, C, H, W)
                 if pool_fn is not None:
                     out = pool_fn((out >= self.vth).float())  # apply pool shape
@@ -193,13 +219,52 @@ class TPTrainer(BaseTrainer):
         return S
 
     # -------------------------------------------------------------------------
-    # Spike function with ArcTan surrogate gradient
+    # TBPTT prevention — detach network hidden states between timesteps
+    # -------------------------------------------------------------------------
+
+    def _detach_network_hidden(self):
+        """
+        Detach snntorch's internal membrane/spike tensors to prevent TBPTT.
+
+        After torch.autograd.grad(..., retain_graph=False), the computation graph
+        is freed but snntorch's stored hidden tensors (lif.mem, rlif.spk, etc.)
+        still carry grad_fn pointers into that freed graph.  On the next forward,
+        snntorch builds a new graph that includes those stale tensors → backward
+        tries to traverse the freed graph → RuntimeError.
+
+        Detaching replaces each hidden tensor with a fresh leaf (same value, no
+        grad_fn) so the next timestep's graph is self-contained.
+
+        This is training logic and deliberately lives in the trainer, not in the
+        network (networks are pure inference modules).
+        """
+        if hasattr(self.network, 'synapses'):          # FCSNN
+            for neu in self.network.neurons:
+                neu.mem = neu.mem.detach()
+
+        elif hasattr(self.network, 'input_layers'):    # RSNN
+            for rlif in self.network.recurrent_layers:
+                rlif.mem = rlif.mem.detach()
+                rlif.spk = rlif.spk.detach()
+            self.network.lif_out.mem = self.network.lif_out.mem.detach()
+
+        elif hasattr(self.network, 'VGG9_CFG'):        # VGG9 CNN architecture
+            for i in range(1, self.network._num_blocks + 1):
+                attr = f'mem{i}'
+                setattr(self.network, attr, getattr(self.network, attr).detach())
+            self.network.head.mem = self.network.head.mem.detach()
+
+    # -------------------------------------------------------------------------
+    # Spike function with ArcTan surrogate gradient — used for the TARGET path
     # -------------------------------------------------------------------------
 
     class _SpikeFunction(torch.autograd.Function):
         """
         Forward: hard threshold Θ(v - V_th).
         Backward: ArcTan surrogate  scale / (1 + (π·(v - V_th))²).
+
+        Used for the TARGET path only.  The student path uses the network's
+        own surrogate gradient (applied inside network.forward()).
         (Eq 2, surrogate type "1" from reference)
         """
         @staticmethod
@@ -216,7 +281,7 @@ class TPTrainer(BaseTrainer):
             return grad_output * surrogate, None, None
 
     def _spike(self, v: torch.Tensor) -> torch.Tensor:
-        """Θ(v - V_th) with ArcTan surrogate gradient (Eq 2)."""
+        """Θ(v - V_th) with ArcTan surrogate gradient (target path, Eq 2)."""
         return self._SpikeFunction.apply(v, self.vth, self.surrogate_scale)
 
     # -------------------------------------------------------------------------
@@ -233,6 +298,15 @@ class TPTrainer(BaseTrainer):
 
         Returns:
             (loss, pred)  — scalar loss and [B] predicted indices.
+
+        Student path: network.forward() is called at each timestep.
+          - spk_rec[l] for l in range(n_blocks) gives the hidden student spikes.
+          - _detach_network_hidden() is called before each forward to prevent TBPTT.
+          - For VGG9: spk_rec[l] from network.forward() already includes pooling.
+
+        Target path: emulated by the trainer.
+          - Uses alpha/vth/ArcTan-surrogate (trainer-controlled, Eq 1).
+          - Starts from c* projected via S at layer 0 (Alg 1 line 13-14).
         """
         T = data.size(0)
         B = data.size(1)
@@ -242,26 +316,25 @@ class TPTrainer(BaseTrainer):
         c_star = F.one_hot(target, self.n_classes).float()  # [B, C]
 
         # ------------------------------------------------------------------
-        # Initialize state (zero at start of each sequence)
+        # Reset network and initialize trainer state
         # ------------------------------------------------------------------
-        # Membrane potentials v_l^t (Eq 1) and target ṽ_l^t
-        # Shapes: 2D (B, H) for FC/Rec; 4D (B, C, H, W) for CNN.
-        # We init as zeros and let the first forward call define the shape.
+        self.network.reset()
 
-        v_s = [None] * self.n_blocks   # student membranes
-        v_t = [None] * self.n_blocks   # target membranes
-        s_s = [None] * self.n_blocks   # student spikes  s_l^t  (Eq 2)
-        s_t = [None] * self.n_blocks   # target spikes   s̃_l^t
-        eps_s = [None] * self.n_blocks  # student traces ε_l^t  (Eq 11)
-        eps_t = [None] * self.n_blocks  # target traces  ε̃_l^t  (Eq 12)
+        # Target path state (trainer-managed)
+        v_t = [None] * self.n_blocks       # target membranes     ṽ_l^t  (pre-pool)
+        s_t_raw = [None] * self.n_blocks   # target spikes pre-pool s̃_l^t (for reset term)
+        s_t = [None] * self.n_blocks       # target spikes post-pool (input to next layer)
+        eps_t = [None] * self.n_blocks     # target traces         ε̃_l^t  (Eq 12)
+
+        # Student eligibility traces — built from network.forward() spikes
+        eps_s = [None] * self.n_blocks  # student traces    ε_l^t  (Eq 11)
 
         # Input-level traces (Alg 1 lines 5-6)
-        # eps_in:        ε_0^t = β*ε_0^{t-1} + x_t
-        # eps_in_target: ε̃_0^t = β*ε̃_0^{t-1} + c*
+        # x_flat is used ONLY for eps_in; network.forward() handles its own flattening.
         eps_in = torch.zeros(B, data[0].flatten(1).size(1), device=device)
         eps_in_target = torch.zeros(B, self.n_classes, device=device)
 
-        # Output integrator mem_out (Sec 3.1): pure leak=1, no threshold
+        # Output integrator (Sec 3.1): pure accumulator, no decay/threshold
         mem_out = torch.zeros(B, self.n_classes, device=device)
 
         if self.optimizer:
@@ -271,92 +344,77 @@ class TPTrainer(BaseTrainer):
         # Time loop — Algorithm 1 line 2
         # ==================================================================
         for t in range(T):
-            x_t = data[t]                        # [B, *features]
-            x_flat = x_t.flatten(1)              # [B, F] for input trace
+            x_t = data[t]                   # [B, *features]
+            x_flat = x_t.flatten(1)         # [B, F] — for input trace only
 
             if self.optimizer:
                 self.optimizer.zero_grad()
 
             # --- Alg 1 lines 5-6: input-level trace update ---
-            # ε_0^t = β·ε_0^{t-1} + x_t
             eps_in = self.beta * eps_in.detach() + x_flat
-            # ε̃_0^t = β·ε̃_0^{t-1} + c*
             eps_in_target = self.beta * eps_in_target.detach() + c_star
 
             # ----------------------------------------------------------
-            # Forward loop — Alg 1 lines 7-20
+            # Student path: network forward (Alg 1 lines 7-11)
+            # Detach hidden states first to prevent TBPTT through freed graphs.
             # ----------------------------------------------------------
-            # FC/Rec: first layer is nn.Linear → needs flat [B, F] input
-            # CNN: first layer is Conv2d → needs spatial [B, C, H, W] input
-            cur_s = x_flat if isinstance(self.blocks[0][0], nn.Linear) else x_t
-            cur_t = c_star   # target path always starts with one-hot (Alg 1 line 13)
+            self._detach_network_hidden()
+            spk_rec, mem_rec = self.network(x_t)
+            # spk_rec[l] for l in range(n_blocks) = hidden student spikes at layer l.
+            # For VGG9: pooling is already applied inside network.forward().
+
+            # ----------------------------------------------------------
+            # Target path (Alg 1 lines 12-20) — trainer-emulated
+            # ----------------------------------------------------------
+            cur_t = c_star  # target path starts with one-hot (Alg 1 line 13)
 
             for l, (layer, pool_fn) in enumerate(self.blocks):
-                rec_w = self.recurrent_weights[l] if self.recurrent_weights else None
-
-                # ---- Student path (green) ----
-                # Eq 1: v_l^t = α·v_l^{t-1} + W_l·s_{l-1}^t + [R_l·s_l^{t-1}] - V_th·s_l^{t-1}
-                linear_s = layer(cur_s)
-                if rec_w is not None:
-                    # recurrent term: R_l · s_l^{t-1}  (Eq 1, only RSNN)
-                    s_prev = s_s[l] if s_s[l] is not None else torch.zeros_like(linear_s)
-                    linear_s = linear_s + rec_w(s_prev.detach())
-
-                v_prev_s = v_s[l] if v_s[l] is not None else torch.zeros_like(linear_s)
-                s_prev_s = s_s[l] if s_s[l] is not None else torch.zeros_like(linear_s)
-
-                v_s[l] = (
-                    self.alpha * v_prev_s.detach()
-                    + linear_s
-                    - self.vth * s_prev_s.detach()          # soft reset
-                )
-
-                spk_s = self._spike(v_s[l])                  # Eq 2: s_l^t = Θ(v_l^t - V_th)
-                if pool_fn is not None:
-                    spk_s = pool_fn(spk_s)
-                s_s[l] = spk_s
-
-                # Eq 11: ε_l^t = β·ε_l^{t-1} + s_l^t
+                # --- Student trace (Eq 11) ---
+                spk_s = spk_rec[l]
                 eps_prev_s = eps_s[l] if eps_s[l] is not None else torch.zeros_like(spk_s)
                 eps_s[l] = self.beta * eps_prev_s.detach() + spk_s
 
-                # ---- Target path (purple) ----
-                # Alg 1 lines 12-15: for l=0, use S instead of W_l and c* as input
+                # --- Target path (Eq 1, Eq 2, Eq 12) ---
                 if l == 0:
                     # Alg 1 line 14: W_l = S, s̃_0^t = c*
-                    linear_t = self.S(cur_t)   # [B, H1] for FC or [B, C1*H1*W1] for CNN
-                    # For CNN: S outputs flat vector; reshape to match spatial linear_s
+                    linear_t = self.S(cur_t)   # [B, s_out_size]
+                    # For CNN (VGG9): S outputs flat; reshape to match block-0 spatial output.
+                    # block 0 has no pooling in VGG9_CFG so spk_rec[0] has the conv output shape.
                     if not isinstance(layer, nn.Linear):
-                        linear_t = linear_t.view_as(linear_s)
+                        linear_t = linear_t.view(B, *spk_rec[0].shape[1:])
                 else:
                     # Alg 1 lines 16-19: same W_l as student
                     linear_t = layer(cur_t)
 
                 v_prev_t = v_t[l] if v_t[l] is not None else torch.zeros_like(linear_t)
-                s_prev_t = s_t[l] if s_t[l] is not None else torch.zeros_like(linear_t)
+                # Reset uses the pre-pool spike (same shape as v_t[l]).
+                s_prev_raw = s_t_raw[l] if s_t_raw[l] is not None else torch.zeros_like(linear_t)
 
                 v_t[l] = (
                     self.alpha * v_prev_t.detach()
                     + linear_t
-                    - self.vth * s_prev_t.detach()
+                    - self.vth * s_prev_raw.detach()
                 )
 
-                spk_t = self._spike(v_t[l])
+                spk_t_raw = self._spike(v_t[l])          # pre-pool (for reset term)
+                s_t_raw[l] = spk_t_raw
                 if pool_fn is not None:
-                    spk_t = pool_fn(spk_t)
+                    spk_t = pool_fn(spk_t_raw)            # post-pool (input to next layer)
+                else:
+                    spk_t = spk_t_raw
                 s_t[l] = spk_t
 
-                # Eq 12: ε̃_l^t = β·ε̃_l^{t-1} + s̃_l^t
+                # Eq 12: ε̃_l^t = β·ε̃_l^{t-1} + s̃_l^t (use post-pool for trace)
                 eps_prev_t = eps_t[l] if eps_t[l] is not None else torch.zeros_like(spk_t)
                 eps_t[l] = self.beta * eps_prev_t.detach() + spk_t
 
-                cur_s = spk_s    # next layer input
                 cur_t = spk_t
 
             # --- Output layer (pure integrator, Sec 3.1) ---
             # mem_out^t = mem_out^{t-1} + W_out · s_{L-1}^t
-            # No alpha, no threshold, no reset — this is the key fix vs previous code
-            mem_out = mem_out + self.output_layer(cur_s)
+            # Uses the last hidden block's student spike from network.forward().
+            # .flatten(1) is needed for VGG9 where the last conv output is spatial.
+            mem_out = mem_out + self.output_layer(spk_rec[self.n_blocks - 1].flatten(1))
 
             # ==============================================================
             # Contrastive loss + gradient accumulation — Alg 1 lines 22-27
@@ -367,22 +425,24 @@ class TPTrainer(BaseTrainer):
                 t1 = eps_t[l].flatten(1)    # [B, H]  target trace
                 z_l = h1 @ t1.t()           # [B, B]  similarity matrix
 
-                # Eq 15: y_l^t[b,b'] = softmax(-dist(ε̃_{l-1}^t[b], ε̃_{l-1}^t[b']))
-                t0 = eps_in_target.flatten(1) if l == 0 else eps_t[l - 1].flatten(1)  # [B, F]
-                # Euclidean distance (reference tp_mlp.py line 226)
+                # Eq 15: y_l^t soft target (softmax of negative distances)
+                t0 = eps_in_target.flatten(1) if l == 0 else eps_t[l - 1].flatten(1)
                 dist = (
                     (t0.unsqueeze(1) - t0.unsqueeze(0)).pow(2).sum(-1) + 1e-9
                 ).sqrt()                    # [B, B]
-                y_l = F.softmax(-dist, dim=1).detach()   # [B, B]  soft target
+                y_l = F.softmax(-dist, dim=1).detach()   # [B, B]
 
                 # Eq 13: E_l^t = -Σ y_l * log softmax(z_l)
                 loss_l = torch.sum(
                     -y_l * F.log_softmax(z_l, dim=1), dim=1
                 ).mean()
 
-                # Eq 18: ∂E_l/∂W_l via autograd
-                # For l>0: both student and target paths go through layer.weight,
-                # so autograd gives ΔW^{in} + ΔW^{trg} in one call (Eq 18).
+                # Eq 18: ∂E_l/∂W_l via autograd.
+                # Student gradient: loss_l → eps_s[l] → spk_rec[l] → network.forward() → layer.weight
+                # Target gradient (l>0): loss_l → eps_t[l] → spk_t → v_t[l] → layer(cur_t) → layer.weight
+                # Target gradient (l=0): loss_l → eps_t[0] → spk_t → v_t[0] → S(c*) → S.weight
+                # Recurrent gradient (RSNN): loss_l → eps_s[l] → spk_rec[l] → rlif(cur) → rlif.recurrent.weight
+                #   rlif.spk (prev spike) is detached → gradient uses current-step value only (no TBPTT)
                 grad_params = [layer.weight]
                 if l == 0 and self.train_target_propagator:
                     grad_params.append(self.S.weight)

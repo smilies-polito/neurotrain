@@ -19,6 +19,15 @@ class FCSNN(BaseSNN):
     `forward` performs exactly one timestep on `(B, *in_shape)` input.
     State reset is external via `reset()`.
     Returns: (spk_rec, mem_rec) with one entry per spiking layer.
+
+    Args:
+        out_integrator: If True, the output layer neuron is configured as a
+            pure Leaky Integrator (beta=1.0, threshold=1e9 so it never fires).
+            The output neuron computes mem += W·spk at each step without spiking.
+            Use mem_rec[-1] at the final timestep for prediction (do not accumulate
+            over timesteps — the membrane already accumulates internally).
+            If False (default), the output uses the same beta/threshold as hidden
+            layers (standard Leaky — fires spikes at the output).
     """
     net_tags = frozenset({"fully_connected", "baseline"})
 
@@ -31,6 +40,7 @@ class FCSNN(BaseSNN):
         threshold: float = 1.0,
         spike_grad=None,
         reset_mechanism: str = "subtract",
+        out_integrator: bool = False,
     ) -> None:
         super().__init__()
 
@@ -55,18 +65,35 @@ class FCSNN(BaseSNN):
         self.synapses = nn.ModuleList()
         self.neurons = nn.ModuleList()
 
-        for n_in, n_out in zip(layer_sizes[:-1], layer_sizes[1:]):
+        n_layers = len(layer_sizes) - 1
+        for i, (n_in, n_out) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
             self.synapses.append(nn.Linear(int(n_in), int(n_out), bias=False))
-            self.neurons.append(
-                snn.Leaky(
-                    beta=float(beta),
-                    threshold=float(threshold),
-                    spike_grad=spike_grad,
-                    reset_mechanism=reset_mechanism,
-                    init_hidden=True,
-                    output=True,
+            is_output = (i == n_layers - 1)
+            if is_output and out_integrator:
+                # Pure Leaky Integrator: no decay (beta=1), never fires (threshold=1e9).
+                # Matches the TP algorithm's output layer (Sec 3.1): mem += W*spk.
+                # Use mem_rec[-1] at the final timestep for prediction during eval.
+                self.neurons.append(
+                    snn.Leaky(
+                        beta=1.0,
+                        threshold=1e9,
+                        spike_grad=spike_grad,
+                        reset_mechanism=reset_mechanism,
+                        init_hidden=True,
+                        output=True,
+                    )
                 )
-            )
+            else:
+                self.neurons.append(
+                    snn.Leaky(
+                        beta=float(beta),
+                        threshold=float(threshold),
+                        spike_grad=spike_grad,
+                        reset_mechanism=reset_mechanism,
+                        init_hidden=True,
+                        output=True,
+                    )
+                )
 
         # Minimal alternating list (Linear, LIF, Linear, LIF, ...)
         self.layers = nn.ModuleList()
@@ -84,6 +111,7 @@ class FCSNN(BaseSNN):
         print(f"  {'Beta':<25} {beta}")
         print(f"  {'Threshold':<25} {threshold}")
         print(f"  {'Reset Mechanism':<25} {reset_mechanism}")
+        print(f"  {'Out Integrator':<25} {out_integrator}")
         print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
@@ -92,7 +120,7 @@ class FCSNN(BaseSNN):
 
         # The network flattens the input since it's fc
         spk = x.reshape(x.shape[0], -1)
-        
+
         spk_rec = []
         mem_rec = []
 
