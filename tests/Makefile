@@ -58,6 +58,10 @@ bptt_svhn_r_optuna:
 # OSTTP on SHD with the paper-style recurrent architecture
 osttp_shd_repro_optuna:
 	python3 osttp_shd_repro.py --optuna-trials 10 --optuna-epochs 5 --study-name osttp_shd_repro --optuna-storage sqlite:///optuna_results/osttp_shd_repro.db
+# TP on CIFAR-10 with VGG9 architecture
+tp_cifar10_vgg9_optuna:
+	mkdir -p optuna_results
+	python3 tp_cifar10_vgg9.py --optuna-trials 20 --optuna-epochs 5 --study-name tp_cifar10_vgg9 --optuna-storage sqlite:///optuna_results/tp_cifar10_vgg9.db
 
 
 # HPC RUNS
@@ -83,3 +87,6 @@ bptt_svhn_r_sbatch:
 # OSTTP on SHD with the paper-style recurrent architecture
 osttp_shd_repro_sbatch:
 	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif hpc/osttp_shd_repro.sbatch
+# TP on CIFAR-10 with VGG9 architecture
+tp_cifar10_vgg9_sbatch:
+	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$$HOME/container-defs/snn-training-benchmarking.sif hpc/tp_cifar10_vgg9.sbatch
