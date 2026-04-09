@@ -26,7 +26,7 @@ import torch
 # -----------------------------------------------------------------------------
 # Hardcoded Defaults
 # -----------------------------------------------------------------------------
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 TIMESTEPS = 20
 NUM_WORKERS = 8
 
@@ -45,12 +45,12 @@ BETA_TRACE = 0.19       # eligibility trace decay β (Eq 11-12)
 VTH = 0.5               # spike threshold
 SURROGATE_SCALE = 1.0   # ArcTan surrogate scale
 
-# Must match the CIFAR10Loader output resolution
-INPUT_SHAPE = (3, 32, 32)
+# Must match the DVSCifar10Loader output resolution
+INPUT_SHAPE = (2, 128, 128)
 
 OPTUNA_TRIALS = 0
 OPTUNA_EPOCHS = 20
-STUDY_NAME = "tp_cifar10_vgg9"
+STUDY_NAME = "tp_dvscifar10_vgg9"
 OPTUNA_STORAGE = ""
 
 # -----------------------------------------------------------------------------
@@ -70,7 +70,7 @@ if "networks" not in sys.modules:
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = networks_pkg
 
-from datasets.cifar10_loader import CIFAR10Loader
+from datasets.dvscifar10_loader import DVSCifar10Loader
 from networks.benchmarking.vgg9_cifar10 import CIFAR10_VGG9
 from trainers.tp_trainer import TPTrainer
 
@@ -139,7 +139,7 @@ def run_training(
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    train_loader, test_loader = CIFAR10Loader(
+    train_loader, test_loader = DVSCifar10Loader(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
