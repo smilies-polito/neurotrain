@@ -89,4 +89,4 @@ osttp_shd_repro_sbatch:
 	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif hpc/osttp_shd_repro.sbatch
 # TP on CIFAR-10 with VGG9 architecture
 tp_cifar10_vgg9_sbatch:
-	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$$HOME/container-defs/snn-training-benchmarking.sif hpc/tp_cifar10_vgg9.sbatch
+	cd .. && mkdir -p hpc/slurm_outputs && sbatch --export=ALL,PROJECT_ROOT=$(abspath ..),APPTAINER_IMAGE=$(abspath ..)/hpc/snn-training-benchmarking.sif hpc/tp_cifar10_vgg9.sbatch

@@ -1,3 +1,4 @@
+#!/bin/bash
 # =============================================================================
 # SLURM Batch Script: TP CIFAR-10 VGG9 Optuna
 # =============================================================================
@@ -10,17 +11,23 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
-#SBATCH --output=/home/users/caviglia/snn-training-benchmarking/hpc/slurm_outputs/%x-%j.out
-#SBATCH --error=/home/users/caviglia/snn-training-benchmarking/hpc/slurm_outputs/%x-%j.err
+#SBATCH --output=%x-%j.out
+#SBATCH --error=%x-%j.err
 
 set -euo pipefail
 
 # ---------------------  Directory Setup  -------------------------------------
-PROJECT_ROOT="${PROJECT_ROOT:-/home/users/caviglia/snn-training-benchmarking}"
-APPTAINER_IMAGE="${APPTAINER_IMAGE:-$HOME/container-defs/snn-training-benchmarking.sif}"
+PROJECT_ROOT="${PROJECT_ROOT:-.}"
+APPTAINER_IMAGE="${APPTAINER_IMAGE:-}"
 
 cd "${PROJECT_ROOT}"
-mkdir -p hpc/slurm_outputs optuna_results src/Data
+mkdir -p "${PROJECT_ROOT}/hpc/slurm_outputs" "${PROJECT_ROOT}/optuna_results" "${PROJECT_ROOT}/src/Data"
+
+# Validate that the container image path is set and exists
+if [[ -z "${APPTAINER_IMAGE}" ]] || [[ ! -f "${APPTAINER_IMAGE}" ]]; then
+    echo "[ERROR] APPTAINER_IMAGE not set or file not found: ${APPTAINER_IMAGE}"
+    exit 1
+fi
 
 # ---------------------  Threading & Environment Variables  -------------------
 cpus="${SLURM_CPUS_PER_TASK:-1}"
@@ -35,7 +42,7 @@ export PYTHONUNBUFFERED=1
 
 # ---------------------  Optuna / Run Parameters  -----------------------------
 OPTUNA_TRIALS="${OPTUNA_TRIALS:-100}"
-OPTUNA_EPOCHS="${OPTUNA_EPOCHS:-20}"
+OPTUNA_EPOCHS="${OPTUNA_EPOCHS:-5}"
 TIMESTEPS="${TIMESTEPS:-20}"
 SEED="${SEED:-42}"
 STUDY_NAME="${STUDY_NAME:-tp_cifar10_vgg9}"
