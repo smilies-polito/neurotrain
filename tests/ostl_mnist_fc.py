@@ -231,8 +231,6 @@ def run_training(
             try:
                 import optuna
                 trial.report(test_acc, epoch)
-                if trial.should_prune():
-                    raise optuna.exceptions.TrialPruned()
             except ImportError:
                 pass
 
