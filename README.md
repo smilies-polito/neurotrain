@@ -47,24 +47,24 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 
 ### Trainers
 
-| Algorithm | Trainer File | Status | Supported Networks |
-|-----------|--------------|--------|-------------------|
-| BPTT | `bptt_trainer.py` | 🟢 | All |
-| OSTL | `ostl_trainer.py` | 🟢 | Recurrent |
-| OTTT | `ottt_trainer.py` | 🔴 | Convolutional |
-| OSTTP | `osttp_trainer.py` | 🟢 | Recurrent (SHD-tuned) |
-| OTPE | `otpe_trainer.py` | 🔴 | All |
-| DECOLLE | `decolle_trainer.py` | 🔴 | All |
-| E-prop | `eprop_trainer.py` | 🟢 | Recurrent |
-| ESD-RTRL | `esd_rtrl_trainer.py` | 🟢 | Recurrent |
-| ETLP | `etlp_trainer.py` | 🟢 | All |
-| STOP | `stop_trainer.py` | 🔴 | All |
-| TP | `tp_trainer.py` | 🔴 | All |
-| ELL | `ell_trainer.py` | 🔴 | Feedforward |
-| FELL | `fell_trainer.py` | 🔴 | Feedforward |
-| BELL | `bell_trainer.py` | 🔴 | Feedforward |
-| STLLR | `stllr_trainer.py` | 🔴 | All |
-| STSF | `stsf_trainer.py` | 🔴 | All |
+| Algorithm | Trainer File | Status | Supported Networks | Notes |
+|-----------|--------------|--------|--------------------|-------|
+| BPTT | `bptt_trainer.py` | 🟢 | All | |
+| OSTL | `ostl_trainer.py` | 🟢 | Recurrent | |
+| OTTT | `ottt_trainer.py` | 🔴 | Convolutional | |
+| OSTTP | `osttp_trainer.py` | 🟢 | Recurrent (SHD-tuned) | |
+| OTPE | `otpe_trainer.py` | 🔴 | All | |
+| DECOLLE | `decolle_trainer.py` | 🔴 | All | |
+| E-prop | `eprop_trainer.py` | 🟢 | Recurrent | |
+| ESD-RTRL | `esd_rtrl_trainer.py` | 🟢 | Recurrent | |
+| ETLP | `etlp_trainer.py` | 🟢 | All | |
+| STOP | `stop_trainer.py` | 🔴 | All | |
+| TP | `tp_trainer.py` | 🔴 | All | **batch_size ≥ 2 required** (contrastive loss degenerates to zero gradient with B=1). **Use `out_integrator=True`** on FCSNN/RSNN for faithful eval: the algorithm trains a pure integrator at the output; with `out_integrator=True` eval uses `mem_rec[-1]` at the final timestep. VGG9 already has a correct LI head. |
+| ELL | `ell_trainer.py` | 🔴 | Feedforward | |
+| FELL | `fell_trainer.py` | 🔴 | Feedforward | |
+| BELL | `bell_trainer.py` | 🔴 | Feedforward | |
+| STLLR | `stllr_trainer.py` | 🔴 | All | |
+| STSF | `stsf_trainer.py` | 🔴 | All | |
 
 ### Test Programs
 

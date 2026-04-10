@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BPTT training test: SVHN + SVHN_VGG9.
+BPTT training test: CIFAR-10 + CIFAR10_VGG9.
 
 Adapted from bptt_dvsgest_vgg9_tp.py.
-Dataset: SVHN with rate-coded spike trains — shape [T, B, 3, 32, 32].
-Network: SVHN_VGG9 (VGG-9 SNN, in_channels=3, num_classes=10).
+Dataset: CIFAR-10 with rate-coded spike trains — shape [T, B, 3, 32, 32].
+Network: CIFAR10_VGG9 (VGG-9 SNN, in_channels=3, num_classes=10).
 """
 
 from __future__ import annotations
@@ -23,9 +23,9 @@ import torch
 # -----------------------------------------------------------------------------
 # Hardcoded Defaults
 # -----------------------------------------------------------------------------
-BATCH_SIZE = 32         # Mini-batch size used for both training and evaluation.
+BATCH_SIZE = 16         # Mini-batch size used for both training and evaluation.
 TIMESTEPS = 20          # Number of rate-coded time steps per sample.
-NUM_WORKERS = 2         # DataLoader worker processes.
+NUM_WORKERS = 8         # DataLoader worker processes.
 
 BETA = 0.53             # LIF membrane decay.
 THRESHOLD = 1.0         # Spiking threshold.
@@ -38,7 +38,7 @@ HPC_PRINTS = False      # If True, suppress per-batch progress bar updates.
 
 OPTUNA_TRIALS = 0       # Number of Optuna trials; 0 disables hyperparameter search.
 OPTUNA_EPOCHS = 20      # Epochs executed inside each Optuna trial.
-STUDY_NAME = "optuna_study"
+STUDY_NAME = "bptt_dvscifar10_vgg9"
 OPTUNA_STORAGE = ""
 
 # -----------------------------------------------------------------------------
@@ -58,15 +58,15 @@ if "networks" not in sys.modules:
     networks_pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = networks_pkg
 
-from datasets.svhn_loader import SVHNLoader
-from networks.benchmarking.vgg9_svhn import SVHN_VGG9
+from datasets.dvscifar10_loader import DVSCifar10Loader
+from networks.benchmarking.vgg9_cifar10 import CIFAR10_VGG9
 from trainers.bptt_trainer import BPTTTrainer
 
 # -----------------------------------------------------------------------------
 # Tiny utilities
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Minimal SVHN+VGG9 BPTT test.")
+    p = argparse.ArgumentParser(description="Minimal CIFAR-10+VGG9 BPTT test.")
     p.add_argument("--epochs", type=int, default=EPOCHS)
     p.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     p.add_argument("--timesteps", type=int, default=TIMESTEPS)
@@ -115,14 +115,14 @@ def run_training(
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    train_loader, test_loader = SVHNLoader(
+    train_loader, test_loader = DVSCifar10Loader(
         batch_size=batch_size,
         T=timesteps,
         pin_memory=(device.type == "cuda"),
         seed=seed,
         num_workers=NUM_WORKERS,
     )
-    network = SVHN_VGG9(
+    network = CIFAR10_VGG9(in_channels=2, 
         beta=beta,
         threshold=threshold,
         verbose=True,
@@ -131,6 +131,7 @@ def run_training(
         network=network,
         lr=lr,
         batch_size=batch_size,
+        grad_clip=1.0,
     ).to(device)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(trainer.optimizer, T_max=epochs)
 

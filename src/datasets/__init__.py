@@ -6,7 +6,7 @@ from datasets.fashionmnist_loader import FashionMNISTLoader
 from datasets.svhn_loader import SVHNLoader
 from datasets.dvsgesture_loader import DVSGestureLoader
 from datasets.shd_loader import SHDLoader
-from datasets.ncifar10_loader import NCifar10Loader
+from datasets.dvscifar10_loader import DVSCifar10Loader
 
 __all__ = [
     "MNISTLoader",
@@ -15,5 +15,5 @@ __all__ = [
     "SVHNLoader",
     "DVSGestureLoader",
     "SHDLoader",
-    "NCifar10Loader",
+    "DVSCifar10Loader",
 ]

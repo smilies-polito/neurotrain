@@ -29,7 +29,7 @@ def _seed_worker(worker_id: int) -> None:
     random.seed(worker_seed)
 
 
-# N-CIFAR10 (a.k.a. CIFAR10-DVS) is the neuromorphic counterpart of CIFAR-10.
+# DVS-CIFAR10 (a.k.a. CIFAR10-DVS) is the neuromorphic counterpart of CIFAR-10.
 # It was recorded by pointing a DVS camera at CIFAR-10 images displayed on a monitor
 # while the camera was moved in smooth circles, generating ~9000 samples across 10
 # classes. Each sample is a raw event stream; we bin it into T frames of shape
@@ -38,7 +38,7 @@ def _seed_worker(worker_id: int) -> None:
 # NOTE: tonic does NOT split the dataset into train/test sets — all 9000 samples are
 # in a single pool. We apply a deterministic 90/10 split (stratification not guaranteed).
 # Override `train_fraction` if you prefer a different split ratio.
-def NCifar10Loader(
+def DVSCifar10Loader(
     batch_size: int,
     T: int,
     pin_memory: bool = False,
@@ -50,7 +50,7 @@ def NCifar10Loader(
     train_fraction: float = 0.9,  # fraction of data used for training
 ):
     """
-    Build train/test DataLoaders for N-CIFAR10 (CIFAR10-DVS) with binned event frames.
+    Build train/test DataLoaders for DVS-CIFAR10 (CIFAR10-DVS) with binned event frames.
 
     Output batch shapes:
       - data:   [T, B, 2, 128, 128]   (2 channels = ON/OFF polarities)
@@ -64,7 +64,7 @@ def NCifar10Loader(
       - Caching is enabled by default; set use_cache=False to disable.
     """
     if data_root is None:
-        data_root = os.environ.get("NCIFAR10_ROOT", str(DEFAULT_DATA_ROOT))
+        data_root = os.environ.get("DVSCIFAR10_ROOT", str(DEFAULT_DATA_ROOT))
 
     sensor_size = CIFAR10DVS.sensor_size  # (128, 128, 2)
 
@@ -83,13 +83,13 @@ def NCifar10Loader(
     )
 
     full_ds = CIFAR10DVS(
-        save_to=str(Path(data_root) / "NCIFAR10"),
+        save_to=str(Path(data_root) / "DVSCIFAR10"),
         transform=transform,
     )
 
     # Wrap with disk cache before splitting so both subsets share the same cache.
     if use_cache:
-        cache_path = Path(data_root) / "NCIFAR10" / "cache" / f"T{T}"
+        cache_path = Path(data_root) / "DVSCIFAR10" / "cache" / f"T{T}"
         full_ds = DiskCachedDataset(full_ds, cache_path=str(cache_path))
 
     # Deterministic train/test split.
