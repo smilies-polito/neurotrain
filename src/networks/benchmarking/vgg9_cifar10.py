@@ -50,25 +50,27 @@ class ATanSurrogate(nn.Module):
         return _ATanSurrogateFn.apply(input_, self.scale)
 
 
-class WSConv2d(nn.Module):
+class WSConv2d(nn.Conv2d):
+    """
+    Conv2d with Weight Standardization (WS).
+
+    Inherits from nn.Conv2d so that forward hooks (used by OTTTTrainer and similar
+    hook-based trainers) fire correctly on __call__. The weight is stored directly
+    as self.weight (the standard nn.Conv2d parameter); WS is applied in forward().
+    """
 
     def __init__(self, in_channels, out_channels, kernel_size, padding=0, eps=1e-5):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding, bias=False)
+        super().__init__(in_channels, out_channels, kernel_size, padding=padding, bias=False)
         self.eps = eps
 
     def forward(self, x):
-        w = self.conv.weight
+        w = self.weight
         fan_in = w[0].numel()
         mean = w.mean(dim=[1, 2, 3], keepdim=True)
         var = w.var(dim=[1, 2, 3], keepdim=True, unbiased=False)
         w_std = 1.8 * (w - mean) / torch.sqrt(var * fan_in + self.eps)
-        return F.conv2d(x, w_std, bias=None, stride=self.conv.stride,
-                        padding=self.conv.padding)
-
-    @property
-    def weight(self):
-        return self.conv.weight
+        return F.conv2d(x, w_std, bias=None, stride=self.stride,
+                        padding=self.padding)
 
 
 class LeakyIntegrator(nn.Module):
@@ -122,12 +124,18 @@ class CIFAR10_VGG9(nn.Module):
         if spike_grad is None:
             spike_grad = ATanSurrogate(scale=1.0)
 
+        # init_hidden=True: each snn.Leaky manages its membrane state internally
+        # (stored as lif.mem), consistent with FCSNN/RSNN. This allows
+        # _detach_neuron_state() in OTTTTrainer to correctly find and detach
+        # lif.mem each timestep, preventing "backward through freed graph" errors.
+        # output=True: lif(x) returns (spk, mem) matching the forward interface below.
         lif_kwargs = dict(
             beta=beta,
             threshold=threshold,
             spike_grad=spike_grad,
             reset_mechanism='subtract',
-            init_hidden=False,
+            init_hidden=True,
+            output=True,
             learn_beta=False,
             learn_threshold=False,
         )
@@ -147,9 +155,6 @@ class CIFAR10_VGG9(nn.Module):
         self.head = LeakyIntegrator(512 * 2 * 2, num_classes, leak=1.0)
 
         self._num_blocks = len(self.VGG9_CFG)
-
-        for i in range(1, self._num_blocks + 1):
-            setattr(self, f'mem{i}', torch.zeros(1))
 
         self._initialize_weights()
 
@@ -189,9 +194,7 @@ class CIFAR10_VGG9(nn.Module):
             x = getattr(self, f'conv{i}')(x)
 
             lif = getattr(self, f'lif{i}')
-            mem = getattr(self, f'mem{i}')
-            spk, mem = lif(x, mem)
-            setattr(self, f'mem{i}', mem)
+            spk, mem = lif(x)  # lif manages state in lif.mem (init_hidden=True)
 
             if pool_type != 'none':
                 spk = getattr(self, f'pool{i}')(spk)
@@ -209,7 +212,7 @@ class CIFAR10_VGG9(nn.Module):
     def init_states(self):
         for i in range(1, self._num_blocks + 1):
             lif = getattr(self, f'lif{i}')
-            setattr(self, f'mem{i}', lif.init_leaky())
+            lif.init_leaky()  # Initialises lif.mem to zeros on the correct device
         self.head.reset()
 
     def reset(self):

@@ -50,7 +50,7 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | Algorithm | Trainer File | Status | Supported Networks | Notes |
 |-----------|--------------|--------|--------------------|-------|
 | BPTT | `bptt_trainer.py` | 🟢 | All | |
-| OSTL | `ostl_trainer.py` | 🟢 | Recurrent | |
+| OSTL | `ostl_trainer.py` | 🟢 | Recurrent |  |
 | OTTT | `ottt_trainer.py` | 🔴 | Convolutional | |
 | OSTTP | `osttp_trainer.py` | 🟢 | Recurrent (SHD-tuned) | |
 | OTPE | `otpe_trainer.py` | 🔴 | All | |

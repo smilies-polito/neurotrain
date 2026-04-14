@@ -84,22 +84,17 @@ class OTTTTrainer(BaseTrainer):
         )
 
         # OTTT traces are defined on synaptic inputs.
+        # Any nn.Linear / nn.Conv2d (including subclasses that override forward, such as
+        # ScaledWSConv2d) is accepted — forward hooks fire on __call__ for any subclass.
+        # Note: modules that hold an nn.Linear/Conv2d as an *attribute* and bypass it via
+        # F.linear/F.conv2d directly (e.g. a WSConv2d wrapper pattern) will have hooks
+        # registered on the inner module that never fire — those synapses receive no trace
+        # substitution silently. Use subclassing instead of wrapping for full compatibility.
         self.synapse_layers = []
         self.trace_synapse_layers = []
-        unsupported_synapse_types = set()
-        allowed_parametrized_types = {"ParametrizedLinear", "ParametrizedConv2d"}
         for module in self.network.modules():
-            if not isinstance(module, (nn.Linear, nn.Conv2d)):
-                continue
-            if type(module) in (nn.Linear, nn.Conv2d) or type(module).__name__ in allowed_parametrized_types:
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
                 self.synapse_layers.append(module)
-            else:
-                unsupported_synapse_types.add(type(module).__name__)
-        if unsupported_synapse_types:
-            raise TypeError(
-                "OTTTTrainer supports nn.Linear/nn.Conv2d and torch parametrized variants; "
-                f"found unsupported subclasses: {sorted(unsupported_synapse_types)}"
-            )
         if not self.synapse_layers:
             raise TypeError(
                 "OTTTTrainer requires at least one nn.Linear or nn.Conv2d in the network."
@@ -175,12 +170,15 @@ class OTTTTrainer(BaseTrainer):
     def _detach_neuron_state(self) -> None:
         """
         Block temporal graph links between timesteps (OTTT does not use BPTT).
+        Iterates over all tensor attributes in vars(module) so it handles both
+        snnTorch internal states (module.mem/spk/syn) and externally managed
+        states stored on the network itself (e.g. mem1, mem2, ...).
+        Parameters live in module._parameters, not in vars(), so they are safe.
         """
         for module in self.network.modules():
-            for attr in ("mem", "spk", "syn"):
-                value = getattr(module, attr, None)
+            for name, value in vars(module).items():
                 if isinstance(value, torch.Tensor):
-                    setattr(module, attr, value.detach())
+                    setattr(module, name, value.detach())
 
     def _zero_all_grads(self) -> None:
         self.optimizer.zero_grad(set_to_none=True)
