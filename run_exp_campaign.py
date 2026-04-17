@@ -9,23 +9,16 @@ Usage:
     # Custom mode (run user-defined experiments with overrides)
     python3 run_exp_campaign.py --custom config/experiments.yaml --name my_custom
 
-    # Run inline (in-process, for debugging — skips subprocess isolation)
-    python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --inline
-
 Options:
     --benchmarking PATH   Path to benchmarking YAML config
     --custom       PATH   Path to custom experiments YAML config
     --name         NAME   Campaign name (default: timestamp)
     --output       DIR    Root output directory (default: experiments/)
-    --inline              Run experiments in-process instead of subprocesses
     --dry-run             Print the experiment list without running anything
 """
 
 import argparse
-import json
 import logging
-import shutil
-import subprocess
 import sys
 import tempfile
 from datetime import datetime
@@ -67,10 +60,6 @@ def parse_args() -> argparse.Namespace:
         help="Root output directory. Default: experiments/",
     )
     parser.add_argument(
-        "--inline", action="store_true",
-        help="Run experiments in-process (faster but shares memory between runs)",
-    )
-    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print the experiment list and exit without running",
     )
@@ -91,7 +80,6 @@ def main() -> None:
     )
 
     # ── Build experiment list ───────────────────────────────────────────────
-    # Load the experiments found in `input_path` together with checks   
     input_path = Path(args.benchmarking or args.custom)
     if not input_path.exists():
         log.error("Config file not found: %s", input_path)
@@ -143,10 +131,7 @@ def main() -> None:
         )
 
         try:
-            if args.inline:
-                _run_inline(spec, exp_out)
-            else:
-                _run_subprocess(spec, exp_out)
+            _run_inline(spec, exp_out)
 
             metrics = load_experiment_metrics(exp_out)
             if metrics:
@@ -168,31 +153,9 @@ def main() -> None:
     _print_summary(all_metrics, failed, campaign_dir)
 
 
-def _run_subprocess(spec: ExperimentSpec, out_dir: Path) -> None:
-    """Run one experiment in an isolated subprocess (keeps GPU memory clean)."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False
-    ) as tmp:
-        tmp.write(spec.to_json())
-        tmp_path = tmp.name
-
-    try:
-        cmd = [
-            sys.executable,
-            str(_REPO / "experiment.py"),
-            tmp_path,
-            str(out_dir),
-        ]
-        result = subprocess.run(cmd, capture_output=False, check=True)
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
-
-
 def _run_inline(spec: ExperimentSpec, out_dir: Path) -> None:
-    """Run one experiment in the current process (for debugging)."""
-    # Import lazily to avoid loading torch before subprocess spawning
-    import importlib
-    import tempfile
+    """Run one experiment in the current process."""
+    import importlib.util
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False
@@ -201,7 +164,6 @@ def _run_inline(spec: ExperimentSpec, out_dir: Path) -> None:
         tmp_path = tmp.name
 
     try:
-        # Dynamically import experiment.main to avoid top-level torch import
         spec_mod = importlib.util.spec_from_file_location(
             "experiment", _REPO / "experiment.py"
         )
