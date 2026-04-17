@@ -6,7 +6,7 @@
 #
 # See config/README.md for full documentation.
 
-# Example 1: BPTT with a smaller hidden layer on MNIST
+# Example 1: BPTT with a smaller hidden layer on MNIST (plain values, no tuning)
 bptt_small_mnist:
   name: bptt_small_fc_mnist
   trainer:
@@ -22,19 +22,38 @@ bptt_small_mnist:
     epochs: 5
     device: cuda
 
-# Example 2: STSF on FashionMNIST with Optuna-tunable lr
+# Example 2: STSF on FashionMNIST with Optuna — tunes lr, beta, and loss_type.
+# Set opt: true and define tunable blocks for the parameters you want to explore.
 stsf_fmnist_tuned:
-  name: stsf_fmnist_tunable_lr
-  opt: false   # set to true to enable Optuna for the lr field below
+  name: stsf_fmnist_tunable
+  opt: true   # enable Optuna for this experiment
+  optuna:     # per-experiment override of the global optuna: block
+    n_trials: 30
+    sampler: tpe
   trainer:
     name: stsf
     lr:
-      value: 1.0e-3
+      value: 1.0e-3     # used in normal (opt: false) runs
       type: float
       min: 1.0e-5
       max: 1.0e-1
+      log: true         # log-scale sampling
+    loss_type:
+      value: ce_rate
+      type: categorical
+      list: [ce_rate, mse_count, ce_count]
   model:
     name: fc_snn
+    beta:
+      value: 0.9
+      type: float
+      min: 0.5
+      max: 0.99
+    threshold:
+      value: 1.0
+      type: float
+      min: 0.5
+      max: 2.0
   dataset:
     name: FashionMNIST
   runtime:

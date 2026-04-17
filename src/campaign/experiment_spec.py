@@ -43,6 +43,10 @@ class ExperimentSpec:
         "neurobench": True,
     })
 
+    # Optuna study settings (only used when opt=True).
+    # Keys: n_trials, direction, sampler, pruner, timeout, storage, seed.
+    optuna: dict = field(default_factory=dict)
+
     # ------------------------------------------------------------------ #
     # Serialization helpers (used to pass specs across subprocesses)       #
     # ------------------------------------------------------------------ #

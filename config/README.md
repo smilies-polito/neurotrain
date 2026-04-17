@@ -85,29 +85,104 @@ fashionmnist:
 
 ---
 
-## Optuna-tunable attributes
+## Hyper-parameter optimisation with Optuna
 
-Any scalar attribute can be replaced with a tunable block:
+### 1 — Define the search space in YAML
+
+Replace any plain scalar with a *tunable block*:
 
 ```yaml
+# float with log-scale sampling
 lr:
-  value: 1.0e-3    # used in normal runs and as the Optuna starting point
-  type: float      # float | int | categorical
+  value: 1.0e-3    # default for normal (opt: false) runs
+  type: float
   min: 1.0e-5
   max: 1.0e-1
-  log: true        # optional: log-scale sampling
+  log: true        # optional; omit for linear scale
 
+# integer
 batch_size:
   value: 256
   type: int
   min: 32
   max: 512
+  step: 32         # optional; default 1
 
+# categorical
 loss_type:
   value: ce_rate
   type: categorical
   list: [ce_rate, mse_count, ce_count]
+
+# not tunable — keeps the value, documents intent
+hidden_sizes:
+  value: [256]
+  type: null
 ```
 
-Set `opt: true` in the custom experiment config to activate Optuna.
-In normal runs (`opt: false`) the plain `value` is used.
+Tunable blocks can appear anywhere in the `trainer`, `model`, or `dataset`
+sections of any config.  Blocks with `type: null` (or no `type` key) are
+treated identically to plain values in both normal and Optuna runs.
+
+### 2 — Enable Optuna
+
+**Custom mode** (`experiments.yaml`): set `opt: true` on any experiment.
+
+```yaml
+my_tuned_exp:
+  opt: true
+  optuna:           # optional: override global Optuna settings
+    n_trials: 50
+    sampler: tpe
+  trainer:
+    name: bptt
+    lr: { value: 1e-3, type: float, min: 1e-5, max: 1e-1, log: true }
+  ...
+```
+
+**Benchmarking mode** (`benchmarking.yaml`): set top-level `opt: true` to run
+an Optuna study for every generated `(trainer × model × dataset)` experiment.
+
+```yaml
+opt: true
+optuna:
+  n_trials: 20
+  sampler: tpe
+trainers: [bptt]
+models: [fc_snn]
+datasets: [MNIST]
+```
+
+### 3 — Configure the study (`optuna:` block)
+
+| Key         | Default      | Description                                     |
+|-------------|------------- |-------------------------------------------------|
+| `n_trials`  | `20`         | Number of trials to run per experiment          |
+| `direction` | `maximize`   | `maximize` or `minimize`                        |
+| `sampler`   | `tpe`        | `tpe` \| `random` \| `cmaes`                   |
+| `pruner`    | `null`       | `median` \| `hyperband` \| `null` (no pruning) |
+| `timeout`   | `null`       | Max seconds per study (`null` = unlimited)      |
+| `storage`   | `null`       | SQLite URL, e.g. `sqlite:///path/to/optuna.db`  |
+
+The global `optuna:` block in `benchmarking.yaml` applies to all experiments.
+A per-experiment `optuna:` block in `experiments.yaml` overrides it.
+
+### 4 — Output structure
+
+```
+experiments/<campaign>/<exp_name>/
+  config.yaml          ← best trial's resolved config
+  metrics.json         ← best trial's metrics
+  log.txt
+  trials/
+    trial_0000/        ← per-trial artefacts (config, metrics, log)
+    trial_0001/
+    ...
+  optuna/
+    trials.csv         ← all trials: params + objective value
+    best_params.yaml   ← params of the best trial
+    study.db           ← SQLite storage (only if storage: is set)
+```
+
+In normal (`opt: false`) runs the `trials/` and `optuna/` directories are not
+created; output is identical to the pre-Optuna behaviour.

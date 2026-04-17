@@ -96,6 +96,11 @@ def resolve_model_for_dataset(model_cfg: dict, dataset_name: str) -> dict:
     return base
 
 
+def is_tunable_block(v: object) -> bool:
+    """Return True if v is an Optuna-style attribute block ({value, type, ...})."""
+    return isinstance(v, dict) and "value" in v and "type" in v
+
+
 def normalize_optuna_attrs(cfg: dict) -> dict:
     """
     Flatten Optuna-style attribute dicts to their plain values.
@@ -112,8 +117,7 @@ def normalize_optuna_attrs(cfg: dict) -> dict:
     """
     result = {}
     for k, v in cfg.items():
-        if isinstance(v, dict) and "value" in v and "type" in v:
-            # Optuna attribute block — extract the plain value
+        if is_tunable_block(v):
             result[k] = v["value"]
         elif isinstance(v, dict):
             result[k] = normalize_optuna_attrs(v)

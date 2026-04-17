@@ -133,8 +133,8 @@ class RSNN(BaseSNN):
         print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
-        if x.dim() != len(self.in_shape) + 1 or tuple(x.shape[1:]) != self.in_shape:
-            raise ValueError(f"Expected input (B,{self.in_shape}), got {tuple(x.shape)}.")
+        if x.dim() < 2 or prod(x.shape[1:]) != prod(self.in_shape):
+            raise ValueError(f"Expected input (B,{self.in_shape}) [{prod(self.in_shape)} elements], got {tuple(x.shape)}.")
 
         spk = x.reshape(x.shape[0], -1)
 

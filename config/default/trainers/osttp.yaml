@@ -1,9 +1,23 @@
 name: osttp
 supported_net_types: [fc, conv]
-lr: 1.0e-3
-batch_size: 256
-pseudo: tanh           # surrogate: tanh | logistic
-output_loss: mse       # output loss type
+lr:
+  value: 1.0e-3
+  type: float
+  min: 1.0e-5
+  max: 1.0e-1
+  log: true
+batch_size:
+  value: 256
+  type: categorical
+  list: [64, 128, 256, 512]
+pseudo:
+  value: tanh
+  type: categorical
+  list: [tanh, logistic]           # surrogate: tanh | logistic
+output_loss:
+  value: mse
+  type: categorical
+  list: [mse, ce]       # output loss type
 feedback_scale: 1.0
 feedback_seed: 42
 grad_clip: 0.0

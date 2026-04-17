@@ -1,8 +1,20 @@
 name: MNIST
 supported_net_types: [fc, recurrent, conv]
-batch_size: 256
-T: 25           # number of rate-coding timesteps
-seed: null
+batch_size:
+  value: 256
+  type: categorical
+  list: [64, 128, 256, 512]
+T:
+  value: 25
+  type: int
+  min: 10
+  max: 50
+  step: 5
+seed:
+  value: null
+  type: int
+  min: 1
+  max: 1000
 pin_memory: false
 download: true
 data_root: null  # null = uses STSF_DATA env var or ../Data/

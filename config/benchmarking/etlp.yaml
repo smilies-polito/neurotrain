@@ -1,0 +1,29 @@
+trainers:
+  - etlp
+
+models:
+  - fc_snn
+  - r_snn
+  - conv_snn
+
+datasets:
+  - MNIST
+  - FashionMNIST
+  - CIFAR10
+  - SVHN
+
+runtime:
+  epochs: 2
+  device: cuda
+  seed: 42
+  neurobench: true
+
+opt: true
+
+optuna:
+  n_trials: 2
+  direction: maximize
+  sampler: tpe
+  pruner: null
+  timeout: null
+  storage: null

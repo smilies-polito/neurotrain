@@ -1,6 +1,18 @@
 name: SHD
 supported_net_types: [fc, recurrent]   # flat 700-channel sequence, no spatial dims
-batch_size: 128
-T: 100
-seed: null
+batch_size:
+  value: 128
+  type: categorical
+  list: [32, 64, 128, 256]
+T:
+  value: 100
+  type: int
+  min: 50
+  max: 150
+  step: 10
+seed:
+  value: null
+  type: int
+  min: 1
+  max: 1000
 pin_memory: false

@@ -12,6 +12,10 @@ EXP_NAME      ?=
 bench:
 	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
 
+## Run a benchmarking campaign with optuna
+bench-opt:
+	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) --name debug_opt --inline
+
 ## Run custom experiments
 custom:
 	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
@@ -47,4 +51,18 @@ clean-cache:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 	find . -name "*.pyc" -delete 2>/dev/null; true
 
-.PHONY: bench custom dry-bench dry-custom test smoke clean clean-cache
+## Submit all per-trainer benchmarking jobs to SLURM (one job per algorithm)
+all-opt:
+	sbatch hpc/bench_bptt.sbatch
+	sbatch hpc/bench_decolle.sbatch
+	sbatch hpc/bench_ell.sbatch
+	sbatch hpc/bench_eprop.sbatch
+	sbatch hpc/bench_esd_rtrl.sbatch
+	sbatch hpc/bench_etlp.sbatch
+	sbatch hpc/bench_ostl.sbatch
+	sbatch hpc/bench_osttp.sbatch
+	sbatch hpc/bench_ottt.sbatch
+	sbatch hpc/bench_stsf.sbatch
+	sbatch hpc/bench_tp.sbatch
+
+.PHONY: bench custom dry-bench dry-custom test smoke clean clean-cache all-opt

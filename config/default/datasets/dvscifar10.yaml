@@ -1,6 +1,18 @@
 name: DVSCIFAR10
 supported_net_types: [fc, recurrent, conv]
-batch_size: 64
-T: 10
-seed: null
+batch_size:
+  value: 64
+  type: categorical
+  list: [16, 32, 64, 128]
+T:
+  value: 10
+  type: int
+  min: 5
+  max: 20
+  step: 1
+seed:
+  value: null
+  type: int
+  min: 1
+  max: 1000
 pin_memory: false

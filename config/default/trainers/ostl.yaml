@@ -1,7 +1,15 @@
 name: ostl
 supported_net_types: [fc]
-lr: 1.0e-3
-batch_size: 256
+lr:
+  value: 1.0e-3
+  type: float
+  min: 1.0e-5
+  max: 1.0e-1
+  log: true
+batch_size:
+  value: 256
+  type: categorical
+  list: [64, 128, 256, 512]
 grad_clip: 0.0
 use_optimizer: false
 deferred: false

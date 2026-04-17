@@ -11,6 +11,11 @@ Usage:
 
 Called by run_exp_campaign.py for each experiment in the campaign.
 You can also call it directly for debugging a single experiment.
+
+When spec.opt is True, an Optuna study is run instead of a single training run.
+Each trial samples new hyper-parameters from the search space defined in the
+YAML config (tunable blocks: {value, type, min, max, list}).  Study artefacts
+(trials.csv, best_params.yaml) are written to <output_dir>/optuna/.
 """
 
 import json
@@ -24,7 +29,6 @@ import numpy as np
 import torch
 
 # ── Path setup ─────────────────────────────────────────────────────────────
-# Allow imports from src/ without installing the package
 _SRC = Path(__file__).resolve().parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
@@ -42,24 +46,23 @@ from trainers import TRAINER_REGISTRY
 from campaign.neurobench_eval import run_neurobench
 
 
-def main(spec_path: str, output_dir: str) -> None:
-    spec = ExperimentSpec.load(spec_path)
-    out  = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
+# Keys in YAML configs used only by the compatibility system (campaign/compatibility.py).
+# They must be stripped before passing config dicts to constructors.
+_CONFIG_METADATA_KEYS = {"supported_net_types", "net_type"}
 
-    # ── Logging ────────────────────────────────────────────────────────────
-    log_level = spec.runtime.get("log_level", "INFO").upper()
-    logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(out / "log.txt"),
-        ],
-    )
-    log = logging.getLogger(__name__)
-    log.info("Starting experiment: %s", spec.name)
+def _strip_metadata(cfg: dict) -> dict:
+    """Remove campaign-level metadata keys that are not constructor arguments."""
+    return {k: v for k, v in cfg.items() if k not in _CONFIG_METADATA_KEYS}
 
+
+def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) -> dict:
+    """
+    Core training loop: build dataset/model/trainer, train for spec.runtime
+    epochs, optionally run NeuroBench, and return a metrics dict.
+
+    The spec must already have plain (non-tunable-block) values — either
+    normalised by normalize_optuna_attrs or resolved by suggest_from_cfg.
+    """
     # ── Reproducibility ────────────────────────────────────────────────────
     seed = int(spec.runtime.get("seed", 42))
     random.seed(seed)
@@ -89,13 +92,13 @@ def main(spec_path: str, output_dir: str) -> None:
     ds_cfg["seed"] = seed
     ds_cfg["pin_memory"] = (device.type == "cuda")
     train_loader, test_loader = LOADER_REGISTRY[dataset_name](
-        **{k: v for k, v in ds_cfg.items() if v is not None}
+        **{k: v for k, v in _strip_metadata(ds_cfg).items() if v is not None}
     )
 
     # ── Network ────────────────────────────────────────────────────────────
     m_cfg = dict(spec.model)
     model_name = m_cfg.pop("name")
-    m_cfg.pop("algorithm_name", None)  # unused after removing algorithm-model override logic
+    m_cfg.pop("algorithm_name", None)
 
     if model_name not in NETWORK_REGISTRY:
         raise ValueError(
@@ -103,7 +106,7 @@ def main(spec_path: str, output_dir: str) -> None:
         )
     log.info("Building network: %s", model_name)
     network = NETWORK_REGISTRY[model_name](
-        **{k: v for k, v in m_cfg.items() if v is not None}
+        **{k: v for k, v in _strip_metadata(m_cfg).items() if v is not None}
     )
     network = network.to(device)
 
@@ -124,7 +127,7 @@ def main(spec_path: str, output_dir: str) -> None:
         network=network,
         lr=t_cfg.pop("lr", 1e-3),
         batch_size=batch_size,
-        **{k: v for k, v in t_cfg.items() if v is not None},
+        **{k: v for k, v in _strip_metadata(t_cfg).items() if v is not None},
     )
     trainer = trainer.to(device)
 
@@ -140,8 +143,8 @@ def main(spec_path: str, output_dir: str) -> None:
         test_acc      = evaluate(network, test_loader, device)
 
         epoch_metrics.append({
-            "epoch":         epoch,
-            "train_loss":    train_metrics["loss"],
+            "epoch":          epoch,
+            "train_loss":     train_metrics["loss"],
             "train_accuracy": train_metrics["accuracy"],
             "test_accuracy":  test_acc,
         })
@@ -170,23 +173,91 @@ def main(spec_path: str, output_dir: str) -> None:
             log.warning("NeuroBench evaluation failed: %s", e)
             nb_results = {"error": str(e)}
 
-    # ── Save results ───────────────────────────────────────────────────────
-    save_experiment_config(out, spec)
-
-    metrics = {
-        "name":          spec.name,
-        "trainer":       trainer_name,
-        "model":         model_name,
-        "dataset":       dataset_name,
-        "test_accuracy": final_test_acc,
-        "train_loss":    epoch_metrics[-1]["train_loss"] if epoch_metrics else 0.0,
-        "elapsed_s":     elapsed,
-        "epochs":        epochs,
-        "epoch_metrics": epoch_metrics,
-        "neurobench":    nb_results,
+    return {
+        "name":           spec.name,
+        "trainer":        trainer_name,
+        "model":          model_name,
+        "dataset":        dataset_name,
+        "test_accuracy":  final_test_acc,
+        "train_loss":     epoch_metrics[-1]["train_loss"] if epoch_metrics else 0.0,
+        "elapsed_s":      elapsed,
+        "epochs":         epochs,
+        "epoch_metrics":  epoch_metrics,
+        "neurobench":     nb_results,
     }
-    save_experiment_metrics(out, metrics)
 
+
+def main(spec_path: str, output_dir: str) -> None:
+    spec = ExperimentSpec.load(spec_path)
+    out  = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    # ── Logging ────────────────────────────────────────────────────────────
+    log_level = spec.runtime.get("log_level", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(out / "log.txt"),
+        ],
+    )
+    log = logging.getLogger(__name__)
+    log.info("Starting experiment: %s", spec.name)
+
+    # ── Normal run (opt=False) ──────────────────────────────────────────────
+    if not spec.opt:
+        metrics = _train_and_evaluate(spec, out, log)
+        save_experiment_config(out, spec)
+        save_experiment_metrics(out, metrics)
+        log.info("Results written to: %s", out)
+        return
+
+    # ── Optuna run (opt=True) ───────────────────────────────────────────────
+    # Each trial resolves tunable blocks to concrete values, then trains.
+    # All trials run in the same subprocess; GPU memory is freed between trials.
+    from campaign.optuna_opt import run_study, suggest_from_cfg
+
+    def objective(trial) -> float:
+        trial_dir = out / "trials" / f"trial_{trial.number:04d}"
+        trial_dir.mkdir(parents=True, exist_ok=True)
+
+        trial_spec = ExperimentSpec(
+            name    = f"{spec.name}_t{trial.number}",
+            opt     = False,
+            trainer = suggest_from_cfg(spec.trainer, trial, "trainer"),
+            model   = suggest_from_cfg(spec.model,   trial, "model"),
+            dataset = suggest_from_cfg(spec.dataset,  trial, "dataset"),
+            runtime = spec.runtime,
+            optuna  = {},
+        )
+
+        metrics = _train_and_evaluate(trial_spec, trial_dir, log)
+        save_experiment_config(trial_dir, trial_spec)
+        save_experiment_metrics(trial_dir, metrics)
+
+        # Free GPU memory before the next trial
+        torch.cuda.empty_cache()
+        return float(metrics["test_accuracy"])
+
+    seed = int(spec.runtime.get("seed", 42))
+    optuna_cfg = {**spec.optuna, "seed": seed}
+
+    study = run_study(
+        spec_name  = spec.name,
+        optuna_cfg = optuna_cfg,
+        out_dir    = out,
+        objective  = objective,
+    )
+
+    # Save the best trial's config and metrics at the experiment root
+    best_trial_dir = out / "trials" / f"trial_{study.best_trial.number:04d}"
+    if (best_trial_dir / "metrics.json").exists():
+        import shutil
+        shutil.copy(best_trial_dir / "metrics.json", out / "metrics.json")
+        shutil.copy(best_trial_dir / "config.yaml",  out / "config.yaml")
+
+    log.info("Optuna study complete. Best trial: #%d", study.best_trial.number)
     log.info("Results written to: %s", out)
 
 

@@ -62,6 +62,8 @@ def from_benchmarking(yaml_path: str | Path) -> list[ExperimentSpec]:
     models   = cfg.get("models")   or list_defaults("models")
     datasets = cfg.get("datasets") or list_defaults("datasets")
     runtime  = merge(_DEFAULT_RUNTIME, cfg.get("runtime") or {})
+    opt      = bool(cfg.get("opt", False))
+    optuna   = cfg.get("optuna") or {}
 
     # Report skipped combinations for transparency
     skipped = skipped_combinations(trainers, models, datasets)
@@ -90,7 +92,8 @@ def from_benchmarking(yaml_path: str | Path) -> list[ExperimentSpec]:
             dataset_override={},
             runtime=runtime,
             exp_name=None,
-            opt=False,
+            opt=opt,
+            optuna=optuna,
         )
         specs.append(spec)
 
@@ -161,6 +164,7 @@ def from_custom(yaml_path: str | Path) -> list[ExperimentSpec]:
             runtime=merge(_DEFAULT_RUNTIME, runtime_override),
             exp_name=exp_cfg.get("name") or key,
             opt=bool(exp_cfg.get("opt", False)),
+            optuna=exp_cfg.get("optuna") or {},
         )
         specs.append(spec)
 
@@ -182,6 +186,7 @@ def _build_spec(
     runtime: dict,
     exp_name: str | None,
     opt: bool,
+    optuna: dict | None = None,
 ) -> ExperimentSpec:
     """
     Load defaults for each component, apply overrides, resolve model-for-dataset,
@@ -223,4 +228,5 @@ def _build_spec(
         model=model_cfg,
         dataset=dataset_cfg,
         runtime=runtime,
+        optuna=optuna or {},
     )

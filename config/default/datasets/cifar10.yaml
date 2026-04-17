@@ -1,8 +1,20 @@
 name: CIFAR10
 supported_net_types: [fc, recurrent, conv]
-batch_size: 128
-T: 25
-seed: null
+batch_size:
+  value: 128
+  type: categorical
+  list: [32, 64, 128, 256]
+T:
+  value: 25
+  type: int
+  min: 10
+  max: 50
+  step: 5
+seed:
+  value: null
+  type: int
+  min: 1
+  max: 1000
 pin_memory: false
 download: true
 data_root: null
