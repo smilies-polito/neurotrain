@@ -5,6 +5,8 @@ Each spec holds a fully resolved configuration (defaults merged with overrides)
 for one training run: trainer + model + dataset + runtime settings.
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path

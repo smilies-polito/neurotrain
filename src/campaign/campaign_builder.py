@@ -9,6 +9,8 @@ Two entry points:
 Both return list[ExperimentSpec] which is the common sink for experiment.py.
 """
 
+from __future__ import annotations
+
 import logging
 from itertools import product
 from pathlib import Path
