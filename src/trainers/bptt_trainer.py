@@ -5,6 +5,8 @@ This is a thin wrapper around snnTorch's BPTT functionality to match
 the BaseTrainer interface for fair algorithm comparison.
 """
 
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 import snntorch.functional as SF

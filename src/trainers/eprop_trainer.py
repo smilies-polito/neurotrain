@@ -91,6 +91,8 @@ Known deviations from the paper:
 ──────────────────────────────────────────────────────────────────────
 """
 
+from __future__ import annotations
+
 import math
 
 import torch
