@@ -3,6 +3,7 @@
 
 default:
   name: r_snn
+  net_type: recurrent
   in_shape: [784]
   hidden_sizes: [256]
   num_classes: 10

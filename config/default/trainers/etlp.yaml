@@ -1,4 +1,5 @@
 name: etlp
+supported_net_types: [fc, recurrent]
 lr: 1.0e-3
 batch_size: 256
 surrogate_scale: 0.3

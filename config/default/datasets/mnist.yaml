@@ -1,4 +1,5 @@
 name: MNIST
+supported_net_types: [fc, recurrent, conv]
 batch_size: 256
 T: 25           # number of rate-coding timesteps
 seed: null

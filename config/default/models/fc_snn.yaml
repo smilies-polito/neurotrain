@@ -3,6 +3,7 @@
 
 default:
   name: fc_snn
+  net_type: fc
   in_shape: [784]
   hidden_sizes: [256]
   num_classes: 10

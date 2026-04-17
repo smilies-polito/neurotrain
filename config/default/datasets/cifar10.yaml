@@ -1,4 +1,5 @@
 name: CIFAR10
+supported_net_types: [fc, recurrent, conv]
 batch_size: 128
 T: 25
 seed: null

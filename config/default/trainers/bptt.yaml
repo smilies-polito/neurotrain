@@ -1,4 +1,5 @@
 name: bptt
+supported_net_types: [fc, recurrent, conv]
 lr: 1.0e-3
 batch_size: 256
 loss_type: ce_rate   # ce_rate | mse_count | ce_count

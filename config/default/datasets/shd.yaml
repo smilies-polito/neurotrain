@@ -1,4 +1,5 @@
 name: SHD
+supported_net_types: [fc, recurrent]   # flat 700-channel sequence, no spatial dims
 batch_size: 128
 T: 100
 seed: null

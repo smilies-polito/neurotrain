@@ -209,7 +209,7 @@ def _build_spec(
     # Inject names so experiment.py can dispatch
     trainer_cfg["name"] = trainer_name.lower()
     model_cfg["name"]   = model_name.lower()
-    dataset_cfg["name"] = dataset_name
+    dataset_cfg["name"] = dataset_name.lower()
 
     # Add algorithm name to model cfg so get_network can pick the right arch
     model_cfg["algorithm_name"] = trainer_name.lower()

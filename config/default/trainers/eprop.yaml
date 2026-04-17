@@ -1,4 +1,5 @@
 name: eprop
+supported_net_types: [recurrent]
 lr: 1.0e-3
 batch_size: 256
 gamma: null           # eligibility trace decay (defaults internally)

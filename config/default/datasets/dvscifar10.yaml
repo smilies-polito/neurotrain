@@ -1,4 +1,5 @@
 name: DVSCIFAR10
+supported_net_types: [fc, recurrent, conv]
 batch_size: 64
 T: 10
 seed: null

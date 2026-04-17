@@ -1,4 +1,5 @@
 name: ostl
+supported_net_types: [fc]
 lr: 1.0e-3
 batch_size: 256
 grad_clip: 0.0

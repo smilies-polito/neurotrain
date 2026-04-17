@@ -1,4 +1,5 @@
 name: decolle
+supported_net_types: [conv]
 lr: 1.0e-3
 batch_size: 256
 use_optimizer: true

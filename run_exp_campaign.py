@@ -84,12 +84,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    # Configure logging
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
     # ── Build experiment list ───────────────────────────────────────────────
+    # Load the experiments found in `input_path` together with checks   
     input_path = Path(args.benchmarking or args.custom)
     if not input_path.exists():
         log.error("Config file not found: %s", input_path)

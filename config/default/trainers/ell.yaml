@@ -1,4 +1,5 @@
 name: ell
+supported_net_types: [local_classifier]
 lr: 1.0e-3
 batch_size: 256
 use_optimizer: true

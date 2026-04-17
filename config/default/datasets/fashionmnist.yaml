@@ -1,4 +1,5 @@
 name: FashionMNIST
+supported_net_types: [fc, recurrent, conv]
 batch_size: 256
 T: 25
 seed: null

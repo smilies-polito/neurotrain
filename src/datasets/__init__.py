@@ -4,7 +4,7 @@ To add a new dataset:
   1. Create src/datasets/my_loader.py with a loader function returning (train_loader, test_loader).
   2. Add two lines here:
        from datasets.my_loader import MyLoader
-       LOADER_REGISTRY["MyDataset"] = MyLoader
+       LOADER_REGISTRY["mydataset"] = MyLoader
 """
 
 from datasets.mnist_loader import MNISTLoader
@@ -23,18 +23,18 @@ from datasets.neurobench_loaders import (
 )
 
 LOADER_REGISTRY: dict[str, callable] = {
-    "MNIST":           MNISTLoader,
-    "CIFAR10":         CIFAR10Loader,
-    "FashionMNIST":    FashionMNISTLoader,
-    "SVHN":            SVHNLoader,
-    "DVSGesture":      DVSGestureLoader,
-    "NMNIST":          NMNISTLoader,
-    "SHD":             SHDLoader,
-    "DVSCIFAR10":      DVSCifar10Loader,
-    "SpeechCommands":  SpeechCommandsLoader,
-    "WISDM":           WISDMLoader,
-    "PrimateReaching": PrimateReachingLoader,
-    "MackeyGlass":     MackeyGlassLoader,
+    "mnist":           MNISTLoader,
+    "cifar10":         CIFAR10Loader,
+    "fashionmnist":    FashionMNISTLoader,
+    "svhn":            SVHNLoader,
+    "dvsgesture":      DVSGestureLoader,
+    "nmnist":          NMNISTLoader,
+    "shd":             SHDLoader,
+    "dvscifar10":      DVSCifar10Loader,
+    "speechcommands":  SpeechCommandsLoader,
+    "wisdm":           WISDMLoader,
+    "primatereaching": PrimateReachingLoader,
+    "mackeyglass":     MackeyGlassLoader,
 }
 
 __all__ = ["LOADER_REGISTRY"]

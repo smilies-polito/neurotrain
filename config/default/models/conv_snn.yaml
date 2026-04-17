@@ -4,6 +4,7 @@
 
 default:
   name: conv_snn
+  net_type: conv
   in_shape: [3, 32, 32]
   num_classes: 10
   beta: 0.9

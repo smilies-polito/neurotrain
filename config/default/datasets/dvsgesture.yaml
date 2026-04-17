@@ -1,4 +1,5 @@
 name: DVSGesture
+supported_net_types: [fc, recurrent, conv]
 batch_size: 32
 T: 25
 seed: null
