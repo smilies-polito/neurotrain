@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --output=hpc/slurm_outputs/snn-stsf-%j.out
-#SBATCH --error=hpc/slurm_outputs/snn-stsf-%j.err
+#SBATCH --output=snn-stsf-%j.out
+#SBATCH --error=snn-stsf-%j.err
 
 set -euo pipefail
 

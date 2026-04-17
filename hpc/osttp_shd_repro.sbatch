@@ -11,8 +11,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
-#SBATCH --output=hpc/slurm_outputs/%x-%j.out
-#SBATCH --error=hpc/slurm_outputs/%x-%j.err
+#SBATCH --output=%x-%j.out
+#SBATCH --error=%x-%j.err
 
 set -euo pipefail
 
