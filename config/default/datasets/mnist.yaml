@@ -1,0 +1,7 @@
+name: MNIST
+batch_size: 256
+T: 25           # number of rate-coding timesteps
+seed: null
+pin_memory: false
+download: true
+data_root: null  # null = uses STSF_DATA env var or ../Data/

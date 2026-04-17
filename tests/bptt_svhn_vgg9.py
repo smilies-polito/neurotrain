@@ -59,7 +59,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.svhn_loader import SVHNLoader
-from networks.benchmarking.vgg9_svhn import SVHN_VGG9
+from networks.vgg9_svhn import SVHN_VGG9
 from trainers.bptt_trainer import BPTTTrainer
 
 # -----------------------------------------------------------------------------

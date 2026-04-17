@@ -71,7 +71,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.dvsgesture_loader import DVSGestureLoader
-from networks.benchmarking.r_snn import RSNN
+from networks.r_snn import RSNN
 from trainers.decolle_trainer import DECOLLETrainer
 
 

@@ -1,0 +1,6 @@
+name: bptt
+lr: 1.0e-3
+batch_size: 256
+loss_type: ce_rate   # ce_rate | mse_count | ce_count
+grad_clip: null      # null disables gradient clipping
+use_optimizer: true

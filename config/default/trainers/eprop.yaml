@@ -1,0 +1,13 @@
+name: eprop
+lr: 1.0e-3
+batch_size: 256
+gamma: null           # eligibility trace decay (defaults internally)
+dt: null
+tau_mem: null
+tau_out: null
+threshold: null
+lr_layer_norm: [1.0, 1.0, 1.0]
+use_optimizer: true
+update_last: false
+update_every: 1
+seq_batch_size: 1

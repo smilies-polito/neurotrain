@@ -74,7 +74,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.dvsgesture_loader import DVSGestureLoader
-from networks.benchmarking.vgg9_ottt import OTTT_VGG9
+from networks.vgg9_ottt import OTTT_VGG9
 from trainers.bptt_trainer import BPTTTrainer
 
 # -----------------------------------------------------------------------------

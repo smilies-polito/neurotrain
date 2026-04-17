@@ -33,7 +33,7 @@ class RSNN(BaseSNN):
 
     def __init__(
         self,
-        in_shape: Tuple[int, ...] = (1, 28, 28),
+        in_shape: Tuple[int, ...] | None = None,
         num_classes: int = 10,
         hidden_sizes: Sequence[int] = (256,),
         beta: float = 0.9,
@@ -43,6 +43,9 @@ class RSNN(BaseSNN):
         out_integrator: bool = False,
     ) -> None:
         super().__init__()
+
+        if in_shape is None:
+            in_shape = (784,)
 
         if hidden_sizes is None:
             hidden_sizes = (256,)

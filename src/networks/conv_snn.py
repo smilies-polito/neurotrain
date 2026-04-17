@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple, List
+from typing import Tuple
 
 import snntorch as snn
 import torch
@@ -25,13 +25,16 @@ class ConvSNN(BaseSNN):
 
     def __init__(
         self,
-        in_shape: Tuple[int, int, int] = (3, 32, 32),
+        in_shape: Tuple[int, int, int] | None = None,
         num_classes: int = 10,
         beta: float = 0.95,
         threshold: float = 1.0,
         spike_grad=None,
     ) -> None:
         super().__init__()
+
+        if in_shape is None:
+            in_shape = (3, 32, 32)
 
         if len(in_shape) != 3:
             raise ValueError("in_shape must be (C, H, W).")

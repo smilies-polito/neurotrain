@@ -1,0 +1,12 @@
+name: etlp
+lr: 1.0e-3
+batch_size: 256
+surrogate_scale: 0.3
+weight_l1: 0.0
+weight_l2: 0.0
+update_rate_hz: 1000.0
+dt_ms: 1.0
+feedback_distribution: normal
+feedback_scale: 1.0
+use_optimizer: false
+grad_clip: 0.0

@@ -1,0 +1,9 @@
+name: tp
+lr: 1.0e-3
+batch_size: 256
+alpha: 0.98
+beta: 0.98
+vth: 1.0
+surrogate_scale: 1.0
+train_target_propagator: true
+use_optimizer: true

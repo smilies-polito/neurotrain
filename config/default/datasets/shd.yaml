@@ -1,0 +1,5 @@
+name: SHD
+batch_size: 128
+T: 100
+seed: null
+pin_memory: false

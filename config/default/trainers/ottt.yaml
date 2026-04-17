@@ -1,0 +1,8 @@
+name: ottt
+lr: 1.0e-3
+batch_size: 256
+trace_decay: null       # null = inferred from network tau
+online_updates: true
+loss_lambda: null
+grad_clip: null
+sanitize_grads: null

@@ -53,7 +53,7 @@ Conclusions:
 ### Usage examples
 
 ```python
-from networks.benchmarking.fc_snn import FCSNN
+from networks.fc_snn import FCSNN
 
 model = FCSNN(in_shape=(1, 28, 28), num_classes=10, hidden_sizes=(256, 128))
 model.reset()
@@ -95,7 +95,7 @@ Notes:
 ### Usage examples
 
 ```python
-from networks.benchmarking.r_snn import RSNN
+from networks.r_snn import RSNN
 
 model = RSNN(in_shape=(1, 28, 28), num_classes=10, hidden_sizes=(256,))
 model.reset()
@@ -139,7 +139,7 @@ for t in range(T):
 ### Usage examples
 
 ```python
-from networks.benchmarking.conv_snn import ConvSNN
+from networks.conv_snn import ConvSNN
 
 model = ConvSNN(
     in_shape=(1, 28, 28),
@@ -199,7 +199,7 @@ optionally scaled by `base_channels`.
 ### Usage examples
 
 ```python
-from networks.benchmarking.vg11_snn import VG11SNN
+from networks.vg11_snn import VG11SNN
 
 model = VG11SNN(
     in_shape=(3, 32, 32),

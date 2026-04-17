@@ -1,0 +1,26 @@
+# Convolutional SNN with LIF neurons.
+# Fixed architecture: 12C5-MP2 -> 32C5-MP2 -> FC -> LIF(out)
+# Works with spatial (image) datasets.
+
+default:
+  name: conv_snn
+  in_shape: [3, 32, 32]
+  num_classes: 10
+  beta: 0.9
+  threshold: 1.0
+
+mnist:
+  in_shape: [1, 28, 28]
+  num_classes: 10
+
+fashionmnist:
+  in_shape: [1, 28, 28]
+  num_classes: 10
+
+cifar10:
+  in_shape: [3, 32, 32]
+  num_classes: 10
+
+svhn:
+  in_shape: [3, 32, 32]
+  num_classes: 10

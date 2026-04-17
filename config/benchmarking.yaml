@@ -1,0 +1,24 @@
+# Benchmarking mode configuration.
+#
+# Lists the trainers, models and datasets to compare.
+# Empty list means "all available defaults in config/default/<kind>/".
+#
+# See config/README.md for full documentation.
+
+trainers:
+  - bptt
+  - stsf
+
+models:
+  - fc_snn
+
+datasets:
+  - MNIST
+  - FashionMNIST
+
+# Shared runtime settings (override defaults for all experiments)
+runtime:
+  epochs: 10
+  device: cuda
+  seed: 42
+  neurobench: true

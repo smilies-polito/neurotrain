@@ -1,0 +1,8 @@
+name: ostl
+lr: 1.0e-3
+batch_size: 256
+grad_clip: 0.0
+use_optimizer: false
+deferred: false
+feedback_alignment: false
+ostl_complete: false

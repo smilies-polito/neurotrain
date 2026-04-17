@@ -1,0 +1,7 @@
+name: FashionMNIST
+batch_size: 256
+T: 25
+seed: null
+pin_memory: false
+download: true
+data_root: null

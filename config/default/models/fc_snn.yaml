@@ -1,0 +1,42 @@
+# Fully-connected SNN with LIF neurons.
+# Supports per-dataset section overrides (see config/README.md).
+
+default:
+  name: fc_snn
+  in_shape: [784]
+  hidden_sizes: [256]
+  num_classes: 10
+  beta: 0.9
+  threshold: 1.0
+  reset_mechanism: subtract
+  out_integrator: false
+
+mnist:
+  in_shape: [784]
+  hidden_sizes: [256]
+  num_classes: 10
+
+fashionmnist:
+  in_shape: [784]
+  hidden_sizes: [800]
+  num_classes: 10
+
+cifar10:
+  in_shape: [3072]
+  hidden_sizes: [512]
+  num_classes: 10
+
+svhn:
+  in_shape: [3072]
+  hidden_sizes: [512]
+  num_classes: 10
+
+nmnist:
+  in_shape: [1156]
+  hidden_sizes: [256]
+  num_classes: 10
+
+dvsgesture:
+  in_shape: [16384]
+  hidden_sizes: [512]
+  num_classes: 11

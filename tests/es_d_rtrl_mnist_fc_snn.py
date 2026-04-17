@@ -85,7 +85,7 @@ if "networks" not in sys.modules:
 
 # [MODIFY] Import dataset, trainer and network
 from datasets.mnist_loader import MNISTLoader
-from networks.benchmarking.fc_snn import FCSNN
+from networks.fc_snn import FCSNN
 from trainers.es_d_rtrl_trainer import ESDRTRLTrainer
 
 # -----------------------------------------------------------------------------

@@ -34,7 +34,7 @@ import torch.nn as nn
 from snntorch import surrogate
 
 from networks.base_snn import BaseSNN
-from networks.benchmarking._components import (
+from networks._components import (
     ATanSurrogate,
     LeakyIntegrator,
     Scale,

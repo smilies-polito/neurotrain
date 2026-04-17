@@ -66,7 +66,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.fashionmnist_loader import FashionMNISTLoader
-from networks.benchmarking.r_snn import RSNN
+from networks.r_snn import RSNN
 from trainers.eprop_trainer import EpropTrainer
 
 # -----------------------------------------------------------------------------

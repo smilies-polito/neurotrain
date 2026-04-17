@@ -67,7 +67,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.fashionmnist_loader import FashionMNISTLoader
-from networks.benchmarking.vgg9 import vgg9_ottt_fashionmnist as OTTT_VGG9_FashionMNIST
+from networks.vgg9 import vgg9_ottt_fashionmnist as OTTT_VGG9_FashionMNIST
 from trainers.ottt_trainer import OTTTTrainer
 
 

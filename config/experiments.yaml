@@ -1,0 +1,42 @@
+# Custom experiments configuration.
+#
+# Each top-level key is one experiment. The sub-keys configure the three
+# components (trainer, model, dataset) and the runtime.
+# Values in trainer/model/dataset override the defaults from config/default/.
+#
+# See config/README.md for full documentation.
+
+# Example 1: BPTT with a smaller hidden layer on MNIST
+bptt_small_mnist:
+  name: bptt_small_fc_mnist
+  trainer:
+    name: bptt
+    lr: 5.0e-4
+  model:
+    name: fc_snn
+    hidden_sizes: [128]   # override: smaller network
+  dataset:
+    name: MNIST
+    T: 25
+  runtime:
+    epochs: 5
+    device: cuda
+
+# Example 2: STSF on FashionMNIST with Optuna-tunable lr
+stsf_fmnist_tuned:
+  name: stsf_fmnist_tunable_lr
+  opt: false   # set to true to enable Optuna for the lr field below
+  trainer:
+    name: stsf
+    lr:
+      value: 1.0e-3
+      type: float
+      min: 1.0e-5
+      max: 1.0e-1
+  model:
+    name: fc_snn
+  dataset:
+    name: FashionMNIST
+  runtime:
+    epochs: 10
+    device: cuda

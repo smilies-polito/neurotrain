@@ -30,9 +30,9 @@ DATA_ROOT = Path(__file__).resolve().parent.parent / "Data" / "NeuroBench"
 class SpeechCommandsWrapper(Dataset):
     """Wrapper to make SpeechCommands compatible with our training loop."""
     
-    def __init__(self, dataset, timesteps: int):
+    def __init__(self, dataset, T: int):
         self.dataset = dataset
-        self.timesteps = timesteps
+        self.T = T
     
     def __len__(self):
         return len(self.dataset)
@@ -44,16 +44,16 @@ class SpeechCommandsWrapper(Dataset):
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).float()
         
-        # Ensure shape is [timesteps, features]
+        # Ensure shape is [T, features]
         if data.dim() == 1:
             data = data.unsqueeze(0)
         
-        # Resample/pad to match desired timesteps
-        if data.shape[0] != self.timesteps:
-            data = self._resample(data, self.timesteps)
+        # Resample/pad to match desired T
+        if data.shape[0] != self.T:
+            data = self._resample(data, self.T)
         
         # Flatten features if needed
-        data = data.reshape(self.timesteps, -1)
+        data = data.reshape(self.T, -1)
         
         return data, label
     
@@ -71,9 +71,9 @@ class SpeechCommandsWrapper(Dataset):
 class WISDMWrapper(Dataset):
     """Wrapper to make WISDM compatible with our training loop."""
     
-    def __init__(self, dataset, timesteps: int):
+    def __init__(self, dataset, T: int):
         self.dataset = dataset
-        self.timesteps = timesteps
+        self.T = T
     
     def __len__(self):
         return len(self.dataset)
@@ -84,15 +84,15 @@ class WISDMWrapper(Dataset):
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).float()
         
-        # Ensure shape is [timesteps, features]
+        # Ensure shape is [T, features]
         if data.dim() == 1:
             data = data.unsqueeze(0)
         
-        # Resample to match timesteps
-        if data.shape[0] != self.timesteps:
-            data = self._resample(data, self.timesteps)
+        # Resample to match T
+        if data.shape[0] != self.T:
+            data = self._resample(data, self.T)
         
-        data = data.reshape(self.timesteps, -1)
+        data = data.reshape(self.T, -1)
         
         return data, label
     
@@ -107,9 +107,9 @@ class WISDMWrapper(Dataset):
 class PrimateReachingWrapper(Dataset):
     """Wrapper for PrimateReaching (regression task)."""
     
-    def __init__(self, dataset, timesteps: int):
+    def __init__(self, dataset, T: int):
         self.dataset = dataset
-        self.timesteps = timesteps
+        self.T = T
     
     def __len__(self):
         return len(self.dataset)
@@ -125,10 +125,10 @@ class PrimateReachingWrapper(Dataset):
         if data.dim() == 1:
             data = data.unsqueeze(0)
         
-        if data.shape[0] != self.timesteps:
-            data = self._resample(data, self.timesteps)
+        if data.shape[0] != self.T:
+            data = self._resample(data, self.T)
         
-        data = data.reshape(self.timesteps, -1)
+        data = data.reshape(self.T, -1)
         
         return data, target
     
@@ -143,9 +143,9 @@ class PrimateReachingWrapper(Dataset):
 class MackeyGlassWrapper(Dataset):
     """Wrapper for MackeyGlass chaotic time series (regression task)."""
     
-    def __init__(self, dataset, timesteps: int):
+    def __init__(self, dataset, T: int):
         self.dataset = dataset
-        self.timesteps = timesteps
+        self.T = T
     
     def __len__(self):
         return len(self.dataset)
@@ -161,11 +161,11 @@ class MackeyGlassWrapper(Dataset):
         if data.dim() == 1:
             data = data.unsqueeze(-1)  # Add feature dimension
         
-        if data.shape[0] != self.timesteps:
-            data = self._resample(data, self.timesteps)
+        if data.shape[0] != self.T:
+            data = self._resample(data, self.T)
         
-        # Ensure consistent output shape [timesteps, features]
-        data = data.reshape(self.timesteps, -1)
+        # Ensure consistent output shape [T, features]
+        data = data.reshape(self.T, -1)
         
         return data, target
     
@@ -177,7 +177,7 @@ class MackeyGlassWrapper(Dataset):
         return data[indices]
 
 
-def SpeechCommandsLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
+def SpeechCommandsLoader(batch_size: int, T: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Google Speech Commands (keyword spotting).
     
@@ -190,8 +190,8 @@ def SpeechCommandsLoader(batch_size: int, timesteps: int, pin_memory: bool = Fal
     train_dataset = SpeechCommands(path=DATA_ROOT.as_posix(), subset="training")
     test_dataset = SpeechCommands(path=DATA_ROOT.as_posix(), subset="testing")
     
-    train_wrapped = SpeechCommandsWrapper(train_dataset, timesteps)
-    test_wrapped = SpeechCommandsWrapper(test_dataset, timesteps)
+    train_wrapped = SpeechCommandsWrapper(train_dataset, T)
+    test_wrapped = SpeechCommandsWrapper(test_dataset, T)
     
     trainloader = DataLoader(
         train_wrapped,
@@ -211,7 +211,7 @@ def SpeechCommandsLoader(batch_size: int, timesteps: int, pin_memory: bool = Fal
     return trainloader, testloader
 
 
-def WISDMLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
+def WISDMLoader(batch_size: int, T: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for WISDM Human Activity Recognition.
     
@@ -223,8 +223,8 @@ def WISDMLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=
     train_dataset = WISDM(root=DATA_ROOT.as_posix(), split="train", download=True)
     test_dataset = WISDM(root=DATA_ROOT.as_posix(), split="test", download=True)
     
-    train_wrapped = WISDMWrapper(train_dataset, timesteps)
-    test_wrapped = WISDMWrapper(test_dataset, timesteps)
+    train_wrapped = WISDMWrapper(train_dataset, T)
+    test_wrapped = WISDMWrapper(test_dataset, T)
     
     trainloader = DataLoader(
         train_wrapped,
@@ -244,7 +244,7 @@ def WISDMLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=
     return trainloader, testloader
 
 
-def PrimateReachingLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
+def PrimateReachingLoader(batch_size: int, T: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Primate Reaching motor prediction.
     
@@ -267,8 +267,8 @@ def PrimateReachingLoader(batch_size: int, timesteps: int, pin_memory: bool = Fa
         download=True
     )
     
-    train_wrapped = PrimateReachingWrapper(train_dataset, timesteps)
-    test_wrapped = PrimateReachingWrapper(test_dataset, timesteps)
+    train_wrapped = PrimateReachingWrapper(train_dataset, T)
+    test_wrapped = PrimateReachingWrapper(test_dataset, T)
     
     trainloader = DataLoader(
         train_wrapped,
@@ -288,7 +288,7 @@ def PrimateReachingLoader(batch_size: int, timesteps: int, pin_memory: bool = Fa
     return trainloader, testloader
 
 
-def MackeyGlassLoader(batch_size: int, timesteps: int, pin_memory: bool = False, seed=None):
+def MackeyGlassLoader(batch_size: int, T: int, pin_memory: bool = False, seed=None):
     """
     Returns DataLoaders for Mackey-Glass chaotic time series prediction.
     
@@ -311,8 +311,8 @@ def MackeyGlassLoader(batch_size: int, timesteps: int, pin_memory: bool = False,
         download=True
     )
     
-    train_wrapped = MackeyGlassWrapper(train_dataset, timesteps)
-    test_wrapped = MackeyGlassWrapper(test_dataset, timesteps)
+    train_wrapped = MackeyGlassWrapper(train_dataset, T)
+    test_wrapped = MackeyGlassWrapper(test_dataset, T)
     
     trainloader = DataLoader(
         train_wrapped,

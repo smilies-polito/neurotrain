@@ -82,7 +82,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.shd_loader import SHDLoader
-from networks.benchmarking.r_snn import RSNN
+from networks.r_snn import RSNN
 from trainers.etlp_trainer import ETLPTrainer
 
 

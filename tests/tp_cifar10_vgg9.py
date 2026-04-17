@@ -71,7 +71,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.cifar10_loader import CIFAR10Loader
-from networks.benchmarking.vgg9_cifar10 import CIFAR10_VGG9
+from networks.vgg9_cifar10 import CIFAR10_VGG9
 from trainers.tp_trainer import TPTrainer
 
 

@@ -70,7 +70,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.mnist_loader import MNISTLoader
-from networks.benchmarking.fc_snn import FCSNN
+from networks.fc_snn import FCSNN
 from trainers.decolle_trainer import DECOLLETrainer
 
 

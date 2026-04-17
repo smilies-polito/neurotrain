@@ -67,7 +67,7 @@ from datasets.dvsgesture_loader import DVSGestureLoader
 from trainers.es_d_rtrl_trainer import ESDRTRLTrainer
 
 # Adjust this import to wherever you saved the uploaded VGG9 model file.
-from networks.benchmarking.vgg9_dvsgest import DVSGEST_VGG9
+from networks.vgg9_dvsgest import DVSGEST_VGG9
 
 
 # -----------------------------------------------------------------------------

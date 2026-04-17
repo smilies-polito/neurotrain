@@ -1,0 +1,5 @@
+name: DVSCIFAR10
+batch_size: 64
+T: 10
+seed: null
+pin_memory: false

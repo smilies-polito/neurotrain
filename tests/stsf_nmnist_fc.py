@@ -69,7 +69,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.nmnist_loader import NMNISTLoader
-from networks.benchmarking.fc_snn import FCSNN
+from networks.fc_snn import FCSNN
 from trainers.stsf_trainer import STSFTrainer
 
 

@@ -62,7 +62,7 @@ if "networks" not in sys.modules:
     sys.modules["networks"] = networks_pkg
 
 from datasets.cifar10_loader import CIFAR10Loader
-from networks.benchmarking.conv_snn import ConvSNN
+from networks.conv_snn import ConvSNN
 from trainers.ell_trainer import AuxClassifier
 
 
