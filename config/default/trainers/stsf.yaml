@@ -1,5 +1,5 @@
 name: stsf
-supported_net_types: [fc, conv]
+supported_net_types: [fc]
 lr:
   value: 1.0e-3
   type: float

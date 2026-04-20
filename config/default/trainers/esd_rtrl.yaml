@@ -1,5 +1,5 @@
 name: esd_rtrl
-supported_net_types: [recurrent]
+supported_net_types: [fc, rec, conv]
 lr:
   value: 1.0e-3
   type: float

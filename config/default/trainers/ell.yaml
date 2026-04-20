@@ -1,5 +1,5 @@
 name: ell
-supported_net_types: [local_classifier]
+supported_net_types: [fc, rec, conv]
 lr:
   value: 1.0e-3
   type: float
