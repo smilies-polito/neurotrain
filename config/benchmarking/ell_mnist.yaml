@@ -7,7 +7,7 @@ models:
 datasets:
 - MNIST
 runtime:
-  epochs: 5
+  epochs: 10
   device: cuda
   seed: 42
   neurobench: false

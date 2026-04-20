@@ -33,3 +33,11 @@ cifar10:
 svhn:
   in_shape: [3, 32, 32]
   num_classes: 10
+
+nmnist:
+  in_shape: [2, 34, 34]  # 2 polarities, 34x34
+  num_classes: 10
+
+dvsgesture:
+  in_shape: [2, 128, 128]  # 2 polarities, 128x128
+  num_classes: 11

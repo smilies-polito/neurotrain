@@ -55,22 +55,22 @@ cifar10:
   in_shape: [3072]
   num_classes: 10
   hidden_sizes:
-    value: [512]
+    value: [1024]
 
 svhn:
   in_shape: [3072]
   num_classes: 10
   hidden_sizes:
-    value: [512]
+    value: [1024]
 
 nmnist:
-  in_shape: [1156]
+  in_shape: [2312]  # 2 polarities * 34 * 34
   num_classes: 10
   hidden_sizes:
-    value: [256]
+    value: [512]
 
 dvsgesture:
-  in_shape: [16384]
+  in_shape: [32768]  # 2 polarities * 128 * 128
   num_classes: 11
   hidden_sizes:
-    value: [512]
+    value: [2048]

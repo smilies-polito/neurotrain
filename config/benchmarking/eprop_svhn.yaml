@@ -7,7 +7,7 @@ models:
 datasets:
 - SVHN
 runtime:
-  epochs: 5
+  epochs: 20
   device: cuda
   seed: 42
   neurobench: false

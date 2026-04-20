@@ -61,3 +61,15 @@ svhn:
   num_classes: 10
   hidden_sizes:
     value: [512]
+
+nmnist:
+  in_shape: [2312]  # 2 polarities * 34 * 34
+  num_classes: 10
+  hidden_sizes:
+    value: [256]
+
+dvsgesture:
+  in_shape: [32768]  # 2 polarities * 128 * 128
+  num_classes: 11
+  hidden_sizes:
+    value: [1024]
