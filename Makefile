@@ -64,6 +64,9 @@ all-opt: hpc-mkdir
 	sbatch hpc/bench_stsf.sbatch
 	sbatch hpc/bench_tp.sbatch
 
+opt-bench: hpc-mkdir
+	sbatch hpc/bench.sbatch
+
 opt-bptt: hpc-mkdir
 	sbatch hpc/bench_bptt.sbatch
 opt-decolle: hpc-mkdir
