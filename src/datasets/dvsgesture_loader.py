@@ -71,6 +71,13 @@ def DVSGestureLoader(
         ]
     )
 
+    # --- ADDED WAF BYPASS ---
+    # Figshare's bot protection blocks standard downloads. 
+    # This points Tonic to the backend S3 bucket directly.
+    DVSGesture.train_url = "https://ndownloader.figshare.com/files/38022171"
+    DVSGesture.test_url = "https://ndownloader.figshare.com/files/38020584"
+    # ------------------------
+
     train_ds = DVSGesture(
         save_to=str(Path(data_root) / "DVSGesture"),
         train=True,

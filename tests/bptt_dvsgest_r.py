@@ -23,7 +23,7 @@ import torch
 # Dataset defaults
 BATCH_SIZE = 64         # Mini-batch size used for both training and evaluation.
 TIMESTEPS = 10         # Number of temporal bins produced by the DVS Gesture loader.
-NUM_WORKERS = 32         # DataLoader worker processes for DVS Gesture loading.
+NUM_WORKERS = 24         # DataLoader worker processes for DVS Gesture loading.
 DATA_ROOT = ""          # Optional DVS Gesture root override; empty string uses the loader default.
 
 # Network defaults

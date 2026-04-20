@@ -82,6 +82,9 @@ def DVSCifar10Loader(
         ]
     )
 
+    # Bypass Figshare's bot protection by pointing directly to the S3 backend
+    CIFAR10DVS.url = "https://ndownloader.figshare.com/files/38023437"
+
     full_ds = CIFAR10DVS(
         save_to=str(Path(data_root) / "DVSCIFAR10"),
         transform=transform,
