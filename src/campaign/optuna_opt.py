@@ -143,6 +143,11 @@ def run_study(
     Artifacts are written to out_dir/optuna/:
         trials.csv       — all trials with params and objective value
         best_params.yaml — hyper-parameters of the best trial
+        study.db         — SQLite DB usable with optuna-dashboard
+
+    The DB is written to /tmp during the study to avoid NFS/Lustre file-locking
+    issues common on HPC clusters, then copied to out_dir/optuna/study.db on
+    completion.  Set storage: sqlite:///... in the YAML config to override.
 
     Args:
         spec_name:   human-readable experiment name (used for the study name).
@@ -151,14 +156,27 @@ def run_study(
         out_dir:     experiment output directory.
         objective:   function (trial) -> float to maximise/minimise.
     """
+    import shutil
+    import uuid
+
     import optuna as op
 
     cfg = {**_DEFAULT_OPTUNA_CFG, **optuna_cfg}
 
-    sampler  = _build_sampler(cfg["sampler"], cfg.get("seed"))
-    pruner   = _build_pruner(cfg["pruner"])
-    storage  = cfg["storage"]
+    sampler   = _build_sampler(cfg["sampler"], cfg.get("seed"))
+    pruner    = _build_pruner(cfg["pruner"])
     direction = cfg["direction"]
+
+    # Use /tmp for the live DB to avoid NFS/Lustre locking issues; copy to
+    # out_dir once the study finishes.  A user-supplied storage: value bypasses
+    # this and is used directly.
+    user_storage = cfg["storage"]
+    if user_storage:
+        tmp_db  = None
+        storage = user_storage
+    else:
+        tmp_db  = Path(f"/tmp/optuna_{spec_name}_{uuid.uuid4().hex[:8]}.db")
+        storage = f"sqlite:///{tmp_db}"
 
     study = op.create_study(
         study_name=spec_name,
@@ -174,13 +192,20 @@ def run_study(
         spec_name, cfg["n_trials"], direction,
     )
 
-    study.optimize(
-        objective,
-        n_trials=cfg["n_trials"],
-        timeout=cfg["timeout"],
-    )
+    try:
+        study.optimize(
+            objective,
+            n_trials=cfg["n_trials"],
+            timeout=cfg["timeout"],
+        )
+    finally:
+        _write_artifacts(study, out_dir)
+        if tmp_db and tmp_db.exists():
+            dest = out_dir / "optuna" / "study.db"
+            shutil.copy2(tmp_db, dest)
+            tmp_db.unlink(missing_ok=True)
+            log.info("Optuna DB written to: %s", dest)
 
-    _write_artifacts(study, out_dir)
     log.info(
         "Best trial #%d: value=%.4f  params=%s",
         study.best_trial.number,
