@@ -18,3 +18,4 @@ seed:
 pin_memory: false
 download: true
 data_root: null
+num_workers: 4

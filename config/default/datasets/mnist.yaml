@@ -18,3 +18,4 @@ seed:
 pin_memory: false
 download: true
 data_root: null  # null = uses STSF_DATA env var or ../Data/
+num_workers: 4

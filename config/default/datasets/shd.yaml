@@ -16,3 +16,4 @@ seed:
   min: 1
   max: 1000
 pin_memory: false
+num_workers: 4

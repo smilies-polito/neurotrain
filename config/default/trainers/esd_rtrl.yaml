@@ -11,3 +11,8 @@ batch_size:
   type: categorical
   list: [64, 128, 256, 512]
 use_optimizer: true
+etrace_decay: 0.9
+gamma: 0.3
+lr_layer_norm: [1.0, 1.0, 1.0]
+detach_state_each_step: true
+debug_unused_learning_signals: false

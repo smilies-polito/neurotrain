@@ -11,3 +11,13 @@ batch_size:
   type: categorical
   list: [64, 128, 256, 512]
 use_optimizer: true
+g_scale: 0.5
+burn_in: 0
+surrogate: sigmoid
+surrogate_scale: 5.0
+delta: 0.5
+h_with_noise: false
+omega_std: 0.5
+lambda_u_upper: 0.0
+lambda_u_lower: 0.0
+lr_scale_per_layer: false
