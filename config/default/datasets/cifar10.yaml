@@ -19,4 +19,3 @@ pin_memory: false
 download: true
 data_root: null
 num_workers: 4
-train_fraction: 0.9
