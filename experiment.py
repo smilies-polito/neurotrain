@@ -90,7 +90,7 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
         )
     log.info("Loading dataset: %s (T=%d, batch=%d)", dataset_name, T, batch_size)
     ds_cfg["seed"] = seed
-    ds_cfg["pin_memory"] = (device.type == "cuda")
+    ds_cfg.setdefault("pin_memory", False)
     train_loader, test_loader = LOADER_REGISTRY[dataset_name](
         **{k: v for k, v in _strip_metadata(ds_cfg).items() if v is not None}
     )

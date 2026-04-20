@@ -5,6 +5,8 @@ PYTHON ?= python3
 BENCH_CONFIG  ?= config/benchmarking.yaml
 CUSTOM_CONFIG ?= config/experiments.yaml
 EXP_NAME      ?=
+HPC_SLURM_OUT ?= hpc/slurm_outputs
+
 
 # ── Main entry points ───────────────────────────────────────────────────────
 
@@ -27,6 +29,7 @@ dry-bench:
 dry-custom:
 	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) --dry-run
 
+
 # ── Testing ─────────────────────────────────────────────────────────────────
 
 ## Run all tests
@@ -40,19 +43,15 @@ smoke:
 		--name smoke_$(shell date +%Y%m%d_%H%M%S) \
 		--inline
 
-# ── Cleanup ─────────────────────────────────────────────────────────────────
 
-## Remove all experiment outputs
-clean:
-	rm -rf experiments/
+# --─ Optimization benchmarking (SLURM) ─────────────────────────────────────────
 
-## Remove Python cache files
-clean-cache:
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
-	find . -name "*.pyc" -delete 2>/dev/null; true
+## Ensure SLURM output directory exists
+hpc-mkdir:
+	mkdir -p $(HPC_SLURM_OUT)
 
 ## Submit all per-trainer benchmarking jobs to SLURM (one job per algorithm)
-all-opt:
+all-opt: hpc-mkdir
 	sbatch hpc/bench_bptt.sbatch
 	sbatch hpc/bench_decolle.sbatch
 	sbatch hpc/bench_ell.sbatch
@@ -65,4 +64,42 @@ all-opt:
 	sbatch hpc/bench_stsf.sbatch
 	sbatch hpc/bench_tp.sbatch
 
-.PHONY: bench custom dry-bench dry-custom test smoke clean clean-cache all-opt
+opt-bptt: hpc-mkdir
+	sbatch hpc/bench_bptt.sbatch
+opt-decolle: hpc-mkdir
+	sbatch hpc/bench_decolle.sbatch
+opt-ell: hpc-mkdir
+	sbatch hpc/bench_ell.sbatch
+opt-eprop: hpc-mkdir
+	sbatch hpc/bench_eprop.sbatch
+opt-esd_rtrl: hpc-mkdir
+	sbatch hpc/bench_esd_rtrl.sbatch
+opt-etlp: hpc-mkdir
+	sbatch hpc/bench_etlp.sbatch
+opt-ostl: hpc-mkdir
+	sbatch hpc/bench_ostl.sbatch
+opt-osttp: hpc-mkdir
+	sbatch hpc/bench_osttp.sbatch
+opt-ottt: hpc-mkdir
+	sbatch hpc/bench_ottt.sbatch
+opt-stsf: hpc-mkdir
+	sbatch hpc/bench_stsf.sbatch
+opt-tp: hpc-mkdir
+	sbatch hpc/bench_tp.sbatch
+
+
+# ── Cleanup ─────────────────────────────────────────────────────────────────
+
+## Remove all experiment outputs and clear HPC SLURM logs
+clean: clean-hpc
+	rm -rf experiments/
+
+## Empty SLURM output directory without deleting it
+clean-hpc:
+	mkdir -p $(HPC_SLURM_OUT)
+	find $(HPC_SLURM_OUT) -mindepth 1 -delete
+
+## Remove Python cache files
+clean-cache:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+	find . -name "*.pyc" -delete 2>/dev/null; true

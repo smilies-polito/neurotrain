@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --output=snn-osttp-%j.out
-#SBATCH --error=snn-osttp-%j.err
+#SBATCH --output=hpc/slurm_outputs/bench_osttp-%j.out
+#SBATCH --error=hpc/slurm_outputs/bench_osttp-%j.err
 
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \

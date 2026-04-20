@@ -6,7 +6,7 @@ batch_size:
   list: [32, 64, 128, 256]
 T:
   value: 100
-  type: int
+  type: null
   min: 50
   max: 150
   step: 10

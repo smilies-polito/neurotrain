@@ -6,12 +6,12 @@ batch_size:
   list: [16, 32, 64, 128]
 T:
   value: 10
-  type: int
+  type: null
   min: 5
   max: 20
   step: 1
 seed:
-  value: null
+  value: 42
   type: int
   min: 1
   max: 1000

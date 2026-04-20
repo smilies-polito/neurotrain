@@ -10,21 +10,16 @@ trainers:
 
 models:
   - fc_snn
-  - r_snn
-  - conv_snn
 
 datasets:
   - MNIST
-  - FashionMNIST
-  - CIFAR10
-  - SVHN
 
 # Shared runtime settings (override defaults for all experiments)
 runtime:
-  epochs: 20
+  epochs: 5
   device: cuda
   seed: 42
-  neurobench: true
+  neurobench: false
 
 # Set opt: true to run Optuna optimisation for every generated experiment.
 # Each experiment must define tunable attributes (see config/README.md).
@@ -33,7 +28,7 @@ opt: true
 # Optuna study settings — used when opt: true.
 # These are the global defaults; custom experiments.yaml can override per-experiment.
 optuna:
-  n_trials: 100          # number of trials per experiment
+  n_trials: 10          # number of trials per experiment
   direction: maximize   # maximize | minimize
   sampler: tpe          # tpe | random | cmaes
   pruner: null          # median | hyperband | null (no pruning)
