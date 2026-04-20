@@ -42,7 +42,6 @@ class OTTTTrainer(BaseTrainer):
         network: nn.Module,                     # SNN to be trained with OTTT
         lr: float,                              # Learning rate for optimizer updates
         batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
-        trace_decay: Optional[float] = None,    # Decay factor for synaptic traces (default: 0.5)
         online_updates: bool = True,
         loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
         grad_clip: Optional[float] = None,      # Element-wise gradient clip before optimizer step
@@ -53,11 +52,11 @@ class OTTTTrainer(BaseTrainer):
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        # Match OTTT default: decay = 1 - 1/tau for LIF traces.
-        if trace_decay is None:
-            tau = float(getattr(self.network, "tau", 2.0))
-            trace_decay = 1.0 - 1.0 / tau
-        self.trace_decay = float(trace_decay)
+        # Derive trace decay from the network's membrane time constant tau.
+        # tau relates to decay as: trace_decay = 1 - 1/tau.
+        # Falls back to tau=2.0 (decay=0.5) if the network doesn't define tau.
+        tau = float(getattr(self.network, "tau", 2.0))
+        self.trace_decay = 1.0 - 1.0 / tau
         self.online_updates = bool(online_updates)
         if loss_lambda is None:
             loss_lambda = (

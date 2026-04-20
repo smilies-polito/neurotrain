@@ -11,7 +11,7 @@ T:
   max: 30
   step: 5
 seed:
-  value: null
+  value: 42
   type: int
   min: 1
   max: 1000

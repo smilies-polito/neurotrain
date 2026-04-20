@@ -10,7 +10,6 @@ batch_size:
   value: 256
   type: categorical
   list: [64, 128, 256, 512]
-use_optimizer: true
 g_scale:
   value: 0.5
   type: float

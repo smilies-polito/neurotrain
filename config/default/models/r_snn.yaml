@@ -37,6 +37,7 @@ default:
     min: 0.5
     max: 1.5
   reset_mechanism: subtract
+  out_integrator: false  # set true when pairing with the TP trainer for eval consistency
 
 mnist:
   in_shape: [784]
@@ -67,6 +68,12 @@ nmnist:
   num_classes: 10
   hidden_sizes:
     value: [256]
+
+dvscifar10:
+  in_shape: [32768]  # 2 polarities * 128 * 128 (loaders output [T, B, 2, 128, 128]; network flattens)
+  num_classes: 10
+  hidden_sizes:
+    value: [512]
 
 dvsgesture:
   in_shape: [32768]  # 2 polarities * 128 * 128

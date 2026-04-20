@@ -10,11 +10,6 @@ batch_size:
   value: 256
   type: categorical
   list: [64, 128, 256, 512]
-trace_decay:            # synaptic trace decay; null infers from network tau
-  value: 0.5
-  type: float
-  min: 0.1
-  max: 0.99
 online_updates: true
 loss_lambda:            # CE/MSE interpolation weight (0 = pure CE)
   value: 0.0

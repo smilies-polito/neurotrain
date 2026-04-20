@@ -1,5 +1,5 @@
 name: etlp
-supported_net_types: [fc, recurrent]
+supported_net_types: [fc, rec]
 lr:
   value: 1.0e-3
   type: float
