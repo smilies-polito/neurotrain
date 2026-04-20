@@ -52,43 +52,175 @@ hpc-mkdir:
 
 ## Submit all per-trainer benchmarking jobs to SLURM (one job per algorithm)
 all-opt: hpc-mkdir
-	sbatch hpc/bench_bptt.sbatch
-	sbatch hpc/bench_decolle.sbatch
-	sbatch hpc/bench_ell.sbatch
-	sbatch hpc/bench_eprop.sbatch
-	sbatch hpc/bench_esd_rtrl.sbatch
-	sbatch hpc/bench_etlp.sbatch
-	sbatch hpc/bench_ostl.sbatch
-	sbatch hpc/bench_osttp.sbatch
-	sbatch hpc/bench_ottt.sbatch
-	sbatch hpc/bench_stsf.sbatch
-	sbatch hpc/bench_tp.sbatch
+	sbatch hpc/bench_bptt_mnist.sbatch
+	sbatch hpc/bench_bptt_fmnist.sbatch
+	sbatch hpc/bench_bptt_cifar10.sbatch
+	sbatch hpc/bench_bptt_svhn.sbatch
+	sbatch hpc/bench_bptt_nmnist.sbatch
+	sbatch hpc/bench_bptt_dvsgesture.sbatch
+	sbatch hpc/bench_bptt_dvscifar10.sbatch
+	sbatch hpc/bench_decolle_mnist.sbatch
+	sbatch hpc/bench_decolle_fmnist.sbatch
+	sbatch hpc/bench_decolle_cifar10.sbatch
+	sbatch hpc/bench_decolle_svhn.sbatch
+	sbatch hpc/bench_decolle_nmnist.sbatch
+	sbatch hpc/bench_decolle_dvsgesture.sbatch
+	sbatch hpc/bench_decolle_dvscifar10.sbatch
+	sbatch hpc/bench_ell_mnist.sbatch
+	sbatch hpc/bench_ell_fmnist.sbatch
+	sbatch hpc/bench_ell_cifar10.sbatch
+	sbatch hpc/bench_ell_svhn.sbatch
+	sbatch hpc/bench_ell_nmnist.sbatch
+	sbatch hpc/bench_ell_dvsgesture.sbatch
+	sbatch hpc/bench_ell_dvscifar10.sbatch
+	sbatch hpc/bench_eprop_mnist.sbatch
+	sbatch hpc/bench_eprop_fmnist.sbatch
+	sbatch hpc/bench_eprop_cifar10.sbatch
+	sbatch hpc/bench_eprop_svhn.sbatch
+	sbatch hpc/bench_eprop_nmnist.sbatch
+	sbatch hpc/bench_eprop_dvsgesture.sbatch
+	sbatch hpc/bench_eprop_dvscifar10.sbatch
+	sbatch hpc/bench_esd_rtrl_mnist.sbatch
+	sbatch hpc/bench_esd_rtrl_fmnist.sbatch
+	sbatch hpc/bench_esd_rtrl_cifar10.sbatch
+	sbatch hpc/bench_esd_rtrl_svhn.sbatch
+	sbatch hpc/bench_esd_rtrl_nmnist.sbatch
+	sbatch hpc/bench_esd_rtrl_dvsgesture.sbatch
+	sbatch hpc/bench_esd_rtrl_dvscifar10.sbatch
+	sbatch hpc/bench_etlp_mnist.sbatch
+	sbatch hpc/bench_etlp_fmnist.sbatch
+	sbatch hpc/bench_etlp_cifar10.sbatch
+	sbatch hpc/bench_etlp_svhn.sbatch
+	sbatch hpc/bench_etlp_nmnist.sbatch
+	sbatch hpc/bench_etlp_dvsgesture.sbatch
+	sbatch hpc/bench_etlp_dvscifar10.sbatch
+	sbatch hpc/bench_ostl_mnist.sbatch
+	sbatch hpc/bench_ostl_fmnist.sbatch
+	sbatch hpc/bench_ostl_cifar10.sbatch
+	sbatch hpc/bench_ostl_svhn.sbatch
+	sbatch hpc/bench_ostl_nmnist.sbatch
+	sbatch hpc/bench_ostl_dvsgesture.sbatch
+	sbatch hpc/bench_ostl_dvscifar10.sbatch
+	sbatch hpc/bench_osttp_mnist.sbatch
+	sbatch hpc/bench_osttp_fmnist.sbatch
+	sbatch hpc/bench_osttp_cifar10.sbatch
+	sbatch hpc/bench_osttp_svhn.sbatch
+	sbatch hpc/bench_osttp_nmnist.sbatch
+	sbatch hpc/bench_osttp_dvsgesture.sbatch
+	sbatch hpc/bench_osttp_dvscifar10.sbatch
+	sbatch hpc/bench_ottt_mnist.sbatch
+	sbatch hpc/bench_ottt_fmnist.sbatch
+	sbatch hpc/bench_ottt_cifar10.sbatch
+	sbatch hpc/bench_ottt_svhn.sbatch
+	sbatch hpc/bench_ottt_nmnist.sbatch
+	sbatch hpc/bench_ottt_dvsgesture.sbatch
+	sbatch hpc/bench_ottt_dvscifar10.sbatch
+	sbatch hpc/bench_stsf_mnist.sbatch
+	sbatch hpc/bench_stsf_fmnist.sbatch
+	sbatch hpc/bench_stsf_cifar10.sbatch
+	sbatch hpc/bench_stsf_svhn.sbatch
+	sbatch hpc/bench_stsf_nmnist.sbatch
+	sbatch hpc/bench_stsf_dvsgesture.sbatch
+	sbatch hpc/bench_stsf_dvscifar10.sbatch
+	sbatch hpc/bench_tp_mnist.sbatch
+	sbatch hpc/bench_tp_fmnist.sbatch
+	sbatch hpc/bench_tp_cifar10.sbatch
+	sbatch hpc/bench_tp_svhn.sbatch
+	sbatch hpc/bench_tp_nmnist.sbatch
+	sbatch hpc/bench_tp_dvsgesture.sbatch
+	sbatch hpc/bench_tp_dvscifar10.sbatch
 
 opt-bench: hpc-mkdir
 	sbatch hpc/bench.sbatch
 
 opt-bptt: hpc-mkdir
-	sbatch hpc/bench_bptt.sbatch
+	sbatch hpc/bench_bptt_mnist.sbatch
+	sbatch hpc/bench_bptt_fmnist.sbatch
+	sbatch hpc/bench_bptt_cifar10.sbatch
+	sbatch hpc/bench_bptt_svhn.sbatch
+	sbatch hpc/bench_bptt_nmnist.sbatch
+	sbatch hpc/bench_bptt_dvsgesture.sbatch
+	sbatch hpc/bench_bptt_dvscifar10.sbatch
 opt-decolle: hpc-mkdir
-	sbatch hpc/bench_decolle.sbatch
+	sbatch hpc/bench_decolle_mnist.sbatch
+	sbatch hpc/bench_decolle_fmnist.sbatch
+	sbatch hpc/bench_decolle_cifar10.sbatch
+	sbatch hpc/bench_decolle_svhn.sbatch
+	sbatch hpc/bench_decolle_nmnist.sbatch
+	sbatch hpc/bench_decolle_dvsgesture.sbatch
+	sbatch hpc/bench_decolle_dvscifar10.sbatch
 opt-ell: hpc-mkdir
-	sbatch hpc/bench_ell.sbatch
+	sbatch hpc/bench_ell_mnist.sbatch
+	sbatch hpc/bench_ell_fmnist.sbatch
+	sbatch hpc/bench_ell_cifar10.sbatch
+	sbatch hpc/bench_ell_svhn.sbatch
+	sbatch hpc/bench_ell_nmnist.sbatch
+	sbatch hpc/bench_ell_dvsgesture.sbatch
+	sbatch hpc/bench_ell_dvscifar10.sbatch
 opt-eprop: hpc-mkdir
-	sbatch hpc/bench_eprop.sbatch
+	sbatch hpc/bench_eprop_mnist.sbatch
+	sbatch hpc/bench_eprop_fmnist.sbatch
+	sbatch hpc/bench_eprop_cifar10.sbatch
+	sbatch hpc/bench_eprop_svhn.sbatch
+	sbatch hpc/bench_eprop_nmnist.sbatch
+	sbatch hpc/bench_eprop_dvsgesture.sbatch
+	sbatch hpc/bench_eprop_dvscifar10.sbatch
 opt-esd_rtrl: hpc-mkdir
-	sbatch hpc/bench_esd_rtrl.sbatch
+	sbatch hpc/bench_esd_rtrl_mnist.sbatch
+	sbatch hpc/bench_esd_rtrl_fmnist.sbatch
+	sbatch hpc/bench_esd_rtrl_cifar10.sbatch
+	sbatch hpc/bench_esd_rtrl_svhn.sbatch
+	sbatch hpc/bench_esd_rtrl_nmnist.sbatch
+	sbatch hpc/bench_esd_rtrl_dvsgesture.sbatch
+	sbatch hpc/bench_esd_rtrl_dvscifar10.sbatch
 opt-etlp: hpc-mkdir
-	sbatch hpc/bench_etlp.sbatch
+	sbatch hpc/bench_etlp_mnist.sbatch
+	sbatch hpc/bench_etlp_fmnist.sbatch
+	sbatch hpc/bench_etlp_cifar10.sbatch
+	sbatch hpc/bench_etlp_svhn.sbatch
+	sbatch hpc/bench_etlp_nmnist.sbatch
+	sbatch hpc/bench_etlp_dvsgesture.sbatch
+	sbatch hpc/bench_etlp_dvscifar10.sbatch
 opt-ostl: hpc-mkdir
-	sbatch hpc/bench_ostl.sbatch
+	sbatch hpc/bench_ostl_mnist.sbatch
+	sbatch hpc/bench_ostl_fmnist.sbatch
+	sbatch hpc/bench_ostl_cifar10.sbatch
+	sbatch hpc/bench_ostl_svhn.sbatch
+	sbatch hpc/bench_ostl_nmnist.sbatch
+	sbatch hpc/bench_ostl_dvsgesture.sbatch
+	sbatch hpc/bench_ostl_dvscifar10.sbatch
 opt-osttp: hpc-mkdir
-	sbatch hpc/bench_osttp.sbatch
+	sbatch hpc/bench_osttp_mnist.sbatch
+	sbatch hpc/bench_osttp_fmnist.sbatch
+	sbatch hpc/bench_osttp_cifar10.sbatch
+	sbatch hpc/bench_osttp_svhn.sbatch
+	sbatch hpc/bench_osttp_nmnist.sbatch
+	sbatch hpc/bench_osttp_dvsgesture.sbatch
+	sbatch hpc/bench_osttp_dvscifar10.sbatch
 opt-ottt: hpc-mkdir
-	sbatch hpc/bench_ottt.sbatch
+	sbatch hpc/bench_ottt_mnist.sbatch
+	sbatch hpc/bench_ottt_fmnist.sbatch
+	sbatch hpc/bench_ottt_cifar10.sbatch
+	sbatch hpc/bench_ottt_svhn.sbatch
+	sbatch hpc/bench_ottt_nmnist.sbatch
+	sbatch hpc/bench_ottt_dvsgesture.sbatch
+	sbatch hpc/bench_ottt_dvscifar10.sbatch
 opt-stsf: hpc-mkdir
-	sbatch hpc/bench_stsf.sbatch
+	sbatch hpc/bench_stsf_mnist.sbatch
+	sbatch hpc/bench_stsf_fmnist.sbatch
+	sbatch hpc/bench_stsf_cifar10.sbatch
+	sbatch hpc/bench_stsf_svhn.sbatch
+	sbatch hpc/bench_stsf_nmnist.sbatch
+	sbatch hpc/bench_stsf_dvsgesture.sbatch
+	sbatch hpc/bench_stsf_dvscifar10.sbatch
 opt-tp: hpc-mkdir
-	sbatch hpc/bench_tp.sbatch
+	sbatch hpc/bench_tp_mnist.sbatch
+	sbatch hpc/bench_tp_fmnist.sbatch
+	sbatch hpc/bench_tp_cifar10.sbatch
+	sbatch hpc/bench_tp_svhn.sbatch
+	sbatch hpc/bench_tp_nmnist.sbatch
+	sbatch hpc/bench_tp_dvsgesture.sbatch
+	sbatch hpc/bench_tp_dvscifar10.sbatch
 
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────
