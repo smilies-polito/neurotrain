@@ -94,11 +94,15 @@ class OSTLTrainer(BaseTrainer):
             rm = getattr(lif, "reset_mechanism", None)
             lif_type = type(lif).__name__
             if rm != "zero":
-                raise TypeError(
-                    f"OSTLTrainer requires reset_mechanism='zero' on all spiking layers "
-                    f"(layer {idx} ({lif_type}) has reset_mechanism={rm!r}). "
-                    "Pass reset_mechanism='zero' when constructing the network."
+                # OSTL's eligibility trace equations (Eq. 17) are derived assuming a
+                # zero (hard) reset. Coerce silently so any network can be used.
+                import warnings
+                warnings.warn(
+                    f"OSTLTrainer: coercing reset_mechanism to 'zero' on layer {idx} "
+                    f"({lif_type}) (was {rm!r}). OSTL requires zero reset for its "
+                    "eligibility trace equations."
                 )
+                lif.reset_mechanism = "zero"
 
         # OSTL rnd (Eq. 26): fixed random feedback matrices B^{l+1} for l = 0 … K-2.
         # Same shape as the corresponding forward weight W^{l+1}: [n_{l+1}, n_l].

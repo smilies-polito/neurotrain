@@ -13,7 +13,7 @@ batch_size:
 pseudo:
   value: tanh
   type: categorical
-  list: [tanh, logistic]           # surrogate: tanh | logistic
+  list: [tanh, fast_sigmoid]           # surrogate: tanh | logistic
 output_loss:
   value: mse
   type: categorical
