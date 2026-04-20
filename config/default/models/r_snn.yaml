@@ -54,13 +54,13 @@ cifar10:
   in_shape: [3072]
   num_classes: 10
   hidden_sizes:
-    value: [512]
+    value: [512, 256]
 
 svhn:
   in_shape: [3072]
   num_classes: 10
   hidden_sizes:
-    value: [512]
+    value: [512, 256]
 
 nmnist:
   in_shape: [2312]  # 2 polarities * 34 * 34

@@ -5,11 +5,11 @@ batch_size:
   type: categorical
   list: [8, 16, 32, 64]
 T:
-  value: 25
+  value: 50
   type: null
-  min: 10
-  max: 50
-  step: 5
+  min: 20
+  max: 100
+  step: 10
 seed:
   value: null
   type: int
