@@ -18,7 +18,11 @@ output_loss:
   value: mse
   type: categorical
   list: [mse, ce]       # output loss type
-feedback_scale: 1.0
+feedback_scale:
+  value: 1.0
+  type: float
+  min: 0.1
+  max: 2.0
 feedback_seed: 42
 grad_clip: 0.0
 use_optimizer: true
