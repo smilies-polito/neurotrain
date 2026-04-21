@@ -1,5 +1,5 @@
 name: CIFAR10
-supported_net_types: [fc, recurrent, conv]
+supported_net_types: [fc, recurrent, conv, vgg9_tp, vgg9_ottt]
 batch_size:
   value: 128
   type: categorical

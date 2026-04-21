@@ -4,7 +4,7 @@
 
 default:
   name: vgg9_ottt
-  net_type: vgg9
+  net_type: vgg9_ottt
   in_channels: 3
   num_classes: 10
   input_shape: [3, 32, 32]
