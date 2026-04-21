@@ -1,5 +1,5 @@
 name: ottt
-supported_net_types: [fc, rec, conv, vgg9]
+supported_net_types: [fc, rec, conv, vgg9_ottt]
 lr:
   value: 1.0e-3
   type: float
