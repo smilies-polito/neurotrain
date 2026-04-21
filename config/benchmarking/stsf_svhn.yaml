@@ -7,13 +7,13 @@ models:
 datasets:
 - SVHN
 runtime:
-  epochs: 20
+  epochs: 5
   device: cuda
   seed: 42
   neurobench: false
 opt: true
 optuna:
-  n_trials: 100
+  n_trials: 50
   direction: maximize
   sampler: tpe
   pruner: null

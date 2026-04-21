@@ -25,6 +25,7 @@ from campaign.config_loader import (
     merge,
     normalize_optuna_attrs,
     resolve_model_for_dataset,
+    resolve_model_for_trainer_and_dataset,
 )
 from campaign.experiment_spec import ExperimentSpec
 
@@ -204,8 +205,10 @@ def _build_spec(
     model_raw   = merge(model_default, model_override)
     dataset_cfg = merge(dataset_default, dataset_override)
 
-    # Apply per-dataset model section fallback
-    model_cfg = resolve_model_for_dataset(model_raw, dataset_name)
+    # Apply per-trainer then per-dataset model section overrides.
+    # resolve_model_for_trainer_and_dataset merges: default → trainer → dataset.
+    # Falls back to the old per-dataset-only resolver for models that lack trainer sections.
+    model_cfg = resolve_model_for_trainer_and_dataset(model_raw, trainer_name, dataset_name)
 
     # Flatten Optuna attribute dicts for normal runs
     if not opt:

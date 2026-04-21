@@ -1,20 +1,26 @@
+# OTTT trainer config.
+# Paper: Xiao et al. 2022 — SGD lr=0.1 for CIFAR/DVS-CIFAR, Adam lr=1e-3 for DVSGesture.
+# lr and loss_lambda are tunable; all other hyperparams fixed to paper values.
+
 name: ottt
-supported_net_types: [fc, rec, conv, vgg9_ottt]
+supported_net_types: [fc, rec, conv, vgg9]
 lr:
-  value: 1.0e-3
+  value: 0.1
   type: float
-  min: 1.0e-5
-  max: 1.0e-1
+  min: 1.0e-4
+  max: 5.0e-1
   log: true
 batch_size:
-  value: 256
+  value: 128
   type: categorical
-  list: [64, 128, 256, 512]
+  list: [16, 32, 64, 128, 256]
 online_updates: true
-loss_lambda:            # CE/MSE interpolation weight (0 = pure CE)
-  value: 0.0
+# CE/MSE interpolation weight. Paper: 0.05 (CIFAR10/SVHN), 0.001 (DVS datasets).
+loss_lambda:
+  value: 0.05
   type: float
-  min: 0.0
+  min: 1.0e-4
   max: 0.5
+  log: true
 grad_clip: null
 sanitize_grads: null

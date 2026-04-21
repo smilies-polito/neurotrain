@@ -28,7 +28,7 @@ stsf_fmnist_tuned:
   name: stsf_fmnist_tunable
   opt: true   # enable Optuna for this experiment
   optuna:     # per-experiment override of the global optuna: block
-    n_trials: 30
+    n_trials: 50
     sampler: tpe
   trainer:
     name: stsf
@@ -57,5 +57,5 @@ stsf_fmnist_tuned:
   dataset:
     name: FashionMNIST
   runtime:
-    epochs: 10
+    epochs: 5
     device: cuda

@@ -1,5 +1,5 @@
 name: SHD
-supported_net_types: [fc, recurrent]   # flat 700-channel sequence, no spatial dims
+supported_net_types: [fc, rec]   # flat 700-channel sequence, no spatial dims
 batch_size:
   value: 128
   type: categorical

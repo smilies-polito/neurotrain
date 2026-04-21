@@ -39,13 +39,14 @@ class OTTTTrainer(BaseTrainer):
 
     def __init__(
         self,
-        network: nn.Module,                     # SNN to be trained with OTTT
-        lr: float,                              # Learning rate for optimizer updates
-        batch_size: int,                        # Batch size for training (used for loss scaling; not a dataloader batch size)
+        network: nn.Module,                              # SNN to be trained with OTTT
+        lr: float,                                       # Learning rate for optimizer updates
+        batch_size: int,                                 # Batch size for training (used for loss scaling; not a dataloader batch size)
         online_updates: bool = True,
-        loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
-        grad_clip: Optional[float] = None,      # Element-wise gradient clip before optimizer step
-        sanitize_grads: Optional[bool] = None,  # Replace NaN/Inf grads with finite values before step
+        constant_input_per_timestep: bool = False,       # True when the dataset feeds the same frame every timestep (direct/analog coding)
+        loss_lambda: Optional[float] = None,             # CE/MSE interpolation used by official CIFAR OTTT recipe
+        grad_clip: Optional[float] = None,               # Element-wise gradient clip before optimizer step
+        sanitize_grads: Optional[bool] = None,           # Replace NaN/Inf grads with finite values before step
         optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
@@ -56,21 +57,17 @@ class OTTTTrainer(BaseTrainer):
         # Falls back to 0.5 (tau=2.0) if the network doesn't expose beta.
         self.trace_decay = float(getattr(self.network, "beta", 0.5))
         self.online_updates = bool(online_updates)
+        self.constant_input_per_timestep = bool(constant_input_per_timestep)
         if loss_lambda is None:
-            loss_lambda = (
-                0.05 if getattr(self.network, "constant_input_per_timestep", False) else 0.0
-            )
+            loss_lambda = 0.05 if self.constant_input_per_timestep else 0.0
         self.loss_lambda = float(loss_lambda)
-        static_input_recipe = bool(
-            getattr(self.network, "constant_input_per_timestep", False)
-        )
         if grad_clip is None:
-            grad_clip = 0.2 if static_input_recipe else 0.0
+            grad_clip = 0.2 if self.constant_input_per_timestep else 0.0
         self.grad_clip = float(grad_clip)
         if self.grad_clip < 0.0:
             raise ValueError("OTTTTrainer requires grad_clip >= 0.")
         if sanitize_grads is None:
-            sanitize_grads = static_input_recipe
+            sanitize_grads = self.constant_input_per_timestep
         self.sanitize_grads = bool(sanitize_grads)
         self._external_optimizer = optimizer
         # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
@@ -219,10 +216,7 @@ class OTTTTrainer(BaseTrainer):
         hooks = self._register_trace_hooks()
         total_loss = torch.tensor(0.0, device=device)
         spk_sum = None
-        use_constant_input = bool(
-            getattr(self.network, "constant_input_per_timestep", False)
-        )
-        x_const = data.mean(dim=0) if use_constant_input else None
+        x_const = data.mean(dim=0) if self.constant_input_per_timestep else None
 
         try:
             with torch.enable_grad():

@@ -5,7 +5,7 @@ models:
 datasets:
 - DVSCifar10
 runtime:
-  epochs: 10
+  epochs: 5
   device: cuda
   seed: 42
   neurobench: false

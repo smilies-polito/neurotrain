@@ -11,28 +11,28 @@ from networks.fc_snn import FCSNN
 from networks.r_snn import RSNN
 from networks.conv_snn import ConvSNN
 from networks.vgg9 import (
+    vgg9,
     vgg9_cifar10,
     vgg9_svhn,
     vgg9_dvsgest,
     vgg9_ottt_cifar10,
     vgg9_ottt_dvsgest,
     vgg9_ottt_fashionmnist,
-    vgg9_tp,
-    vgg9_ottt,
 )
 
 NETWORK_REGISTRY: dict[str, callable] = {
     "fc_snn":                 FCSNN,
     "r_snn":                  RSNN,
     "conv_snn":               ConvSNN,
+    # Unified factory — use this for new experiments via vgg9.yaml
+    "vgg9":                   vgg9,
+    # Legacy preset factories — kept for existing bptt/legacy test files
     "vgg9_cifar10":           vgg9_cifar10,
     "vgg9_svhn":              vgg9_svhn,
     "vgg9_dvsgest":           vgg9_dvsgest,
     "vgg9_ottt_cifar10":      vgg9_ottt_cifar10,
     "vgg9_ottt_dvsgest":      vgg9_ottt_dvsgest,
     "vgg9_ottt_fashionmnist": vgg9_ottt_fashionmnist,
-    "vgg9_tp":                vgg9_tp,
-    "vgg9_ottt":              vgg9_ottt,
 }
 
 __all__ = ["NETWORK_REGISTRY"]

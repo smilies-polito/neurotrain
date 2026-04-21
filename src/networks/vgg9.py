@@ -2,8 +2,7 @@
 Unified parameterized Spiking VGG-9.
 
 The class implements the BaseSNN trainer interface (hidden_weight_layers,
-output_layer, detach_hidden_state) so that it composes with any trainer that
-speaks that contract.
+output_layer) so that it composes with any trainer that speaks that contract.
 """
 
 from __future__ import annotations
@@ -82,11 +81,6 @@ class VGG9Config:
     li_head_spatial: int = 2
     li_head_leak: float = 1.0
 
-    # OTTT recipe: identical static inputs across the T window. Trainers that
-    # care (OTTTTrainer) read this flag to activate their static-input recipe
-    # (loss_lambda=0.05, grad_clip=0.2, sanitize_grads=True).
-    constant_input_per_timestep: bool = False
-
     def __post_init__(self):
         if len(self.pool_spec) != len(self.channels):
             raise ValueError("pool_spec length must equal channels length.")
@@ -130,20 +124,16 @@ class VGG9(BaseSNN):
     (spk_rec, mem_rec) with length `len(channels) + 1` (one entry per conv
     block + one for the head).
 
-    Call reset() between sequences; call detach_hidden_state() between
-    timesteps to prevent TBPTT.
+    Call reset() between sequences.
     """
-
-    net_tags = frozenset({"convolutional", "vgg", "baseline"})
 
     def __init__(self, cfg: VGG9Config, verbose: bool = False):
         super().__init__()
         self._cfg = cfg
         self._n_classes = int(cfg.num_classes)
 
-        # Expose capability flags — read by OTTTTrainer and TPTrainer.
+        # Expose capability flags read by trainers and evaluators.
         self.beta = float(cfg.beta)
-        self.constant_input_per_timestep = bool(cfg.constant_input_per_timestep)
         # out_integrator=True tells evaluators to use the final mem, not accumulated spikes.
         self.out_integrator = (cfg.head_type == _HEAD_LI)
         # Exposed for TPTrainer._init_S when input_shape is not passed explicitly.
@@ -260,15 +250,6 @@ class VGG9(BaseSNN):
             return self.head.fc
         return self.head
 
-    def detach_hidden_state(self) -> None:
-        for i in range(1, self._num_blocks + 1):
-            lif = getattr(self, f"lif{i}")
-            if isinstance(lif.mem, torch.Tensor):
-                lif.mem = lif.mem.detach()
-        if isinstance(self.head, LeakyIntegrator):
-            if isinstance(self.head.mem, torch.Tensor):
-                self.head.mem = self.head.mem.detach()
-
     @property
     def VGG9_CFG(self):
         # Compatibility shim: TPTrainer duck-types on hasattr(net, 'VGG9_CFG').
@@ -340,7 +321,63 @@ def _ottt_pool_spec(pool_after_blocks: Sequence[int]) -> List[Tuple[str, int]]:
 
 
 # ---------------------------------------------------------------------------
-# Preset factories — one per original variant
+# Unified factory — registered as "vgg9" in NETWORK_REGISTRY
+# ---------------------------------------------------------------------------
+
+def vgg9(
+    in_channels: int,
+    num_classes: int,
+    input_shape: Tuple,
+    head_type: str,
+    pool_after_blocks: Optional[Sequence[int]] = None,
+    use_tp_pool: bool = False,
+    **kwargs,
+) -> VGG9:
+    """
+    Unified VGG-9 factory.
+
+    Args:
+        in_channels:       Number of input channels (e.g. 3 for RGB, 2 for DVS).
+        num_classes:       Number of output classes.
+        input_shape:       (C, H, W) spatial shape — used to size the LI head.
+        head_type:         "leaky_integrator" (TP-style) or "global_linear" (OTTT-style).
+        pool_after_blocks: Block indices after which AvgPool(2,2) is inserted
+                           (OTTT topology). Ignored when use_tp_pool=True.
+        use_tp_pool:       If True, use the TP fixed pool spec (MaxPool after
+                           {2,4,6}, AdaptiveAvgPool(2,2) after 8).
+        **kwargs:          Passed through to VGG9Config (beta, threshold,
+                           conv_gain, scale_after_lif, surrogate_kind,
+                           surrogate_slope, surrogate_scale, li_head_spatial,
+                           li_head_leak, channels, verbose).
+    """
+    if use_tp_pool:
+        pool_spec = _tp_pool_spec()
+    else:
+        pool_spec = _ottt_pool_spec(pool_after_blocks or (2, 4))
+
+    cfg = VGG9Config(
+        in_channels=int(in_channels),
+        num_classes=int(num_classes),
+        input_shape=tuple(input_shape),
+        channels=kwargs.pop("channels", (64, 128, 256, 256, 512, 512, 512, 512)),
+        pool_spec=pool_spec,
+        conv_gain=float(kwargs.pop("conv_gain", 1.0)),
+        scale_after_lif=float(kwargs.pop("scale_after_lif", 0.0)),
+        beta=float(kwargs.pop("beta", 0.5)),
+        threshold=float(kwargs.pop("threshold", 1.0)),
+        reset_mechanism=str(kwargs.pop("reset_mechanism", "subtract")),
+        surrogate_kind=str(kwargs.pop("surrogate_kind", "atan")),
+        surrogate_scale=float(kwargs.pop("surrogate_scale", 1.0)),
+        surrogate_slope=float(kwargs.pop("surrogate_slope", 4.0)),
+        head_type=str(head_type),
+        li_head_spatial=int(kwargs.pop("li_head_spatial", 2)),
+        li_head_leak=float(kwargs.pop("li_head_leak", 1.0)),
+    )
+    return VGG9(cfg, verbose=bool(kwargs.pop("verbose", False)))
+
+
+# ---------------------------------------------------------------------------
+# Legacy preset factories — kept for existing tests (bptt_*, legacy test files)
 # ---------------------------------------------------------------------------
 
 def vgg9_cifar10(in_channels: int = 3, num_classes: int = 10, **kwargs) -> VGG9:
@@ -404,7 +441,6 @@ def vgg9_ottt_dvsgest(in_channels: int = 2, num_classes: int = 11, **kwargs) -> 
         threshold=kwargs.pop("threshold", 1.0),
         surrogate_kind="sigmoid", surrogate_slope=4.0,
         head_type=_HEAD_GLOBAL_LINEAR,
-        constant_input_per_timestep=False,
     )
     return VGG9(cfg, verbose=kwargs.pop("verbose", False))
 
@@ -422,7 +458,6 @@ def vgg9_ottt_cifar10(in_channels: int = 3, num_classes: int = 10, **kwargs) -> 
         threshold=kwargs.pop("threshold", 1.0),
         surrogate_kind="sigmoid", surrogate_slope=4.0,
         head_type=_HEAD_GLOBAL_LINEAR,
-        constant_input_per_timestep=bool(kwargs.pop("constant_input_per_timestep", True)),
     )
     return VGG9(cfg, verbose=kwargs.pop("verbose", False))
 
@@ -440,74 +475,5 @@ def vgg9_ottt_fashionmnist(in_channels: int = 1, num_classes: int = 10, **kwargs
         threshold=kwargs.pop("threshold", 1.0),
         surrogate_kind="sigmoid", surrogate_slope=4.0,
         head_type=_HEAD_GLOBAL_LINEAR,
-        constant_input_per_timestep=bool(kwargs.pop("constant_input_per_timestep", True)),
-    )
-    return VGG9(cfg, verbose=kwargs.pop("verbose", False))
-
-
-# ---------------------------------------------------------------------------
-# Generic factories — used by the benchmarking framework via NETWORK_REGISTRY
-# ---------------------------------------------------------------------------
-
-def vgg9_tp(
-    in_channels: int = 3,
-    num_classes: int = 10,
-    input_shape: Tuple = (3, 32, 32),
-    **kwargs,
-) -> VGG9:
-    """
-    Generic TP-style VGG-9.
-
-    Pool spec is fixed (MaxPool after {2,4,6}, AdaptiveAvgPool(2,2) after 8)
-    and works for any spatial input. Adapt to a dataset by passing
-    in_channels, num_classes, and input_shape from the YAML config.
-    """
-    cfg = VGG9Config(
-        in_channels=in_channels,
-        num_classes=num_classes,
-        input_shape=tuple(input_shape),
-        channels=(64, 128, 256, 256, 512, 512, 512, 512),
-        pool_spec=_tp_pool_spec(),
-        conv_gain=kwargs.pop("conv_gain", 1.8),
-        beta=kwargs.pop("beta", 0.53),
-        threshold=kwargs.pop("threshold", 1.0),
-        surrogate_kind=kwargs.pop("surrogate_kind", "atan"),
-        surrogate_scale=kwargs.pop("surrogate_scale", 1.0),
-        head_type=_HEAD_LI,
-    )
-    return VGG9(cfg, verbose=kwargs.pop("verbose", False))
-
-
-def vgg9_ottt(
-    in_channels: int = 3,
-    num_classes: int = 10,
-    input_shape: Tuple = (3, 32, 32),
-    pool_after_blocks: Sequence[int] = (2, 4),
-    **kwargs,
-) -> VGG9:
-    """
-    Generic OTTT-style VGG-9.
-
-    pool_after_blocks controls where AvgPool(2,2) is inserted:
-      - (2, 4)    for 32×32 inputs  (CIFAR-10, SVHN)
-      - (2, 4, 6) for 128×128 inputs (DVS-Gesture, DVS-CIFAR10)
-
-    Adapt to a dataset by passing in_channels, num_classes, input_shape,
-    pool_after_blocks, and constant_input_per_timestep from the YAML config.
-    """
-    cfg = VGG9Config(
-        in_channels=in_channels,
-        num_classes=num_classes,
-        input_shape=tuple(input_shape),
-        channels=(64, 128, 256, 256, 512, 512, 512, 512),
-        pool_spec=_ottt_pool_spec(pool_after_blocks),
-        conv_gain=kwargs.pop("conv_gain", 1.0),
-        scale_after_lif=kwargs.pop("scale_after_lif", 2.74),
-        beta=kwargs.pop("beta", 0.5),
-        threshold=kwargs.pop("threshold", 1.0),
-        surrogate_kind=kwargs.pop("surrogate_kind", "sigmoid"),
-        surrogate_slope=kwargs.pop("surrogate_slope", 4.0),
-        head_type=_HEAD_GLOBAL_LINEAR,
-        constant_input_per_timestep=bool(kwargs.pop("constant_input_per_timestep", False)),
     )
     return VGG9(cfg, verbose=kwargs.pop("verbose", False))

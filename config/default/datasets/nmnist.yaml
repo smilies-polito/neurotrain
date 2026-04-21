@@ -1,5 +1,5 @@
 name: NMNIST
-supported_net_types: [fc, recurrent, conv]
+supported_net_types: [fc, rec, conv]
 batch_size:
   value: 128
   type: categorical

@@ -67,6 +67,43 @@ def merge(base: dict, override: dict) -> dict:
     return result
 
 
+def resolve_model_for_trainer_and_dataset(
+    model_cfg: dict, trainer_name: str, dataset_name: str,
+) -> dict:
+    """
+    Apply per-trainer then per-dataset model overrides.
+
+    Merge order: default → trainer section → dataset section.
+    The trainer section sets algorithm-specific defaults (head_type, surrogate,
+    conv_gain, etc.); the dataset section sets spatial shape and topology.
+
+    A model YAML can have this structure:
+        default:
+            beta: 0.5
+        tp:
+            head_type: leaky_integrator
+            conv_gain: 1.8
+        cifar10:
+            in_channels: 3
+            input_shape: [3, 32, 32]
+
+    If no 'default' key exists, the config is returned as-is.
+    """
+    if "default" not in model_cfg:
+        return model_cfg
+
+    base = dict(model_cfg["default"])
+    t_key = trainer_name.lower()
+    d_key = dataset_name.lower()
+
+    if t_key in model_cfg:
+        base = merge(base, model_cfg[t_key])
+    if d_key in model_cfg:
+        base = merge(base, model_cfg[d_key])
+
+    return base
+
+
 def resolve_model_for_dataset(model_cfg: dict, dataset_name: str) -> dict:
     """
     Apply per-dataset model overrides.

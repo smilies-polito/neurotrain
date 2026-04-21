@@ -1,0 +1,79 @@
+# Unified VGG-9 config.
+# Factory: vgg9(in_channels, num_classes, input_shape, head_type, ...)
+#
+# Merge order (campaign_builder): default → trainer → dataset
+#   - default:  shared structural defaults
+#   - tp/ottt:  algorithm-specific recipe (head, surrogate, gain, dynamics)
+#   - dataset sections: spatial shape, num_classes, pool topology
+#
+# Tunable Optuna parameters are marked with a type other than null.
+
+default:
+  name: vgg9
+  net_type: vgg9
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+  head_type: global_linear    # overridden per trainer below
+  use_tp_pool: false          # overridden per trainer below
+  channels: [64, 128, 256, 256, 512, 512, 512, 512]
+  beta:      { value: 0.5, type: null }
+  threshold: { value: 1.0, type: null }
+  conv_gain: { value: 1.0, type: null }
+  scale_after_lif: 0.0
+  surrogate_kind: sigmoid
+
+# ---------------------------------------------------------------------------
+# Trainer sections — paper-accurate defaults (Pes et al. 2026 / Xiao et al. 2022)
+# ---------------------------------------------------------------------------
+tp:
+  head_type: leaky_integrator
+  use_tp_pool: true
+  li_head_spatial: 2
+  li_head_leak: 1.0
+  surrogate_kind: atan
+  surrogate_scale: { value: 1.0, type: null }
+  conv_gain:  { value: 1.8,  type: null }   # TP reference (Pes 2026)
+  beta:       { value: 0.53, type: null }   # α membrane decay (paper DVSGesture/CIFAR10)
+  threshold:  { value: 1.0,  type: null }
+  scale_after_lif: 0.0
+
+ottt:
+  head_type: global_linear
+  use_tp_pool: false
+  surrogate_kind: sigmoid
+  surrogate_slope: { value: 4.0, type: null }
+  conv_gain:       { value: 1.0, type: null }
+  beta:            { value: 0.5, type: null }   # λ=0.5 / tau=2.0 (Xiao 2022)
+  threshold:       { value: 1.0, type: null }
+  scale_after_lif: { value: 2.74, type: null }  # WS activation scale
+
+# ---------------------------------------------------------------------------
+# Dataset sections — spatial shape + pool topology
+# ---------------------------------------------------------------------------
+
+# 32×32 static datasets (CIFAR-10, SVHN) — direct/analog coding
+cifar10:
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+  pool_after_blocks: [2, 4]
+
+svhn:
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+  pool_after_blocks: [2, 4]
+
+# DVS event-based datasets — 128×128, 2 polarity channels
+dvscifar10:
+  in_channels: 2
+  num_classes: 10
+  input_shape: [2, 128, 128]
+  pool_after_blocks: [2, 4, 6]
+
+dvsgesture:
+  in_channels: 2
+  num_classes: 11
+  input_shape: [2, 128, 128]
+  pool_after_blocks: [2, 4, 6]

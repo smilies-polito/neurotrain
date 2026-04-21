@@ -59,47 +59,67 @@ def evaluate(
     network: torch.nn.Module,
     test_loader: DataLoader,
     device: torch.device,
+    constant_input_per_timestep: bool = False,
 ) -> float:
     """
     Evaluate network accuracy on the test set.
 
     Args:
-        network:     Trained SNN (must implement reset() and forward()).
-        test_loader: Test DataLoader (time-major [T, B, ...]).
-        device:      Torch device.
+        network:                    Trained SNN (must implement reset() and forward()).
+        test_loader:                Test DataLoader (time-major [T, B, ...]).
+        device:                     Torch device.
+        constant_input_per_timestep: If True, use the temporal mean of the input
+                                    sequence as a static frame repeated every timestep
+                                    (direct/analog coding datasets). Passed in from the
+                                    dataset config rather than read off the network.
 
     Returns:
         Test accuracy as a float in [0, 1].
+
+    Note:
+        For networks with out_integrator=True (TP-style LI head), the readout is
+        the membrane potential at the FINAL timestep only — the integrator already
+        accumulates across time, so summing over T would over-count. For spike-output
+        networks (out_integrator=False or absent), output spikes are summed across T.
     """
     network.eval()
     correct = 0
     total   = 0
 
-    non_blocking = device.type == "cuda"
-    use_constant = getattr(network, "constant_input_per_timestep", False)
+    non_blocking   = device.type == "cuda"
+    use_integrator = bool(getattr(network, "out_integrator", False))
 
     for data, target in test_loader:
         data   = data.to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
 
-        x_const = data.mean(dim=0) if use_constant else None
+        x_const = data.mean(dim=0) if constant_input_per_timestep else None
 
         network.reset()
-        spk_sum = None
-        for t in range(data.size(0)):
+        spk_sum  = None
+        last_mem = None
+        T = data.size(0)
+
+        for t in range(T):
             x_t = x_const if x_const is not None else data[t]
             out = network(x_t)
 
-            # Networks return (spk_rec, mem_rec); use last spike layer for readout
+            # Networks return (spk_rec, mem_rec)
             if isinstance(out, (tuple, list)):
-                spk = out[0]
-                readout = spk[-1] if isinstance(spk, (list, tuple)) else spk
+                spk_rec, mem_rec = out[0], out[1]
+                spk_readout = spk_rec[-1] if isinstance(spk_rec, (list, tuple)) else spk_rec
+                mem_readout = mem_rec[-1] if isinstance(mem_rec, (list, tuple)) else mem_rec
             else:
-                readout = out
+                spk_readout = out
+                mem_readout = out
 
-            spk_sum = readout if spk_sum is None else spk_sum + readout
+            if use_integrator:
+                last_mem = mem_readout   # only the final timestep matters
+            else:
+                spk_sum = spk_readout if spk_sum is None else spk_sum + spk_readout
 
-        preds   = spk_sum.argmax(dim=1)
+        readout = last_mem if use_integrator else spk_sum
+        preds   = readout.argmax(dim=1)
         correct += preds.eq(target).sum().item()
         total   += target.size(0)
 
