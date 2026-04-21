@@ -22,6 +22,56 @@ bench-opt:
 custom:
 	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
 
+## Run OTTT VGG9 CIFAR10 experiment
+ottt-vgg9-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_cifar10.yaml --name ottt_vgg9_cifar10
+
+## Run OTTT VGG9 SVHN experiment
+ottt-vgg9-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_svhn.yaml --name ottt_vgg9_svhn
+
+## Run OTTT VGG9 DVSGesture experiment
+ottt-vgg9-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_dvsgesture.yaml --name ottt_vgg9_dvsgesture
+
+## Run TP VGG9 CIFAR10 experiment
+tp-vgg9-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_cifar10.yaml --name tp_vgg9_cifar10
+
+## Run TP VGG9 SVHN experiment
+tp-vgg9-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_svhn.yaml --name tp_vgg9_svhn
+
+## Run TP VGG9 DVSGesture experiment
+tp-vgg9-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_dvsgesture.yaml --name tp_vgg9_dvsgesture
+
+## Run all VGG9 individual custom experiments
+vgg9-all: ottt-vgg9-cifar10 ottt-vgg9-svhn ottt-vgg9-dvsgesture tp-vgg9-cifar10 tp-vgg9-svhn tp-vgg9-dvsgesture
+
+# ── HPC / SLURM targets ─────────────────────────────────────────────────────
+
+sbatch-ottt-vgg9-cifar10: hpc-mkdir
+	sbatch hpc/custom_ottt_vgg9_cifar10.sbatch
+
+sbatch-ottt-vgg9-svhn: hpc-mkdir
+	sbatch hpc/custom_ottt_vgg9_svhn.sbatch
+
+sbatch-ottt-vgg9-dvsgesture: hpc-mkdir
+	sbatch hpc/custom_ottt_vgg9_dvsgesture.sbatch
+
+sbatch-tp-vgg9-cifar10: hpc-mkdir
+	sbatch hpc/custom_tp_vgg9_cifar10.sbatch
+
+sbatch-tp-vgg9-svhn: hpc-mkdir
+	sbatch hpc/custom_tp_vgg9_svhn.sbatch
+
+sbatch-tp-vgg9-dvsgesture: hpc-mkdir
+	sbatch hpc/custom_tp_vgg9_dvsgesture.sbatch
+
+## Launch all custom VGG9 optimization jobs on SLURM
+sbatch-vgg9-all: sbatch-ottt-vgg9-cifar10 sbatch-ottt-vgg9-svhn sbatch-ottt-vgg9-dvsgesture sbatch-tp-vgg9-cifar10 sbatch-tp-vgg9-svhn sbatch-tp-vgg9-dvsgesture
+
 ## Dry-run: print experiment list without running
 dry-bench:
 	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) --dry-run

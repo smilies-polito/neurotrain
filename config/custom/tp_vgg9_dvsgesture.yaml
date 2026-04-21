@@ -1,0 +1,23 @@
+tp_vgg9_dvsgesture:
+  name: tp_vgg9_dvsgesture
+  opt: true
+  optuna:
+    n_trials: 50
+  trainer:
+    name: tp
+    lr:
+      value: 1e-4
+      type: float
+      min: 1e-5
+      max: 1e-2
+      log: true
+  model:
+    name: vgg9
+  dataset:
+    name: dvsgesture
+    batch_size: 16
+    T: 100
+  runtime:
+    epochs: 5
+    seed: 42
+    device: cuda

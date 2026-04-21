@@ -1,0 +1,31 @@
+ottt_vgg9_svhn:
+  name: ottt_vgg9_svhn
+  opt: true
+  optuna:
+    n_trials: 50
+  trainer:
+    name: ottt
+    lr:
+      value: 0.1
+      type: float
+      min: 1e-4
+      max: 5e-1
+      log: true
+    loss_lambda:
+      value: 0.05
+      type: float
+      min: 1e-4
+      max: 0.2
+      log: true
+    online_updates: true
+  model:
+    name: vgg9
+  dataset:
+    name: svhn
+    batch_size: 128
+    T: 6
+    direct_coding: true
+  runtime:
+    epochs: 5
+    seed: 42
+    device: cuda

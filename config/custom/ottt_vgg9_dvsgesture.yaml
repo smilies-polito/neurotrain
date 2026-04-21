@@ -1,0 +1,30 @@
+ottt_vgg9_dvsgesture:
+  name: ottt_vgg9_dvsgesture
+  opt: true
+  optuna:
+    n_trials: 50
+  trainer:
+    name: ottt
+    lr:
+      value: 1e-3
+      type: float
+      min: 1e-5
+      max: 1e-1
+      log: true
+    loss_lambda:
+      value: 0.001
+      type: float
+      min: 1e-5
+      max: 0.1
+      log: true
+    online_updates: true
+  model:
+    name: vgg9
+  dataset:
+    name: dvsgesture
+    batch_size: 16
+    T: 100
+  runtime:
+    epochs: 5
+    seed: 42
+    device: cuda
