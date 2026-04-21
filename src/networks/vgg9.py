@@ -1,27 +1,9 @@
 """
 Unified parameterized Spiking VGG-9.
 
-Replaces the previous six near-duplicate variants (vgg9_cifar10, vgg9_svhn,
-vgg9_dvsgest, vgg9_ottt, vgg9_ottt_cifar10, vgg9_ottt_fashionmnist) with one
-configurable class and eight preset factory functions. Each preset captures the
-architecture of the corresponding paper recipe:
-
-* TP-style recipes (traces_propagation BP_CNN #9):
-    - WSConv2d(gain=1.8), no bias
-    - ATanSurrogate(scale=1.0) surrogate
-    - Pool AFTER LIF (MaxPool after {2,4,6}; AdaptiveAvgPool(2,2) after 8)
-    - LeakyIntegrator readout head (non-firing)
-
-* OTTT-style recipes (Xiao et al. 2022):
-    - WSConv2d(gain=1.0), no bias  (original had learnable gain init 1; here
-      gain is a fixed scalar tunable via Optuna rather than backprop)
-    - snntorch surrogate.sigmoid(slope=4)
-    - Post-LIF Scale(2.74), then AvgPool at dataset-specific positions
-    - AdaptiveAvgPool2d(1,1) + Linear readout
-
 The class implements the BaseSNN trainer interface (hidden_weight_layers,
 output_layer, detach_hidden_state) so that it composes with any trainer that
-speaks that contract (OTTT, TP, BPTT, e-prop).
+speaks that contract.
 """
 
 from __future__ import annotations
@@ -81,10 +63,9 @@ class VGG9Config:
     ))
 
     # Conv gain: fixed scalar applied during weight standardization.
-    # TP-style: 1.8 (paper default). OTTT-style: 1.0 (matches original init).
     conv_gain: float = 1.8
 
-    # Post-LIF Scale(k). Only applied when > 0 (OTTT-style uses 2.74).
+    # Post-LIF Scale(k). Only applied when > 0.
     scale_after_lif: float = 0.0
 
     # LIF dynamics.
@@ -149,8 +130,6 @@ class VGG9(BaseSNN):
     (spk_rec, mem_rec) with length `len(channels) + 1` (one entry per conv
     block + one for the head).
 
-    All LIF neurons use init_hidden=True: snntorch manages lif.mem internally.
-    Membrane state is accessed via lif{i}.mem (not stored on the network).
     Call reset() between sequences; call detach_hidden_state() between
     timesteps to prevent TBPTT.
     """
