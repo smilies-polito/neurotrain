@@ -1,0 +1,19 @@
+trainers:
+- ottt
+models:
+- vgg9_ottt
+datasets:
+- SVHN
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  neurobench: false
+opt: true
+optuna:
+  n_trials: 100
+  direction: maximize
+  sampler: tpe
+  pruner: null
+  timeout: null
+  storage: null

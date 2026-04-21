@@ -222,6 +222,18 @@ opt-tp: hpc-mkdir
 	sbatch hpc/bench_tp_dvsgesture.sbatch
 	sbatch hpc/bench_tp_dvscifar10.sbatch
 
+opt-ottt-vgg9: hpc-mkdir
+	sbatch hpc/bench_ottt_vgg9_cifar10.sbatch
+	sbatch hpc/bench_ottt_vgg9_svhn.sbatch
+	sbatch hpc/bench_ottt_vgg9_dvscifar10.sbatch
+	sbatch hpc/bench_ottt_vgg9_dvsgesture.sbatch
+
+opt-tp-vgg9: hpc-mkdir
+	sbatch hpc/bench_tp_vgg9_cifar10.sbatch
+	sbatch hpc/bench_tp_vgg9_svhn.sbatch
+	sbatch hpc/bench_tp_vgg9_dvscifar10.sbatch
+	sbatch hpc/bench_tp_vgg9_dvsgesture.sbatch
+
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────
 

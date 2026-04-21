@@ -202,9 +202,12 @@ class TPTrainer(BaseTrainer):
             s_out_size = layer.out_features
         else:
             if input_shape is None:
+                input_shape = getattr(self.network, 'input_shape', None)
+            if input_shape is None:
                 raise ValueError(
                     "TPTrainer requires input_shape=(C, H, W) for CNN networks "
-                    "(e.g. input_shape=(2, 128, 128) for DVSGesture)."
+                    "(e.g. input_shape=(2, 128, 128) for DVSGesture). "
+                    "Pass it explicitly or expose network.input_shape."
                 )
             with torch.no_grad():
                 dev = next(self.network.parameters()).device
@@ -249,9 +252,11 @@ class TPTrainer(BaseTrainer):
             self.network.lif_out.mem = self.network.lif_out.mem.detach()
 
         elif hasattr(self.network, 'VGG9_CFG'):        # VGG9 CNN architecture
+            # init_hidden=True: snntorch stores membrane inside lif{i}.mem.
             for i in range(1, self.network._num_blocks + 1):
-                attr = f'mem{i}'
-                setattr(self.network, attr, getattr(self.network, attr).detach())
+                lif = getattr(self.network, f'lif{i}')
+                if lif.mem is not None:
+                    lif.mem = lif.mem.detach()
             self.network.head.mem = self.network.head.mem.detach()
 
     # -------------------------------------------------------------------------

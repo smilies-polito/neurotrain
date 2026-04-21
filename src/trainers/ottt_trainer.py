@@ -52,11 +52,9 @@ class OTTTTrainer(BaseTrainer):
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)
-        # Derive trace decay from the network's membrane time constant tau.
-        # tau relates to decay as: trace_decay = 1 - 1/tau.
-        # Falls back to tau=2.0 (decay=0.5) if the network doesn't define tau.
-        tau = float(getattr(self.network, "tau", 2.0))
-        self.trace_decay = 1.0 - 1.0 / tau
+        # trace_decay = beta, since beta = 1 - 1/tau by definition.
+        # Falls back to 0.5 (tau=2.0) if the network doesn't expose beta.
+        self.trace_decay = float(getattr(self.network, "beta", 0.5))
         self.online_updates = bool(online_updates)
         if loss_lambda is None:
             loss_lambda = (
@@ -169,15 +167,21 @@ class OTTTTrainer(BaseTrainer):
     def _detach_neuron_state(self) -> None:
         """
         Block temporal graph links between timesteps (OTTT does not use BPTT).
-        Iterates over all tensor attributes in vars(module) so it handles both
-        snnTorch internal states (module.mem/spk/syn) and externally managed
-        states stored on the network itself (e.g. mem1, mem2, ...).
-        Parameters live in module._parameters, not in vars(), so they are safe.
+
+        Covers two storage patterns:
+        - vars(module): regular instance attributes (externally managed states, e.g. mem1).
+        - module._buffers: snntorch registers lif.mem as a buffer, not a plain attribute,
+          so vars() misses it.  We detach buffers separately.
+        Parameters live in module._parameters and must not be detached.
         """
         for module in self.network.modules():
             for name, value in vars(module).items():
                 if isinstance(value, torch.Tensor):
                     setattr(module, name, value.detach())
+            # snntorch stores lif.mem (and reset) as registered buffers
+            for name, buf in module._buffers.items():
+                if buf is not None:
+                    module._buffers[name] = buf.detach()
 
     def _zero_all_grads(self) -> None:
         self.optimizer.zero_grad(set_to_none=True)

@@ -17,6 +17,8 @@ from networks.vgg9 import (
     vgg9_ottt_cifar10,
     vgg9_ottt_dvsgest,
     vgg9_ottt_fashionmnist,
+    vgg9_tp,
+    vgg9_ottt,
 )
 
 NETWORK_REGISTRY: dict[str, callable] = {
@@ -29,6 +31,8 @@ NETWORK_REGISTRY: dict[str, callable] = {
     "vgg9_ottt_cifar10":      vgg9_ottt_cifar10,
     "vgg9_ottt_dvsgest":      vgg9_ottt_dvsgest,
     "vgg9_ottt_fashionmnist": vgg9_ottt_fashionmnist,
+    "vgg9_tp":                vgg9_tp,
+    "vgg9_ottt":              vgg9_ottt,
 }
 
 __all__ = ["NETWORK_REGISTRY"]

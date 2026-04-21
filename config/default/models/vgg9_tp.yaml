@@ -1,0 +1,57 @@
+# VGG9 model config for the TP (Trace Propagation) trainer.
+# Generic factory: vgg9_tp(in_channels, num_classes, input_shape, **kwargs)
+# MaxPool after blocks {2,4,6}, AdaptiveAvgPool(2,2) after block 8 (TP fixed topology).
+# Tunable Optuna parameters are marked with a type other than null.
+
+default:
+  name: vgg9_tp
+  net_type: vgg9
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+  conv_gain:
+    value: 1.8
+    type: float
+    min: 0.5
+    max: 3.0
+  beta:
+    value: 0.5
+    type: float
+    min: 0.05
+    max: 0.99
+  threshold:
+    value: 0.5
+    type: float
+    min: 0.2
+    max: 2.0
+  surrogate_kind:
+    value: atan
+    type: categorical
+    list: [atan, sigmoid]
+  surrogate_scale:
+    value: 1.0
+    type: float
+    min: 0.5
+    max: 4.0
+
+# 32x32 static datasets: repeat the same frame T times (direct coding)
+cifar10:
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+
+svhn:
+  in_channels: 3
+  num_classes: 10
+  input_shape: [3, 32, 32]
+
+# DVS event-based datasets — 128x128 spatial, 2 polarity channels
+dvscifar10:
+  in_channels: 2
+  num_classes: 10
+  input_shape: [2, 128, 128]
+
+dvsgesture:
+  in_channels: 2
+  num_classes: 11
+  input_shape: [2, 128, 128]

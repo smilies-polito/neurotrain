@@ -4,14 +4,14 @@ Shared conv / head / surrogate building blocks for benchmarking networks.
 These used to be duplicated across six VGG-9 variants. They now live here and
 are composed by the parameterized `VGG9` class in vgg9.py.
 
-Two weight-standardized conv flavors are exposed:
+One weight-standardized conv flavor:
 
-* `WSConv2d`        — traces-propagation / TP style. Fixed scale 1.8, no
-                       learnable gain, no bias. Inherits from nn.Conv2d so that
-                       trainer forward hooks (OTTT's trace substitution) fire
-                       on __call__.
-* `ScaledWSConv2d`  — OTTT style. Per-output-channel learnable gain (init 1.8),
-                       optional bias. Also inherits from nn.Conv2d for hooks.
+* `WSConv2d`  — weight-standardized Conv2d with a fixed scalar gain set at
+                construction time. No learnable gain parameter, no bias.
+                Inherits nn.Conv2d so trainer forward hooks (OTTT trace
+                substitution) fire correctly on __call__.
+                  TP-style presets use gain=1.8 (paper default).
+                  OTTT-style presets use gain=1.0 (matches original init).
 
 Two head flavors:
 
@@ -70,74 +70,43 @@ class ATanSurrogate(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Weight-standardized convs
+# Unified weight-standardized conv
 # ---------------------------------------------------------------------------
 
 class WSConv2d(nn.Conv2d):
     """
-    Conv2d with fixed-scale Weight Standardization (traces_propagation recipe).
+    Conv2d with Weight Standardization and a fixed scalar gain.
 
-    w_std = 1.8 * (w - mean) / sqrt(var * fan_in + eps)
+    w_std = gain * (w - mean) / sqrt(var * fan_in + eps)
 
-    No learnable gain, no bias by default. Inherits nn.Conv2d so that forward
-    hooks registered on instances fire on __call__ — this is required for
-    OTTT's per-synapse trace substitution to work on WS convolutions.
+    gain  is a plain float set at construction time — NOT a learnable
+    nn.Parameter.  TP-style presets use 1.8; OTTT-style presets use 1.0
+    (matching the original paper's initialization, with gain tunable via
+    Optuna rather than backprop).
+
+    No bias.  Inherits nn.Conv2d so that OTTT's forward hooks fire correctly
+    on any subclass via __call__.
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, padding=0,
-                 stride=1, dilation=1, groups=1, eps: float = 1e-5):
+                 stride=1, dilation=1, groups=1,
+                 gain: float = 1.8, eps: float = 1e-4):
         super().__init__(
             in_channels, out_channels, kernel_size,
-            stride=stride, padding=padding, dilation=dilation, groups=groups,
-            bias=False,
+            stride=stride, padding=padding, dilation=dilation,
+            groups=groups, bias=False,
         )
-        self.eps = float(eps)
-
-    def forward(self, x):
-        w = self.weight
-        fan_in = w[0].numel()
-        mean = w.mean(dim=[1, 2, 3], keepdim=True)
-        var = w.var(dim=[1, 2, 3], keepdim=True, unbiased=False)
-        w_std = 1.8 * (w - mean) / torch.sqrt(var * fan_in + self.eps)
-        return F.conv2d(
-            x, w_std, bias=None,
-            stride=self.stride, padding=self.padding,
-            dilation=self.dilation, groups=self.groups,
-        )
-
-
-class ScaledWSConv2d(nn.Conv2d):
-    """
-    Conv2d with Weight Standardization and optional per-channel learnable gain
-    (OTTT-SNN recipe).
-
-    w_std = (w - mean) / sqrt(var * fan_in + eps)
-    w_out = gain * w_std     (if gain is enabled)
-
-    Inherits nn.Conv2d so OTTT's forward hooks fire correctly.
-    """
-
-    def __init__(self, *args, gain: bool = True, gain_init: float = 1.8,
-                 eps: float = 1e-4, **kwargs):
-        super().__init__(*args, **kwargs)
-        if gain:
-            self.gain = nn.Parameter(
-                torch.full((self.out_channels, 1, 1, 1), float(gain_init))
-            )
-        else:
-            self.gain = None
-        self.eps = float(eps)
+        self.gain = float(gain)
+        self.eps  = float(eps)
 
     def forward(self, x):
         w = self.weight
         fan_in = w.shape[1] * w.shape[2] * w.shape[3]
         mean = w.mean(dim=[1, 2, 3], keepdim=True)
-        var = w.var(dim=[1, 2, 3], keepdim=True)
-        w_std = (w - mean) / ((var * fan_in + self.eps) ** 0.5)
-        if self.gain is not None:
-            w_std = w_std * self.gain
+        var  = w.var (dim=[1, 2, 3], keepdim=True, unbiased=True)
+        w_std = self.gain * (w - mean) / ((var * fan_in + self.eps) ** 0.5)
         return F.conv2d(
-            x, w_std, self.bias,
+            x, w_std, None,
             self.stride, self.padding, self.dilation, self.groups,
         )
 
