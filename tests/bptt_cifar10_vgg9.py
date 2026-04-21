@@ -121,6 +121,7 @@ def run_training(
         pin_memory=(device.type == "cuda"),
         seed=seed,
         num_workers=NUM_WORKERS,
+        direct_coding=True,
     )
     network = CIFAR10_VGG9(
         beta=beta,

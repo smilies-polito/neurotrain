@@ -8,12 +8,16 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
-from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms import Compose, Normalize, RandomCrop, ToTensor
 
-from datasets.rate import Rate, time_major_collate  # returns [T, ...] per sample (time-major)
+from datasets.rate import Rate, DirectCoding, time_major_collate
 
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
+
+# Per-channel mean and std computed over the MNIST training set.
+_MNIST_MEAN = (0.1307,)
+_MNIST_STD  = (0.3081,)
 
 
 def _seed_worker(worker_id: int) -> None:
@@ -31,22 +35,50 @@ def MNISTLoader(
     num_workers: int = 4,
     data_root: str | Path | None = None,
     download: bool = True,
+    direct_coding: bool = False,
 ):
     """
-    Minimal MNIST loader for SNNs using snnTorch rate coding (spikegen.rate).
+    Build train/test DataLoaders for MNIST with a choice of input encoding.
 
-    Per-sample:
-      - ToTensor() -> x in [0,1], shape [1,28,28]
-      - Rate(T) -> spikes [T, 1, 28, 28]  (time-major)
+    Args:
+        batch_size (int): Number of samples per batch.
+        T (int): Number of SNN timesteps.
+        pin_memory (bool): Pin host memory for faster GPU transfers.
+        seed (int | None): If set, makes shuffling and worker RNG reproducible.
+        num_workers (int): Subprocesses used for data loading.
+        data_root (str | Path | None): Dataset root directory.  Falls back to
+            the ``MNIST_ROOT`` environment variable, then ``src/Data/``.
+        download (bool): Download MNIST if not already present.
+        direct_coding (bool): Select the input encoding scheme.
 
-    Batched output shapes:
-      - data:   [T, B, 1, 28, 28]
-      - target: [B]
+            * ``False`` (default) — **Rate coding** via ``[ToTensor, Rate(T)]``.
+            * ``True`` — **Direct coding**.  Normalised pixel values are
+              repeated across T timesteps via ``DirectCoding(T)``.  Train
+              pipeline adds ``RandomCrop`` for augmentation.
+              ``RandomHorizontalFlip`` is intentionally omitted — flipping
+              handwritten digits destroys class labels (e.g. "3", "5", "7").
+
+    Output batch shapes (both modes):
+        - data:   ``[T, B, 1, 28, 28]``
+        - target: ``[B]``
     """
     if data_root is None:
         data_root = os.environ.get("MNIST_ROOT", str(DEFAULT_DATA_ROOT))
 
-    transform = Compose([ToTensor(), Rate(T)])
+    if direct_coding:
+        train_transform = Compose([
+            RandomCrop(28, padding=4),
+            ToTensor(),
+            Normalize(_MNIST_MEAN, _MNIST_STD),
+            DirectCoding(T),
+        ])
+        test_transform = Compose([
+            ToTensor(),
+            Normalize(_MNIST_MEAN, _MNIST_STD),
+            DirectCoding(T),
+        ])
+    else:
+        train_transform = test_transform = Compose([ToTensor(), Rate(T)])
 
     g = None
     worker_init_fn = None
@@ -55,7 +87,7 @@ def MNISTLoader(
         worker_init_fn = _seed_worker
 
     trainloader = DataLoader(
-        MNIST(str(data_root), train=True, download=download, transform=transform),
+        MNIST(str(data_root), train=True, download=download, transform=train_transform),
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
@@ -67,12 +99,11 @@ def MNISTLoader(
     )
 
     testloader = DataLoader(
-        MNIST(str(data_root), train=False, download=download, transform=transform),
+        MNIST(str(data_root), train=False, download=download, transform=test_transform),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
         collate_fn=time_major_collate,
