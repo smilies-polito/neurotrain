@@ -1,0 +1,22 @@
+bptt_vgg9_dvsgesture_tp:
+  name: bptt_vgg9_dvsgesture_tp
+  opt: false
+  trainer:
+    name: bptt
+    lr: 0.0001
+  model:
+    name: vgg9
+    default:
+      head_type: leaky_integrator
+      use_tp_pool: true
+      conv_gain: 1.8
+      surrogate_kind: atan
+      beta: 0.53
+  dataset:
+    name: dvsgesture
+    batch_size: 16
+    T: 100
+  runtime:
+    epochs: 5
+    seed: 42
+    device: cuda

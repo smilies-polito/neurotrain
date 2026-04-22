@@ -54,8 +54,40 @@ tp-vgg9-svhn:
 tp-vgg9-dvsgesture:
 	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_dvsgesture.yaml --name tp_vgg9_dvsgesture
 
+## Run BPTT VGG9 CIFAR10 experiment (OTTT params)
+bptt-vgg9-cifar10-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_ottt.yaml --name bptt_vgg9_cifar10_ottt
+
+## Run BPTT VGG9 CIFAR10 experiment for 200 epochs (OTTT params)
+bptt-vgg9-cifar10-200-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_200_ottt.yaml --name bptt_vgg9_cifar10_200_ottt
+
+## Run BPTT VGG9 SVHN experiment (OTTT params)
+bptt-vgg9-svhn-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_svhn_ottt.yaml --name bptt_vgg9_svhn_ottt
+
+## Run BPTT VGG9 DVSGesture experiment (OTTT params)
+bptt-vgg9-dvsgesture-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_dvsgesture_ottt.yaml --name bptt_vgg9_dvsgesture_ottt
+
+## Run BPTT VGG9 CIFAR10 experiment (TP params)
+bptt-vgg9-cifar10-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_tp.yaml --name bptt_vgg9_cifar10_tp
+
+## Run BPTT VGG9 CIFAR10 experiment for 200 epochs (TP params)
+bptt-vgg9-cifar10-200-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_200_tp.yaml --name bptt_vgg9_cifar10_200_tp
+
+## Run BPTT VGG9 SVHN experiment (TP params)
+bptt-vgg9-svhn-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_svhn_tp.yaml --name bptt_vgg9_svhn_tp
+
+## Run BPTT VGG9 DVSGesture experiment (TP params)
+bptt-vgg9-dvsgesture-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_dvsgesture_tp.yaml --name bptt_vgg9_dvsgesture_tp
+
 ## Run all VGG9 individual custom experiments
-vgg9-all: ottt-vgg9-cifar10 ottt-vgg9-svhn ottt-vgg9-dvsgesture tp-vgg9-cifar10 tp-vgg9-svhn tp-vgg9-dvsgesture
+vgg9-all: ottt-vgg9-cifar10 ottt-vgg9-svhn ottt-vgg9-dvsgesture tp-vgg9-cifar10 tp-vgg9-svhn tp-vgg9-dvsgesture bptt-vgg9-cifar10-ottt bptt-vgg9-svhn-ottt bptt-vgg9-dvsgesture-ottt bptt-vgg9-cifar10-tp bptt-vgg9-svhn-tp bptt-vgg9-dvsgesture-tp
 
 # ── HPC / SLURM targets ─────────────────────────────────────────────────────
 

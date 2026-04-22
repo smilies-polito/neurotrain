@@ -134,6 +134,7 @@ class VGG9(BaseSNN):
 
         # Expose capability flags read by trainers and evaluators.
         self.beta = float(cfg.beta)
+        self.threshold = float(cfg.threshold)
         # out_integrator=True tells evaluators to use the final mem, not accumulated spikes.
         self.out_integrator = (cfg.head_type == _HEAD_LI)
         # Exposed for TPTrainer._init_S when input_shape is not passed explicitly.
