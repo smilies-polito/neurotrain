@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-TP trainer + unified VGG-9 + CIFAR-10 (direct/analog coding, 3×32×32).
+TP trainer + unified VGG-9 + SVHN (direct/analog coding, 3×32×32).
 
-Hyperparameters from Pes et al. 2026:
+Hyperparameters from Pes et al. 2026 (SVHN uses same recipe as CIFAR-10):
   Optimizer: Adam, lr=1e-4, CosineAnnealingLR
-  alpha (target-path membrane decay): 0.53
-  beta  (trace decay):                0.98
-  vth   (target-path threshold):      1.0
-  T (timesteps): 6 (same static frame repeated)
+  alpha: 0.53,  beta (trace): 0.98,  vth: 1.0
 
-Eval: LI head accumulates internally → read mem_rec[-1] at the FINAL timestep only.
+Eval: LI head — read mem_rec[-1] at the FINAL timestep only.
 """
 
 from __future__ import annotations
@@ -25,33 +22,27 @@ from typing import Dict
 import numpy as np
 import torch
 
-# -----------------------------------------------------------------------------
-# Hardcoded Defaults
-# -----------------------------------------------------------------------------
 BATCH_SIZE  = 64
-TIMESTEPS   = 6          # Direct coding: same frame repeated T times
+TIMESTEPS   = 6
 NUM_WORKERS = 4
 
-BETA      = 0.53        # VGG-9 LIF membrane decay (network, Pes 2026)
+BETA      = 0.53
 THRESHOLD = 1.0
 
-EPOCHS  = 5             # Quick default; paper uses 300
-LR      = 1e-4          # Adam, Pes 2026
-ALPHA   = 0.53          # TP target-path membrane decay (Pes 2026 CIFAR10)
-TP_BETA = 0.98          # TP eligibility trace decay
-VTH     = 1.0           # TP target-path threshold
+EPOCHS  = 5
+LR      = 1e-4
+ALPHA   = 0.53
+TP_BETA = 0.98
+VTH     = 1.0
 SEED    = 42
 DEVICE  = "auto"
 HPC_PRINTS = False
 
 OPTUNA_TRIALS  = 0
 OPTUNA_EPOCHS  = 5
-STUDY_NAME     = "tp_cifar10_vgg9"
+STUDY_NAME     = "tp_svhn_vgg9"
 OPTUNA_STORAGE = ""
 
-# -----------------------------------------------------------------------------
-# Repo bootstrap
-# -----------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 TESTS_DIR = PROJECT_ROOT / "tests"
@@ -64,14 +55,11 @@ if "networks" not in sys.modules:
     _pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = _pkg
 
-from datasets.cifar10_loader import CIFAR10Loader
+from datasets.svhn_loader import SVHNLoader
 from networks.vgg9 import vgg9
 from trainers.tp_trainer import TPTrainer
 
 
-# -----------------------------------------------------------------------------
-# Utilities
-# -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--epochs",         type=int,   default=EPOCHS)
@@ -107,7 +95,6 @@ def get_device(req: str) -> torch.device:
 
 
 def eval_network(network, test_loader, device) -> float:
-    """LI head: read mem_rec[-1] at the final timestep (integrator already accumulates)."""
     network.eval()
     correct = total = 0
     non_blocking = device.type == "cuda"
@@ -125,9 +112,6 @@ def eval_network(network, test_loader, device) -> float:
     return correct / total if total else 0.0
 
 
-# -----------------------------------------------------------------------------
-# Training
-# -----------------------------------------------------------------------------
 def run_training(
     *, batch_size, timesteps, beta, threshold,
     epochs, lr, alpha, tp_beta, vth,
@@ -136,7 +120,7 @@ def run_training(
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    train_loader, test_loader = CIFAR10Loader(
+    train_loader, test_loader = SVHNLoader(
         batch_size=batch_size, T=timesteps,
         pin_memory=(device.type == "cuda"),
         seed=seed, num_workers=NUM_WORKERS,
@@ -151,7 +135,6 @@ def run_training(
         li_head_spatial=2, li_head_leak=1.0,
     ).to(device)
 
-    # Build optimizer with cosine scheduler; pass optimizer into TPTrainer.
     optimizer = torch.optim.Adam(list(network.parameters()), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 

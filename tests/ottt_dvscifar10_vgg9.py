@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-TP trainer + unified VGG-9 + CIFAR-10 (direct/analog coding, 3×32×32).
+OTTT trainer + unified VGG-9 + DVSCIFAR10 (event-based, 2×128×128, T=10).
 
-Hyperparameters from Pes et al. 2026:
-  Optimizer: Adam, lr=1e-4, CosineAnnealingLR
-  alpha (target-path membrane decay): 0.53
-  beta  (trace decay):                0.98
-  vth   (target-path threshold):      1.0
-  T (timesteps): 6 (same static frame repeated)
+Hyperparameters from Xiao et al. 2022 (CIFAR10-DVS recipe):
+  Optimizer: SGD, lr=0.1, momentum=0.9, CosineAnnealingLR
+  lambda (loss_lambda): 0.001
+  constant_input_per_timestep: False (event-coded, each frame is different)
 
-Eval: LI head accumulates internally → read mem_rec[-1] at the FINAL timestep only.
+Note: paper also uses dropout=0.1 which is not yet modelled in VGG-9.
+Eval: global_linear head — spike-sum across T, then argmax.
 """
 
 from __future__ import annotations
@@ -25,33 +24,25 @@ from typing import Dict
 import numpy as np
 import torch
 
-# -----------------------------------------------------------------------------
-# Hardcoded Defaults
-# -----------------------------------------------------------------------------
-BATCH_SIZE  = 64
-TIMESTEPS   = 6          # Direct coding: same frame repeated T times
+BATCH_SIZE  = 128
+TIMESTEPS   = 10
 NUM_WORKERS = 4
 
-BETA      = 0.53        # VGG-9 LIF membrane decay (network, Pes 2026)
+BETA      = 0.5
 THRESHOLD = 1.0
 
-EPOCHS  = 5             # Quick default; paper uses 300
-LR      = 1e-4          # Adam, Pes 2026
-ALPHA   = 0.53          # TP target-path membrane decay (Pes 2026 CIFAR10)
-TP_BETA = 0.98          # TP eligibility trace decay
-VTH     = 1.0           # TP target-path threshold
-SEED    = 42
-DEVICE  = "auto"
-HPC_PRINTS = False
+EPOCHS       = 5
+LR           = 0.1
+LOSS_LAMBDA  = 0.001
+SEED         = 42
+DEVICE       = "auto"
+HPC_PRINTS   = False
 
 OPTUNA_TRIALS  = 0
 OPTUNA_EPOCHS  = 5
-STUDY_NAME     = "tp_cifar10_vgg9"
+STUDY_NAME     = "ottt_dvscifar10_vgg9"
 OPTUNA_STORAGE = ""
 
-# -----------------------------------------------------------------------------
-# Repo bootstrap
-# -----------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 TESTS_DIR = PROJECT_ROOT / "tests"
@@ -64,23 +55,18 @@ if "networks" not in sys.modules:
     _pkg.__path__ = [str(SRC_DIR / "networks")]
     sys.modules["networks"] = _pkg
 
-from datasets.cifar10_loader import CIFAR10Loader
+from datasets.dvscifar10_loader import DVSCIFAR10Loader
 from networks.vgg9 import vgg9
-from trainers.tp_trainer import TPTrainer
+from trainers.ottt_trainer import OTTTTrainer
 
 
-# -----------------------------------------------------------------------------
-# Utilities
-# -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--epochs",         type=int,   default=EPOCHS)
     p.add_argument("--batch-size",     type=int,   default=BATCH_SIZE)
     p.add_argument("--timesteps",      type=int,   default=TIMESTEPS)
     p.add_argument("--lr",             type=float, default=LR)
-    p.add_argument("--alpha",          type=float, default=ALPHA)
-    p.add_argument("--tp-beta",        type=float, default=TP_BETA)
-    p.add_argument("--vth",            type=float, default=VTH)
+    p.add_argument("--loss-lambda",    type=float, default=LOSS_LAMBDA)
     p.add_argument("--beta",           type=float, default=BETA)
     p.add_argument("--threshold",      type=float, default=THRESHOLD)
     p.add_argument("--seed",           type=int,   default=SEED)
@@ -107,7 +93,7 @@ def get_device(req: str) -> torch.device:
 
 
 def eval_network(network, test_loader, device) -> float:
-    """LI head: read mem_rec[-1] at the final timestep (integrator already accumulates)."""
+    """Event-coded: each frame is different, no constant_input averaging."""
     network.eval()
     correct = total = 0
     non_blocking = device.type == "cuda"
@@ -116,49 +102,46 @@ def eval_network(network, test_loader, device) -> float:
             data   = data.to(device, non_blocking=non_blocking)
             target = target.to(device, non_blocking=non_blocking)
             network.reset()
-            mem_last = None
+            spk_sum = None
             for t in range(data.size(0)):
-                _, mem_rec = network(data[t])
-                mem_last = mem_rec[-1]
-            correct += mem_last.argmax(dim=1).eq(target).sum().item()
+                spk_rec, _ = network(data[t])
+                out = spk_rec[-1]
+                spk_sum = out if spk_sum is None else spk_sum + out
+            correct += spk_sum.argmax(dim=1).eq(target).sum().item()
             total   += target.size(0)
     return correct / total if total else 0.0
 
 
-# -----------------------------------------------------------------------------
-# Training
-# -----------------------------------------------------------------------------
 def run_training(
     *, batch_size, timesteps, beta, threshold,
-    epochs, lr, alpha, tp_beta, vth,
+    epochs, lr, loss_lambda,
     seed, device, hpc_prints=False,
     log_prefix="", trial=None,
 ) -> Dict[str, float]:
     set_seed(seed)
 
-    train_loader, test_loader = CIFAR10Loader(
+    train_loader, test_loader = DVSCIFAR10Loader(
         batch_size=batch_size, T=timesteps,
         pin_memory=(device.type == "cuda"),
         seed=seed, num_workers=NUM_WORKERS,
-        direct_coding=True,
     )
 
     network = vgg9(
-        in_channels=3, num_classes=10, input_shape=(3, 32, 32),
-        head_type="leaky_integrator", use_tp_pool=True,
+        in_channels=2, num_classes=10, input_shape=(2, 128, 128),
+        head_type="global_linear", pool_after_blocks=(2, 4, 6),
         beta=beta, threshold=threshold,
-        conv_gain=1.8, surrogate_kind="atan", surrogate_scale=1.0,
-        li_head_spatial=2, li_head_leak=1.0,
+        conv_gain=1.0, surrogate_kind="sigmoid", surrogate_slope=4.0,
+        scale_after_lif=2.74,
     ).to(device)
 
-    # Build optimizer with cosine scheduler; pass optimizer into TPTrainer.
-    optimizer = torch.optim.Adam(list(network.parameters()), lr=lr)
+    optimizer = torch.optim.SGD(network.parameters(), lr=lr, momentum=0.9)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
-    trainer = TPTrainer(
+    trainer = OTTTTrainer(
         network=network, lr=lr, batch_size=batch_size,
-        alpha=alpha, beta=tp_beta, vth=vth, surrogate_scale=1.0,
-        train_target_propagator=True, use_optimizer=False,
+        online_updates=True,
+        constant_input_per_timestep=False,   # event-coded
+        loss_lambda=loss_lambda,
         optimizer=optimizer,
     ).to(device)
 
@@ -223,12 +206,12 @@ def run_optuna(args: argparse.Namespace, device: torch.device) -> None:
     )
 
     def objective(trial):
-        lr    = trial.suggest_float("lr",    1e-5, 5e-2, log=True)
-        alpha = trial.suggest_float("alpha", 0.1,  0.99)
+        lr          = trial.suggest_float("lr",          1e-3, 5e-1, log=True)
+        loss_lambda = trial.suggest_float("loss_lambda", 1e-4, 0.1,  log=True)
         result = run_training(
             epochs=args.optuna_epochs, batch_size=args.batch_size,
             timesteps=args.timesteps, lr=lr,
-            alpha=alpha, tp_beta=args.tp_beta, vth=args.vth,
+            loss_lambda=loss_lambda,
             beta=args.beta, threshold=args.threshold,
             seed=args.seed + trial.number, device=device,
             hpc_prints=args.hpc_prints,
@@ -254,7 +237,7 @@ def main() -> None:
     result = run_training(
         epochs=args.epochs, batch_size=args.batch_size,
         timesteps=args.timesteps, lr=args.lr,
-        alpha=args.alpha, tp_beta=args.tp_beta, vth=args.vth,
+        loss_lambda=args.loss_lambda,
         beta=args.beta, threshold=args.threshold,
         seed=args.seed, device=device, hpc_prints=args.hpc_prints,
     )

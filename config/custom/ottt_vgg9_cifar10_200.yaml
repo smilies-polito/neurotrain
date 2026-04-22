@@ -1,0 +1,32 @@
+# Custom experiment config for OTTT + VGG9 + CIFAR10 (200 epochs)
+ottt_vgg9_cifar10_200:
+  name: ottt_vgg9_cifar10_200
+  opt: false
+  optuna:
+    n_trials: 50
+  trainer:
+    name: ottt
+    lr:
+      value: 0.1
+      type: float
+      min: 1.0e-4
+      max: 5.0e-1
+      log: true
+    loss_lambda:
+      value: 0.05
+      type: float
+      min: 1.0e-4
+      max: 0.2
+      log: true
+    online_updates: true
+  model:
+    name: vgg9
+  dataset:
+    name: cifar10
+    batch_size: 128
+    T: 6
+    direct_coding: true
+  runtime:
+    epochs: 200
+    seed: 42
+    device: cuda

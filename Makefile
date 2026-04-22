@@ -26,6 +26,10 @@ custom:
 ottt-vgg9-cifar10:
 	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_cifar10.yaml --name ottt_vgg9_cifar10
 
+## Run OTTT VGG9 CIFAR10 experiment for 200 epochs
+ottt-vgg9-cifar10-200:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_cifar10_200.yaml --name ottt_vgg9_cifar10_200
+
 ## Run OTTT VGG9 SVHN experiment
 ottt-vgg9-svhn:
 	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_svhn.yaml --name ottt_vgg9_svhn
@@ -37,6 +41,10 @@ ottt-vgg9-dvsgesture:
 ## Run TP VGG9 CIFAR10 experiment
 tp-vgg9-cifar10:
 	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_cifar10.yaml --name tp_vgg9_cifar10
+
+## Run TP VGG9 CIFAR10 experiment for 200 epochs
+tp-vgg9-cifar10-200:
+	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_cifar10_200.yaml --name tp_vgg9_cifar10_200
 
 ## Run TP VGG9 SVHN experiment
 tp-vgg9-svhn:
