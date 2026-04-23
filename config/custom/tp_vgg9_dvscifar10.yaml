@@ -35,6 +35,6 @@ tp_vgg9_dvscifar10:
     T: 10
   runtime:
     epochs: 100
-    batch_size: 64
+    batch_size: 16
     seed: 42
     device: cuda
