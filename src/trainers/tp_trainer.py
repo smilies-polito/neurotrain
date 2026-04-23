@@ -60,7 +60,6 @@ Design note — batch size constraint (paper Sec 3.2):
   this implementation.
 """
 
-import os
 from typing import List, Optional, Tuple
 
 import torch
@@ -300,64 +299,6 @@ class TPTrainer(BaseTrainer):
         return self._SpikeFunction.apply(v, self.vth, self.surrogate_scale)
 
     # -------------------------------------------------------------------------
-    # Debug diagnostics — enabled by env var TP_DEBUG_DIR=<path>
-    # -------------------------------------------------------------------------
-
-    def _debug_dump(
-        self,
-        eps_s: list,
-        eps_t: list,
-        s_t: list,
-        spk_rec: list,
-        mem_out: torch.Tensor,
-        t: int,
-        debug_dir: str,
-    ) -> None:
-        """
-        Write per-layer diagnostics to <debug_dir>/t{t:03d}.txt.
-
-        Checks to watch for healthy training:
-          - spike rates 5–40% (0% means dead neurons, 100% means threshold too low)
-          - eps L2 norm not zero or exploding
-          - z_l max/mean ratio near 1.0 (if >> 1.0 softmax is collapsed to diagonal)
-          - mem_out.argmax spread across classes (not stuck on one class)
-        """
-        os.makedirs(debug_dir, exist_ok=True)
-        lines = [f"timestep {t}  alpha={self.alpha:.3f}  vth={self.vth:.3f}  beta={self.beta:.3f}"]
-        with torch.no_grad():
-            for l in range(self.n_blocks):
-                spk_rate_s = spk_rec[l].float().mean().item() if spk_rec[l] is not None else float('nan')
-                spk_rate_t = s_t[l].float().mean().item() if s_t[l] is not None else float('nan')
-                eps_s_norm = eps_s[l].flatten(1).norm(dim=1).mean().item() if eps_s[l] is not None else float('nan')
-                eps_t_norm = eps_t[l].flatten(1).norm(dim=1).mean().item() if eps_t[l] is not None else float('nan')
-
-                if eps_s[l] is not None and eps_t[l] is not None:
-                    if eps_s[l].dim() > 2:
-                        h1 = eps_s[l].flatten(2).permute(2, 0, 1)
-                        t1 = eps_t[l].flatten(2).permute(2, 1, 0)
-                        z = (h1 @ t1).mean(0)
-                    else:
-                        z = eps_s[l].flatten(1) @ eps_t[l].flatten(1).t()
-                    z_max = z.max().item()
-                    z_mean = z.mean().item()
-                else:
-                    z_max = z_mean = float('nan')
-
-                lines.append(
-                    f"  layer {l:2d}  spk_s={spk_rate_s:.3f}  spk_t={spk_rate_t:.3f}"
-                    f"  eps_s_norm={eps_s_norm:.3f}  eps_t_norm={eps_t_norm:.3f}"
-                    f"  z_max={z_max:.3f}  z_mean={z_mean:.3f}"
-                )
-
-            counts = torch.zeros(self.n_classes, device=mem_out.device)
-            counts.scatter_add_(0, mem_out.argmax(dim=1), torch.ones(mem_out.size(0), device=mem_out.device))
-            lines.append(f"  mem_out argmax class counts: {counts.int().tolist()}")
-
-        fname = os.path.join(debug_dir, f"t{t:03d}.txt")
-        with open(fname, "w") as f:
-            f.write("\n".join(lines) + "\n")
-
-    # -------------------------------------------------------------------------
     # Training
     # -------------------------------------------------------------------------
 
@@ -581,12 +522,6 @@ class TPTrainer(BaseTrainer):
                 self.output_layer.weight.grad = grad_out
             else:
                 self.output_layer.weight.grad += grad_out
-
-            # Debug diagnostics — write per-timestep stats when TP_DEBUG_DIR is set.
-            # Use a single timestep per sample (t=0) to keep disk writes manageable.
-            _debug_dir = os.environ.get("TP_DEBUG_DIR", "")
-            if _debug_dir and t == 0:
-                self._debug_dump(eps_s, eps_t, s_t, spk_rec, mem_out, t, _debug_dir)
 
             # --- Alg 1 line 28: W^{t+1} = W^t - η·ΔW ---
             if self.optimizer:
