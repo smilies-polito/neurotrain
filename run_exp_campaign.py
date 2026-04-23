@@ -82,8 +82,8 @@ def main() -> None:
         level=getattr(logging, args.log_level),
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-    logging.getLogger("root").addFilter(
-        type("_TonoCacheFilter", (logging.Filter,), {
+    logging.root.addFilter(
+        type("_TonicCacheFilter", (logging.Filter,), {
             "filter": staticmethod(lambda r: "not in cache" not in r.getMessage())
         })()
     )
