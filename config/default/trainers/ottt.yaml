@@ -10,10 +10,6 @@ lr:
   min: 1.0e-4
   max: 5.0e-1
   log: true
-batch_size:
-  value: 128
-  type: categorical
-  list: [16, 32, 64, 128, 256]
 online_updates: true
 # CE/MSE interpolation weight. Paper: 0.05 (CIFAR10/SVHN), 0.001 (DVS datasets).
 loss_lambda:

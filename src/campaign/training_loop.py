@@ -8,13 +8,25 @@ so experiment.py doesn't need to import the whole benchmark_runner.
 import torch
 from torch.utils.data import DataLoader
 
+try:
+    from tqdm import tqdm as _tqdm
+except ImportError:
+    _tqdm = None
+
 from trainers.base_trainer import BaseTrainer
+
+
+def _wrap(loader, desc: str, progress: bool):
+    if progress and _tqdm is not None:
+        return _tqdm(loader, desc=desc, leave=False, unit="batch")
+    return loader
 
 
 def train_one_epoch(
     trainer: BaseTrainer,
     train_loader: DataLoader,
     device: torch.device,
+    progress: bool = False,
 ) -> dict[str, float]:
     """
     Train for one epoch.
@@ -34,7 +46,7 @@ def train_one_epoch(
 
     non_blocking = device.type == "cuda"
 
-    for data, target in train_loader:
+    for data, target in _wrap(train_loader, "train", progress):
         # Data from loaders is already time-major [T, B, ...]
         data   = data.to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
@@ -60,6 +72,7 @@ def evaluate(
     test_loader: DataLoader,
     device: torch.device,
     constant_input_per_timestep: bool = False,
+    progress: bool = False,
 ) -> float:
     """
     Evaluate network accuracy on the test set.
@@ -89,7 +102,7 @@ def evaluate(
     non_blocking   = device.type == "cuda"
     use_integrator = bool(getattr(network, "out_integrator", False))
 
-    for data, target in test_loader:
+    for data, target in _wrap(test_loader, "eval", progress):
         data   = data.to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
 

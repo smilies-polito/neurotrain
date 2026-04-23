@@ -15,9 +15,9 @@ tp_vgg9_svhn:
     name: vgg9
   dataset:
     name: svhn
-    batch_size: 64
     T: 10
   runtime:
     epochs: 5
+    batch_size: 32
     seed: 42
     device: cuda

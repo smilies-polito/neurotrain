@@ -10,10 +10,6 @@ lr:
   min: 1.0e-5
   max: 5.0e-2
   log: true
-batch_size:
-  value: 64
-  type: categorical
-  list: [32, 64, 128, 256]
 # α: target-path membrane decay (Eq 1). Paper: 0.53 (DVSGesture/CIFAR10), 0.18 (DVSCIFAR10).
 alpha:
   value: 0.53

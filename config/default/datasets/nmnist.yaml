@@ -1,13 +1,9 @@
 name: NMNIST
 supported_net_types: [fc, rec, conv]
-batch_size:
-  value: 128
-  type: categorical
-  list: [32, 64, 128, 256]
 T:
-  value: 50
+  value: 10
   type: null
-  min: 20
+  min: 10
   max: 100
   step: 10
 seed:

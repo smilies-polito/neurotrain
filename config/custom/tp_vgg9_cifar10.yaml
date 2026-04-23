@@ -15,9 +15,9 @@ tp_vgg9_cifar10:
     name: vgg9
   dataset:
     name: cifar10
-    batch_size: 64
     T: 10
   runtime:
     epochs: 5
+    batch_size: 64
     seed: 42
     device: cuda

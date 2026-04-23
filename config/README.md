@@ -186,3 +186,55 @@ experiments/<campaign>/<exp_name>/
 
 In normal (`opt: false`) runs the `trials/` and `optuna/` directories are not
 created; output is identical to the pre-Optuna behaviour.
+
+---
+
+## Override Logic & Priority
+
+Understanding how configurations are merged allows you to specify only what changes, keeping your experiment files clean.
+
+### 1 — The Core Hierarchy
+
+When an experiment is built, the configuration is assembled in this order (later stages override earlier ones):
+
+1.  **Base Defaults**: Loaded from `config/default/{trainers,models,datasets}/`.
+2.  **User Overrides**: Defined in your experiment file (`experiments.yaml` or `custom/*.yaml`).
+3.  **Model Specialization**: Model configurations are refined based on the trainer and dataset.
+
+### 2 — Model Specialization (Hierarchical Merge)
+
+Model YAMLs (e.g., `config/default/models/vgg9.yaml`) support trainer and dataset specific sections:
+
+```yaml
+default:
+  beta: 0.9
+tp:
+  head_type: leaky_integrator  # trainer-specific
+mnist:
+  input_shape: [1, 28, 28]     # dataset-specific
+```
+
+**The Resolve Order:**
+1. `default` section
+2. **User Overrides** (from experiments.yaml)
+3. **Trainer section** (e.g., `tp:`)
+4. **Dataset section** (e.g., `mnist:`)
+
+> [!IMPORTANT]
+> Dataset specialization happens **last**, giving it the highest priority within the model logic.
+
+### 3 — Optuna Attribute Normalization
+
+If you define a parameter as a *tunable block* (with `value`, `type`, etc.):
+- **If `opt: true`**: Optuna uses the full block to define the search space.
+- **If `opt: false`**: The loader automatically flattens it to its `value` (e.g. `lr: 1e-3`).
+
+### 4 — Summary of Priority
+
+| Priority | Level | Description |
+| :--- | :--- | :--- |
+| **1 (Highest)** | Model Dataset Section | `mnist:` block inside `models/vgg9.yaml` |
+| **2** | Model Trainer Section | `tp:` block inside `models/vgg9.yaml` |
+| **3** | User Overrides | Your YAML file's `model: { ... }` block |
+| **4** | Global Defaults | `default:` block inside `models/vgg9.yaml` |
+

@@ -14,9 +14,9 @@ bptt_vgg9_svhn_tp:
       beta: 0.53
   dataset:
     name: svhn
-    batch_size: 64
     T: 10
   runtime:
     epochs: 5
+    batch_size: 64
     seed: 42
     device: cuda

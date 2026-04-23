@@ -9,7 +9,6 @@ ottt_vgg9_svhn:
     - conv
     - vgg9
     lr: 0.016730402817820244
-    batch_size: 64
     online_updates: true
     loss_lambda: 0.00039829941698924106
     grad_clip: null
@@ -51,7 +50,6 @@ ottt_vgg9_svhn:
     - rec
     - conv
     - vgg9
-    batch_size: 128
     T: 6
     seed: 184
     direct_coding: true
@@ -61,6 +59,7 @@ ottt_vgg9_svhn:
     num_workers: 4
   runtime:
     epochs: 100
+    batch_size: 128
     device: cuda
     seed: 42
     log_level: INFO

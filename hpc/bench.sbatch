@@ -12,4 +12,4 @@
 
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
-    python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name bench
+    python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --no-progress --name bench

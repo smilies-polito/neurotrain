@@ -15,9 +15,9 @@ tp_vgg9_dvsgesture:
     name: vgg9
   dataset:
     name: dvsgesture
-    batch_size: 16
     T: 100
   runtime:
     epochs: 5
+    batch_size: 16
     seed: 42
     device: cuda

@@ -1,6 +1,6 @@
 ottt_vgg9_dvsgesture:
   name: ottt_vgg9_dvsgesture
-  opt: true
+  opt: false
   optuna:
     n_trials: 50
   trainer:
@@ -22,9 +22,9 @@ ottt_vgg9_dvsgesture:
     name: vgg9
   dataset:
     name: dvsgesture
-    batch_size: 16
-    T: 100
+    T: 20
   runtime:
-    epochs: 5
+    epochs: 20
+    batch_size: 128
     seed: 42
     device: cuda

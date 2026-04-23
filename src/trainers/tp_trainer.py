@@ -43,6 +43,15 @@ Design note — output layer (paper Sec 3.1):
   over timesteps.  The integrator already accumulates internally (mem += W·spk each
   step); summing over timesteps gives a triangular sum, not a pure integral.
 
+Design note — contrastive loss for CNN layers (tp_cnn.py reference):
+  For conv layers the traces have shape [B, C, H, W].  The reference
+  implementation computes one [B,B] similarity matrix per spatial position
+  and averages (spatial-mean form):
+    z_l = mean_s ( ε_l[:,:,s] @ ε̃_l[:,:,s]^T )
+  Magnitude ≈ C (channels), not C*H*W — keeping softmax responsive to
+  inter-sample structure.  Flattening everything to [B, C*H*W] makes the
+  diagonal dwarf all off-diagonal entries and kills the gradient signal.
+
 Design note — batch size constraint (paper Sec 3.2):
   TP requires batch_size >= 2.  The contrastive loss (Eq 13-15) computes a [B,B]
   inter-sample similarity matrix z_l = ε_l @ ε̃_l^T.  With B=1 this is a 1×1
@@ -51,6 +60,7 @@ Design note — batch size constraint (paper Sec 3.2):
   this implementation.
 """
 
+import os
 from typing import List, Optional, Tuple
 
 import torch
@@ -290,6 +300,64 @@ class TPTrainer(BaseTrainer):
         return self._SpikeFunction.apply(v, self.vth, self.surrogate_scale)
 
     # -------------------------------------------------------------------------
+    # Debug diagnostics — enabled by env var TP_DEBUG_DIR=<path>
+    # -------------------------------------------------------------------------
+
+    def _debug_dump(
+        self,
+        eps_s: list,
+        eps_t: list,
+        s_t: list,
+        spk_rec: list,
+        mem_out: torch.Tensor,
+        t: int,
+        debug_dir: str,
+    ) -> None:
+        """
+        Write per-layer diagnostics to <debug_dir>/t{t:03d}.txt.
+
+        Checks to watch for healthy training:
+          - spike rates 5–40% (0% means dead neurons, 100% means threshold too low)
+          - eps L2 norm not zero or exploding
+          - z_l max/mean ratio near 1.0 (if >> 1.0 softmax is collapsed to diagonal)
+          - mem_out.argmax spread across classes (not stuck on one class)
+        """
+        os.makedirs(debug_dir, exist_ok=True)
+        lines = [f"timestep {t}  alpha={self.alpha:.3f}  vth={self.vth:.3f}  beta={self.beta:.3f}"]
+        with torch.no_grad():
+            for l in range(self.n_blocks):
+                spk_rate_s = spk_rec[l].float().mean().item() if spk_rec[l] is not None else float('nan')
+                spk_rate_t = s_t[l].float().mean().item() if s_t[l] is not None else float('nan')
+                eps_s_norm = eps_s[l].flatten(1).norm(dim=1).mean().item() if eps_s[l] is not None else float('nan')
+                eps_t_norm = eps_t[l].flatten(1).norm(dim=1).mean().item() if eps_t[l] is not None else float('nan')
+
+                if eps_s[l] is not None and eps_t[l] is not None:
+                    if eps_s[l].dim() > 2:
+                        h1 = eps_s[l].flatten(2).permute(2, 0, 1)
+                        t1 = eps_t[l].flatten(2).permute(2, 1, 0)
+                        z = (h1 @ t1).mean(0)
+                    else:
+                        z = eps_s[l].flatten(1) @ eps_t[l].flatten(1).t()
+                    z_max = z.max().item()
+                    z_mean = z.mean().item()
+                else:
+                    z_max = z_mean = float('nan')
+
+                lines.append(
+                    f"  layer {l:2d}  spk_s={spk_rate_s:.3f}  spk_t={spk_rate_t:.3f}"
+                    f"  eps_s_norm={eps_s_norm:.3f}  eps_t_norm={eps_t_norm:.3f}"
+                    f"  z_max={z_max:.3f}  z_mean={z_mean:.3f}"
+                )
+
+            counts = torch.zeros(self.n_classes, device=mem_out.device)
+            counts.scatter_add_(0, mem_out.argmax(dim=1), torch.ones(mem_out.size(0), device=mem_out.device))
+            lines.append(f"  mem_out argmax class counts: {counts.int().tolist()}")
+
+        fname = os.path.join(debug_dir, f"t{t:03d}.txt")
+        with open(fname, "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+    # -------------------------------------------------------------------------
     # Training
     # -------------------------------------------------------------------------
 
@@ -426,15 +494,38 @@ class TPTrainer(BaseTrainer):
             # ==============================================================
             for l, (layer, _) in enumerate(self.blocks):
                 # Eq 14: z_l^t[b,b'] = ε_l^t[b] · ε̃_l^t[b']^T
-                h1 = eps_s[l].flatten(1)    # [B, H]  student trace
-                t1 = eps_t[l].flatten(1)    # [B, H]  target trace
-                z_l = h1 @ t1.t()           # [B, B]  similarity matrix
+                # For conv layers (dim>2) use the spatial-mean form from the
+                # paper's reference implementation (tp_cnn.py:loss): compute a
+                # separate [B,B] matrix per spatial position and average.
+                # This keeps per-position magnitudes O(C) rather than O(C*H*W),
+                # preventing softmax from collapsing onto the self-similarity
+                # diagonal and killing inter-sample gradient signal.
+                if eps_s[l].dim() > 2:
+                    # [B, C, H, W] → [H*W, B, C] and [H*W, C, B]
+                    h1 = eps_s[l].flatten(2).permute(2, 0, 1)   # [S, B, C]
+                    t1 = eps_t[l].flatten(2).permute(2, 1, 0)   # [S, C, B]
+                    z_l = (h1 @ t1).mean(0)                      # [B, B]
+                else:
+                    h1 = eps_s[l]                                # [B, H]
+                    t1 = eps_t[l]                                # [B, H]
+                    z_l = h1 @ t1.t()                            # [B, B]
 
                 # Eq 15: y_l^t soft target (softmax of negative distances)
-                t0 = eps_in_target.flatten(1) if l == 0 else eps_t[l - 1].flatten(1)
-                dist = (
-                    (t0.unsqueeze(1) - t0.unsqueeze(0)).pow(2).sum(-1) + 1e-9
-                ).sqrt()                    # [B, B]
+                # For spatial tensors (conv layers) use spatial-mean distance
+                # (same as z_l): compute pairwise distance per spatial position
+                # and average.  Intermediate shape is [S, B, B] ≈ O(S·B²·C)
+                # rather than O(B²·C·H·W), preventing OOM.
+                t0_raw = eps_in_target if l == 0 else eps_t[l - 1]
+                if t0_raw.dim() > 2:
+                    t0 = t0_raw.flatten(2).permute(2, 0, 1)   # [S, B, C]
+                    dist = (
+                        (t0.unsqueeze(2) - t0.unsqueeze(1) + 1e-9).pow(2).sum(-1)
+                    ).sqrt().mean(0)                           # [B, B]
+                else:
+                    t0 = t0_raw                                # [B, F]
+                    dist = (
+                        (t0.unsqueeze(1) - t0.unsqueeze(0)).pow(2).sum(-1) + 1e-9
+                    ).sqrt()                                   # [B, B]
                 y_l = F.softmax(-dist, dim=1).detach()   # [B, B]
 
                 # Eq 13: E_l^t = -Σ y_l * log softmax(z_l)
@@ -490,6 +581,12 @@ class TPTrainer(BaseTrainer):
                 self.output_layer.weight.grad = grad_out
             else:
                 self.output_layer.weight.grad += grad_out
+
+            # Debug diagnostics — write per-timestep stats when TP_DEBUG_DIR is set.
+            # Use a single timestep per sample (t=0) to keep disk writes manageable.
+            _debug_dir = os.environ.get("TP_DEBUG_DIR", "")
+            if _debug_dir and t == 0:
+                self._debug_dump(eps_s, eps_t, s_t, spk_rec, mem_out, t, _debug_dir)
 
             # --- Alg 1 line 28: W^{t+1} = W^t - η·ΔW ---
             if self.optimizer:

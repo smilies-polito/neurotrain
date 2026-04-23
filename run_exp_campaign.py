@@ -67,6 +67,10 @@ def parse_args() -> argparse.Namespace:
         "--log-level", default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
     )
+    parser.add_argument(
+        "--no-progress", action="store_true",
+        help="Disable tqdm progress bars during training and evaluation",
+    )
     return parser.parse_args()
 
 
@@ -131,6 +135,7 @@ def main() -> None:
         )
 
         try:
+            spec.runtime["progress"] = not args.no_progress
             _run_inline(spec, exp_out)
 
             metrics = load_experiment_metrics(exp_out)

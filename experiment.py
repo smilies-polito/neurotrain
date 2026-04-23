@@ -81,7 +81,7 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     # ── Dataset ────────────────────────────────────────────────────────────
     ds_cfg = dict(spec.dataset)
     dataset_name = ds_cfg.pop("name")
-    batch_size   = ds_cfg.get("batch_size", 256)
+    batch_size   = spec.runtime.get("batch_size", 256)
     T            = ds_cfg.get("T", 25)
     # Whether the dataset repeats the same static frame every timestep.
     # Derived from direct_coding in the dataset YAML; used to configure OTTT
@@ -96,6 +96,7 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     ds_cfg["seed"] = seed
     ds_cfg.setdefault("pin_memory", False)
     train_loader, test_loader = LOADER_REGISTRY[dataset_name](
+        batch_size=batch_size,
         **{k: v for k, v in _strip_metadata(ds_cfg).items() if v is not None}
     )
 
@@ -126,7 +127,6 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     TrainerClass = TRAINER_REGISTRY[trainer_name]
 
     log.info("Building trainer: %s", trainer_name)
-    t_cfg.pop("batch_size", None)
     # Inject constant_input_per_timestep for trainers that accept it (OTTT).
     # Passing it as a kwarg to trainers that don't accept it is harmless — they
     # will forward it via **kwargs or ignore it if their signature doesn't include it.
@@ -145,16 +145,18 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     trainer = trainer.to(device)
 
     # ── Training loop ──────────────────────────────────────────────────────
-    epochs = int(spec.runtime.get("epochs", 10))
+    epochs   = int(spec.runtime.get("epochs", 10))
+    progress = bool(spec.runtime.get("progress", False))
     epoch_metrics = []
 
     log.info("Training for %d epochs...", epochs)
     t0 = time.time()
 
     for epoch in range(1, epochs + 1):
-        train_metrics = train_one_epoch(trainer, train_loader, device)
+        train_metrics = train_one_epoch(trainer, train_loader, device, progress=progress)
         test_acc      = evaluate(network, test_loader, device,
-                                 constant_input_per_timestep=constant_input_per_timestep)
+                                 constant_input_per_timestep=constant_input_per_timestep,
+                                 progress=progress)
 
         epoch_metrics.append({
             "epoch":          epoch,

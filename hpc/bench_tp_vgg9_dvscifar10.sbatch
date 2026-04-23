@@ -11,4 +11,4 @@
 
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
-    python3 run_exp_campaign.py --benchmarking config/benchmarking/tp_vgg9_dvscifar10.yaml --name tp_vgg9_dvscifar10_opt
+    python3 run_exp_campaign.py --benchmarking config/benchmarking/tp_vgg9_dvscifar10.yaml --no-progress --name tp_vgg9_dvscifar10_opt

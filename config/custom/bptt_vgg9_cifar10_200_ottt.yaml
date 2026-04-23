@@ -14,10 +14,10 @@ bptt_vgg9_cifar10_200_ottt:
       conv_gain: 1.0
   dataset:
     name: cifar10
-    batch_size: 128
     T: 6
     direct_coding: true
   runtime:
     epochs: 200
+    batch_size: 128
     seed: 42
     device: cuda

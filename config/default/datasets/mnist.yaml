@@ -1,9 +1,5 @@
 name: MNIST
 supported_net_types: [fc, rec, conv]
-batch_size:
-  value: 256
-  type: categorical
-  list: [64, 128, 256, 512]
 T:
   value: 10
   type: null

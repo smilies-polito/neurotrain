@@ -11,4 +11,4 @@
 
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
-    python3 run_exp_campaign.py --benchmarking config/benchmarking/ostl_dvsgesture.yaml --name ostl_dvsgesture_opt
+    python3 run_exp_campaign.py --benchmarking config/benchmarking/ostl_dvsgesture.yaml --no-progress --name ostl_dvsgesture_opt

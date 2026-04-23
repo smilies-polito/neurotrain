@@ -1,13 +1,9 @@
 name: DVSGesture
 supported_net_types: [fc, rec, conv, vgg9]
-batch_size:
-  value: 32
-  type: categorical
-  list: [8, 16, 32, 64]
 T:
-  value: 50
+  value: 20
   type: null
-  min: 20
+  min: 10
   max: 100
   step: 10
 seed:

@@ -11,4 +11,4 @@
 
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
-    python3 run_exp_campaign.py --benchmarking config/benchmarking/ottt_nmnist.yaml --name ottt_nmnist_opt
+    python3 run_exp_campaign.py --benchmarking config/benchmarking/ottt_nmnist.yaml --no-progress --name ottt_nmnist_opt

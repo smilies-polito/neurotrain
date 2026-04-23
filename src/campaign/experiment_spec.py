@@ -39,6 +39,7 @@ class ExperimentSpec:
     # Runtime settings shared across all three components.
     runtime: dict = field(default_factory=lambda: {
         "epochs": 10,
+        "batch_size": 256,
         "device": "cuda",
         "seed": 42,
         "log_level": "INFO",
