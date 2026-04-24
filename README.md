@@ -18,7 +18,7 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 - `benchmarking.py`: The main entry point for running benchmarking experiments.
 - `reproducibility.py`: Script to launch reproducibility experiments on implemented trainers.
 
-## Unit Tests & Validation
+## Supported Components
 
 ### Dataloaders
 
@@ -66,40 +66,17 @@ This repository contains code for benchmarking the training of Spiking Neural Ne
 | STLLR | `stllr_trainer.py` | 🔴 | All | |
 | STSF | `stsf_trainer.py` | 🔴 | All | |
 
-### Test Programs
+### Test Results
 
-**Integration & Trainer Validation** — Full training loops testing trainer × network × dataset combinations:
+Tests on VGG9 network:
 
-##### BPTT
-| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
-|------|---------|---------|--------|--------|
-| `bptt_mnist_fc.py`      | FC-SNN    | MNIST         |  |  |
-| `bptt_fmnist_conv.py`   | Conv-SNN  | Fashion-MNIST |  |  |
-| `bptt_cifar10_vgg9.py`  | VGG9      | CIFAR-10      | 10: 0.8685/0.7212                   | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
-| `bptt_dvsgest_vgg9.py`  | VGG9      | DVSGesture    | 10: 0.9179/0.8864 40: 1.0/0.9356    | bcae958cdc4487399a3f08c02615d87d7faca6d0 |
-| `bptt_dvsgest_r.py`     | R-SNN     | DVSGesture    | |  |
-| `bptt_svhn_vgg9.py`     | VGG9      | SVHN          |  |  |
-| `bptt_svhn_r.py`        | R-SNN     | SVHN          |  |  |
-| `bptt_nmnist_r.py`      | R-SNN     | NMNIST        |  |  |
+| Cofig File | Trainer | Dataset | Epoch | Train Accuracy | Test Accuracy | Commit | Comment |
+|---------|-------|---------------|----------|------|--------|--------|------------|
+| `ottt_vgg9_svhn.yaml` | OTTT | SVHN | 70 | 0.80 | 0.78 | 07ef17df78dee26957e0bb18cf7492b9471bcf34 | Growing well but overshooting with accuracy drops every once in a while. Reached peaks of 0.92 test accuracy |
+| `ottt_vgg9_cifar10.yaml` | OTTT | CIFAR10 | 70 | 0.42 | 0.42 | 07ef17df78dee26957e0bb18cf7492b9471bcf34 | Growing well but overshooting with accuracy drops every once in a while. Still not high enough. |
+| `tp_vgg9_dvsgesture.yaml` | OTTT | DVSGesture | 70 | 0.85 | 0.80 | 07ef17df78dee26957e0bb18cf7492b9471bcf34 | Growing well but overshooting with accuracy drops every once in a while. Reached peaks of 0.88 test accuracy |
+| `tp_vgg9_dvscifar10.yaml` | OTTT | DVSCIFAR10 | 70 | 0.40 | 0.23 | 07ef17df78dee26957e0bb18cf7492b9471bcf34 | It seems like there is overfitting here |
 
-##### OSTL
-| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
-|------|---------|---------|--------|--------|
-| `ostl_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.9960/0.9753 25: 0.9984/0.9765 | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
-| `ostl_nmnist_r.py`      | R-SNN     | NMNIST        | 10: 0.9137/0.8961                   | 71a774acd6e601a527e119f4b9d3f2c2b48b44da |
-
-##### ETLP
-| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
-|------|---------|---------|--------|--------|
-| `etlp_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.8247/0.8321 100: 0.8512/0.8507 | |
-| `etlp_nmnist_r.py`      | FC-SNN    | MNIST         | 2: 0.3636/0.4436 | |
-
-##### STSF
-
-| Test | Network | Dataset | Result (Epoch: train/test) | Commit |
-|------|---------|---------|--------|--------|
-| `stsf_mnist_fc.py`      | FC-SNN    | MNIST         | 10: 0.9327/0.9340 50: 0.9657/0.9627 | f788ee28695039e4c337d989876577f201136b9d |
-| `stsf_nmnist_fc.py`      | FC-SNN    | NMNIST         | 10: 0.9128/0.9076 |  |
 
 
 **Dataset Smoke Tests** — Minimal tests verifying dataloaders work correctly:
