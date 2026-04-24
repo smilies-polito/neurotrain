@@ -16,7 +16,7 @@ bptt_vgg9_svhn_tp:
     name: svhn
     T: 10
   runtime:
-    epochs: 5
+    epochs: 200
     batch_size: 64
     seed: 42
     device: cuda

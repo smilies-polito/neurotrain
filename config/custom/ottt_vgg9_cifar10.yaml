@@ -51,7 +51,7 @@ ottt_vgg9_cifar10:
     T: 6
     direct_coding: true
   runtime:
-    epochs: 20
+    epochs: 200
     batch_size: 128
     seed: 42
     device: cuda
