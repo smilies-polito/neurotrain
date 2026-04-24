@@ -38,6 +38,7 @@ _DEFAULT_RUNTIME = {
     "seed": 42,
     "log_level": "INFO",
     "neurobench": True,
+    "batch_size": 256,
 }
 
 
@@ -202,13 +203,19 @@ def _build_spec(
 
     # Apply user overrides on top of defaults
     trainer_cfg = merge(trainer_default, trainer_override)
-    model_raw   = merge(model_default, model_override)
     dataset_cfg = merge(dataset_default, dataset_override)
 
-    # Apply per-trainer then per-dataset model section overrides.
-    # resolve_model_for_trainer_and_dataset merges: default → trainer → dataset.
-    # Falls back to the old per-dataset-only resolver for models that lack trainer sections.
+    # Model overrides: split into section overrides (keys that exist as sections in the
+    # default YAML, e.g. 'default', 'tp', 'cifar10') and flat overrides (everything else).
+    # Section overrides are injected before section resolution so they participate in the
+    # default → dataset → trainer merge. Flat overrides are applied last so they always win.
+    known_sections = set(model_default.keys())
+    model_section_overrides = {k: v for k, v in model_override.items() if k in known_sections}
+    model_flat_overrides    = {k: v for k, v in model_override.items() if k not in known_sections}
+
+    model_raw = merge(model_default, model_section_overrides)
     model_cfg = resolve_model_for_trainer_and_dataset(model_raw, trainer_name, dataset_name)
+    model_cfg = merge(model_cfg, model_flat_overrides)  # user flat overrides win (highest priority)
 
     # Flatten Optuna attribute dicts for normal runs
     if not opt:

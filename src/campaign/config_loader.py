@@ -71,11 +71,13 @@ def resolve_model_for_trainer_and_dataset(
     model_cfg: dict, trainer_name: str, dataset_name: str,
 ) -> dict:
     """
-    Apply per-trainer then per-dataset model overrides.
+    Apply per-dataset then per-trainer model overrides.
 
-    Merge order: default → trainer section → dataset section.
-    The trainer section sets algorithm-specific defaults (head_type, surrogate,
-    conv_gain, etc.); the dataset section sets spatial shape and topology.
+    Merge order: default → dataset section → trainer section.
+    Dataset section sets spatial shapes and topology; trainer section applies
+    algorithm-specific overrides on top (head_type, surrogate, conv_gain, etc.)
+    and has the final word — this lets trainers like eprop constrain the model
+    regardless of dataset.
 
     A model YAML can have this structure:
         default:
@@ -96,10 +98,10 @@ def resolve_model_for_trainer_and_dataset(
     t_key = trainer_name.lower()
     d_key = dataset_name.lower()
 
-    if t_key in model_cfg:
-        base = merge(base, model_cfg[t_key])
     if d_key in model_cfg:
         base = merge(base, model_cfg[d_key])
+    if t_key in model_cfg:
+        base = merge(base, model_cfg[t_key])
 
     return base
 
