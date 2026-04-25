@@ -15,3 +15,6 @@ pin_memory: false
 num_workers: 4
 data_root: null   # null = uses SHD_ROOT env var or ../Data/
 download: true
+use_cache:
+  value: true
+  type: null   # tonic disk cache; disable only for debugging

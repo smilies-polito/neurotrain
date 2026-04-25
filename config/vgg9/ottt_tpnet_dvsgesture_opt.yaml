@@ -1,0 +1,54 @@
+# OTTT trainer + TP-style VGG9 + DVSGesture — Optuna sweep
+# ── Optuna budget — edit these two values to change the sweep cost ──────────
+# runtime.epochs : epochs per trial (currently 10)
+# optuna.n_trials: total number of trials   (currently 50)
+# ────────────────────────────────────────────────────────────────────────────
+ottt_tpnet_dvsgesture_opt:
+  name: ottt_tpnet_dvsgesture_opt
+  opt: true
+  optuna:
+    n_trials: 200
+    direction: maximize
+    sampler: tpe
+    pruner: null
+    timeout: null
+    storage: null
+  trainer:
+    name: ottt
+    lr:
+      value: 0.05
+      type: float
+      min: 1.0e-4
+      max: 5.0e-1
+      log: true
+    loss_lambda:
+      value: 0.001
+      type: float
+      min: 1.0e-4
+      max: 0.5
+      log: true
+  model:
+    name: vgg9
+    default:
+      head_type: leaky_integrator
+      use_tp_pool: true
+      li_head_spatial: 2
+      li_head_leak: 1.0
+      surrogate_kind: atan
+      surrogate_scale: 1.0
+      conv_gain: 1.8
+      scale_after_lif: 0.0
+      beta: 0.53
+      threshold: 1.0
+      in_channels: 2
+      input_shape: [2, 128, 128]
+      num_classes: 11
+      pool_after_blocks: [2, 4, 6]
+  dataset:
+    name: DVSGesture
+    T: 20
+  runtime:
+    epochs: 10
+    device: cuda
+    batch_size: 32
+    seed: 42

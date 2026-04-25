@@ -8,7 +8,6 @@ lr:
   log: true
 loss_type:
   value: ce_rate
-  type: categorical
-  list: [ce_rate, mse_count, ce_count]
+  type: null   # algorithmic choice — keep fixed; options: ce_rate, mse_count, ce_count
 grad_clip: null      # null disables gradient clipping
 use_optimizer: true

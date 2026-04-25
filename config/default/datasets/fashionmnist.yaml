@@ -15,3 +15,6 @@ pin_memory: false
 download: true
 data_root: null
 num_workers: 4
+direct_coding:
+  value: false
+  type: null   # false = rate coding (default); true = direct/analog coding

@@ -1,0 +1,37 @@
+# TP trainer + TP-style VGG9 + DVSCIFAR10
+# Single-run (no Optuna). Paper-grade: 100 epochs.
+# Paper-specific values: alpha=0.18, beta=0.19, vth=0.5 (Pes et al. 2026, DVSCIFAR10).
+tp_tpnet_dvscifar10:
+  name: tp_tpnet_dvscifar10
+  opt: false
+  trainer:
+    name: tp
+    lr: 1.0e-4
+    alpha: 0.18
+    beta: 0.19
+    vth: 0.5
+  model:
+    name: vgg9
+    default:
+      head_type: leaky_integrator
+      use_tp_pool: true
+      li_head_spatial: 2
+      li_head_leak: 1.0
+      surrogate_kind: atan
+      surrogate_scale: 1.0
+      conv_gain: 1.8
+      scale_after_lif: 0.0
+      beta: 0.53
+      threshold: 1.0
+      in_channels: 2
+      input_shape: [2, 128, 128]
+      num_classes: 10
+      pool_after_blocks: [2, 4, 6]
+  dataset:
+    name: DVSCIFAR10
+    T: 10
+  runtime:
+    epochs: 100
+    device: cuda
+    batch_size: 32
+    seed: 42

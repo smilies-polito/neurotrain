@@ -17,8 +17,7 @@ update_rate_hz: 1000.0
 dt_ms: 1.0
 feedback_distribution:
   value: normal
-  type: categorical
-  list: [normal, uniform]
+  type: null   # algorithmic choice — keep fixed; options: normal, uniform, kaiming_uniform
 feedback_scale:
   value: 1.0
   type: float

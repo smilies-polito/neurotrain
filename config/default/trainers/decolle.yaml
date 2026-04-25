@@ -14,8 +14,7 @@ g_scale:
 burn_in: 0
 surrogate:
   value: sigmoid
-  type: categorical
-  list: [sigmoid, boxcar]
+  type: null   # algorithmic choice — keep fixed; options: sigmoid, boxcar
 surrogate_scale:
   value: 5.0
   type: float

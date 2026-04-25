@@ -1,6 +1,7 @@
 # Trace Propagation (TP) trainer config.
 # Paper: Pes et al. 2026 — paper optimizer is Adam, lr=1e-4.
-# Only lr is tunable here; other hyperparams are fixed to paper values.
+# NOTE: the Python constructor default for alpha is 0.98; the YAML value (0.53) wins
+# through the campaign loader and matches the paper's CIFAR10/DVSGesture recipe.
 
 name: tp
 supported_net_types: [fc, rec, conv, vgg9]
@@ -13,15 +14,21 @@ lr:
 # α: target-path membrane decay (Eq 1). Paper: 0.53 (DVSGesture/CIFAR10), 0.18 (DVSCIFAR10).
 alpha:
   value: 0.53
-  type: null
+  type: float
+  min: 0.05
+  max: 0.99
 # β: eligibility trace decay (Eq 11-12). Paper: 0.98 (DVSGesture/CIFAR10), 0.19 (DVSCIFAR10).
 beta:
   value: 0.98
-  type: null
+  type: float
+  min: 0.5
+  max: 0.99
 # V_th: target-path threshold. Paper: 1.0 (most datasets), 0.5 (DVSCIFAR10).
 vth:
   value: 1.0
-  type: null
+  type: float
+  min: 0.3
+  max: 1.5
 surrogate_scale:
   value: 1.0
   type: null

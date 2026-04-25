@@ -2,7 +2,7 @@ tp_vgg9_dvscifar10:
   name: tp_vgg9_dvscifar10
   opt: true
   optuna:
-    n_trials: 50
+    n_trials: 200
   trainer:
     name: tp
     lr:

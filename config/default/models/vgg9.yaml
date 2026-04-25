@@ -7,6 +7,8 @@
 #   - dataset sections: spatial shape, num_classes, pool topology
 #
 # Tunable Optuna parameters are marked with a type other than null.
+# beta/threshold in default: are tunable for BPTT+VGG9 sweeps (no trainer section overrides them).
+# Per-trainer sections (tp:, ottt:) freeze beta/threshold to paper values.
 
 default:
   name: vgg9
@@ -17,8 +19,16 @@ default:
   head_type: global_linear    # overridden per trainer below
   use_tp_pool: false          # overridden per trainer below
   channels: [64, 128, 256, 256, 512, 512, 512, 512]
-  beta:      { value: 0.5, type: null }
-  threshold: { value: 1.0, type: null }
+  beta:
+    value: 0.5
+    type: float
+    min: 0.3
+    max: 0.99
+  threshold:
+    value: 1.0
+    type: float
+    min: 0.5
+    max: 1.5
   conv_gain: { value: 1.0, type: null }
   scale_after_lif: 0.0
   surrogate_kind: sigmoid

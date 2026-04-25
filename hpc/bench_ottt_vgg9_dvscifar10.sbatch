@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --output=hpc/slurm_outputs/bench_ottt_vgg9_dvscifar10-%j.out
 #SBATCH --error=hpc/slurm_outputs/bench_ottt_vgg9_dvscifar10-%j.err
 

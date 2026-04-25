@@ -1,0 +1,32 @@
+# BPTT trainer + OTTT-style VGG9 + SVHN
+# Single-run (no Optuna). Paper-grade: 200 epochs.
+bptt_otttnet_svhn:
+  name: bptt_otttnet_svhn
+  opt: false
+  trainer:
+    name: bptt
+    lr: 0.1
+  model:
+    name: vgg9
+    default:
+      head_type: global_linear
+      use_tp_pool: false
+      surrogate_kind: sigmoid
+      surrogate_slope: 4.0
+      conv_gain: 1.0
+      scale_after_lif: 2.74
+      beta: 0.5
+      threshold: 1.0
+      in_channels: 3
+      input_shape: [3, 32, 32]
+      num_classes: 10
+      pool_after_blocks: [2, 4]
+  dataset:
+    name: SVHN
+    T: 10
+    direct_coding: true
+  runtime:
+    epochs: 200
+    device: cuda
+    batch_size: 128
+    seed: 42

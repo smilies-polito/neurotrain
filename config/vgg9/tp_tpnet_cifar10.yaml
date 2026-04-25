@@ -1,0 +1,34 @@
+# TP trainer + TP-style VGG9 + CIFAR10
+# Single-run (no Optuna). Paper-grade: 200 epochs.
+tp_tpnet_cifar10:
+  name: tp_tpnet_cifar10
+  opt: false
+  trainer:
+    name: tp
+    lr: 1.0e-4
+  model:
+    name: vgg9
+    default:
+      head_type: leaky_integrator
+      use_tp_pool: true
+      li_head_spatial: 2
+      li_head_leak: 1.0
+      surrogate_kind: atan
+      surrogate_scale: 1.0
+      conv_gain: 1.8
+      scale_after_lif: 0.0
+      beta: 0.53
+      threshold: 1.0
+      in_channels: 3
+      input_shape: [3, 32, 32]
+      num_classes: 10
+      pool_after_blocks: [2, 4]
+  dataset:
+    name: CIFAR10
+    T: 6
+    direct_coding: true
+  runtime:
+    epochs: 200
+    device: cuda
+    batch_size: 128
+    seed: 42

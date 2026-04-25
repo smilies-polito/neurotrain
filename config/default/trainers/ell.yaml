@@ -1,5 +1,7 @@
 name: ell
 supported_net_types: [fc, rec, conv]
+# NOTE: the Python constructor default for lr is 5e-4; this YAML value (1e-3) wins
+# through the campaign loader.
 lr:
   value: 1.0e-3
   type: float

@@ -11,7 +11,7 @@ runtime:
   neurobench: false
 opt: true
 optuna:
-  n_trials: 50
+  n_trials: 200
   direction: maximize
   sampler: tpe
   pruner: null

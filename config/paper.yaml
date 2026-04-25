@@ -1,0 +1,37 @@
+# Paper experiments — curated post-Optuna recipes.
+#
+# Run with:  make paper
+#   (equivalent to: python3 run_exp_campaign.py --custom config/paper.yaml --name paper)
+#
+# Each top-level key defines one experiment.  Copy the best hyperparameters
+# from Optuna trial summaries in experiments/<name>/optuna/ and paste them
+# here as flat scalar values (no tunable blocks needed — opt: false).
+#
+# Example structure:
+#
+# my_best_run:
+#   name: my_best_run
+#   opt: false
+#   trainer:
+#     name: tp
+#     lr: 8.3e-5
+#     alpha: 0.61
+#     beta: 0.97
+#     vth: 0.92
+#   model:
+#     name: vgg9
+#     default:
+#       head_type: leaky_integrator
+#       use_tp_pool: true
+#       ...
+#   dataset:
+#     name: CIFAR10
+#     T: 6
+#     direct_coding: true
+#   runtime:
+#     epochs: 200
+#     device: cuda
+#     batch_size: 128
+#     seed: 42
+#
+# ── Add your paper experiments below ────────────────────────────────────────

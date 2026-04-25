@@ -16,3 +16,6 @@ num_workers: 4
 train_fraction: 0.9
 data_root: null   # null = uses DVSCIFAR10_ROOT env var or ../Data/
 download: true
+use_cache:
+  value: true
+  type: null   # tonic disk cache; disable only for debugging

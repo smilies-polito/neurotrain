@@ -7,24 +7,7 @@ default:
   in_shape: [784]
   hidden_sizes:
     value: [256]
-    type: null
-    list:
-      - [100]
-      - [200]
-      - [300]
-      - [400]
-      - [500]
-      - [600]
-      - [700]
-      - [800]
-      - [900]
-      - [1000]
-      - [1100]
-      - [1200]
-      - [1300]
-      - [1400]
-      - [1500]
-      - [1600]
+    type: null   # architecture — keep fixed; override per dataset section below
   num_classes: 10
   beta:
     value: 0.9

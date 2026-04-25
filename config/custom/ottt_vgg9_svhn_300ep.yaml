@@ -1,0 +1,54 @@
+ottt_vgg9_svhn_300ep:
+  name: ottt_vgg9_svhn_300ep
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.016730402817820244
+    online_updates: true
+    loss_lambda: 0.00039829941698924106
+    grad_clip: null
+    sanitize_grads: null
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: global_linear
+    use_tp_pool: false
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.5
+    threshold: 1.0
+    conv_gain: 1.0
+    scale_after_lif: 2.74
+    surrogate_kind: sigmoid
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    algorithm_name: ottt
+  dataset:
+    name: svhn
+    T: 6
+    direct_coding: true
+  runtime:
+    epochs: 300
+    batch_size: 128
+    seed: 42
+    device: cuda
