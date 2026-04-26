@@ -140,7 +140,7 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
         lr=t_cfg.pop("lr", 1e-3),
         batch_size=batch_size,
         **_extra,
-        **{k: v for k, v in _strip_metadata(t_cfg).items() if v is not None},
+        **{k: v for k, v in _strip_metadata(t_cfg).items() if v is not None and k not in _extra},
     )
     trainer = trainer.to(device)
 
@@ -188,6 +188,10 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
         except Exception as e:
             log.warning("NeuroBench evaluation failed: %s", e)
             nb_results = {"error": str(e)}
+
+    # Free GPU memory so successive Optuna trials don't accumulate allocations.
+    del trainer, train_loader, test_loader, network
+    torch.cuda.empty_cache()
 
     return {
         "name":           spec.name,

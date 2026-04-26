@@ -289,7 +289,7 @@ hpc-mkdir:
 	mkdir -p $(HPC_SLURM_OUT)
 
 ## Per trainer experiments
-all-opt: opt-bptt opt-decolle opt-ell opt-eprop opt-esd_rtrl opt-etlp opt-ostl opt-osttp opt-ottt opt-stsf opt-tp
+all-opt: opt-bptt opt-decolle opt-eprop opt-esd_rtrl opt-etlp opt-ostl opt-osttp opt-ottt opt-stsf opt-tp
 
 opt-bptt: hpc-mkdir
 	sbatch hpc/bench_bptt_mnist.sbatch

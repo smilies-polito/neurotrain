@@ -121,6 +121,9 @@ def main() -> None:
     # ── Create campaign output directory ───────────────────────────────────
     name = args.name or datetime.now().strftime("%Y%m%d_%H%M%S")
     campaign_dir = Path(args.output) / name
+    if campaign_dir.exists():
+        name = f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        campaign_dir = Path(args.output) / name
     campaign_dir.mkdir(parents=True, exist_ok=True)
     copy_input_config(campaign_dir, input_path)
     log.info("Campaign output: %s", campaign_dir)
