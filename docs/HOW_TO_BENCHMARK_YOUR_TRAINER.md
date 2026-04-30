@@ -1,0 +1,354 @@
+# How to Benchmark Your SNN Training Algorithm with NeuroTrain
+
+This guide walks through the full process of integrating a new SNN training algorithm into NeuroTrain and running a systematic benchmark comparison against existing algorithms.
+
+---
+
+## Framework Design Principles
+
+Before implementing, understand the two core principles that shape every trainer in NeuroTrain.
+
+**1. Networks are standard snnTorch SNNs — your trainer drives everything else.**
+
+NeuroTrain networks are plain snnTorch models: LIF neurons, standard PyTorch layers, no custom hooks, no algorithm-specific modifications. The network's job is to define the architecture and hold state. All training logic — how gradients are computed or approximated, how weights are updated, how temporal credit is assigned, how traces are maintained — lives exclusively in the trainer. This enforces the separation that makes fair comparison possible: the same network runs unchanged under any compatible trainer.
+
+**2. All temporal state is reset between batches by the trainer.**
+
+snnTorch neurons carry membrane potential across timesteps within a sample. Between samples, `reset()` is called. Your trainer is responsible for resetting both the network's neuron states and any algorithm-specific state (eligibility traces, local error signals, running averages). This keeps each sample independent and ensures the benchmarking engine can safely pipeline batches.
+
+If you find yourself modifying a network file to support your algorithm, or carrying state across the `reset()` boundary without explicit intent, the decomposition is likely wrong.
+
+---
+
+## Workflow Overview
+
+1. [Implement your trainer](#step-1--implement-your-trainer)
+2. [Add default config and register compatibility](#step-2--add-default-config-and-register)
+3. [Define and run HPO](#step-3--define-and-run-hpo)
+4. [Run your benchmark](#step-4--run-your-benchmark)
+5. [Open a pull request](#contributing-back)
+
+---
+
+## Step 1 — Implement Your Trainer
+
+Create `src/trainers/my_trainer.py`. Your trainer must extend `BaseTrainer` and implement exactly two abstract methods:
+
+```python
+from trainers.base_trainer import BaseTrainer
+import torch
+import torch.nn as nn
+
+class MyTrainer(BaseTrainer):
+
+    def __init__(self, network: nn.Module, lr: float, batch_size: int, **kwargs):
+        super().__init__()
+        self.network = network
+        self.lr = lr
+        self.batch_size = batch_size
+        self.optimizer = torch.optim.Adam(network.parameters(), lr=lr)
+        # initialise algorithm-specific state here (traces, local errors, etc.)
+
+    def train_sample(
+        self, data: torch.Tensor, target: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Train on a single batch. All training logic goes here.
+        Returns: (loss, predictions)
+        """
+        self.optimizer.zero_grad()
+        # forward pass through the snnTorch network
+        # compute loss and weight update (backprop, traces, local rules, etc.)
+        loss = ...
+        pred = ...
+        loss.backward()
+        self.optimizer.step()
+        return loss, pred
+
+    def reset(self) -> None:
+        """
+        Reset all temporal state. Called between every batch.
+        Must reset both network neuron states and any algorithm-specific state.
+        """
+        self.network.reset()       # resets snnTorch LIF membrane potentials
+        # reset eligibility traces, local error accumulators, etc.
+```
+
+`BaseTrainer` extends `nn.Module`, so your trainer can hold submodules, buffers, and parameters. `**kwargs` not consumed by `__init__` are silently ignored — this keeps your trainer compatible with the config-passing mechanism.
+
+### Abstract method specification
+
+| Method | Called by | Expected behaviour |
+|---|---|---|
+| `train_sample(data, target)` | `campaign/training_loop.py` | One weight update per call; returns `(loss, pred)` |
+| `reset()` | `training_loop.py` at start of each batch | Clears all temporal state — neuron potentials, traces, accumulators |
+
+---
+
+## Step 2 — Add Default Config and Register
+
+### Register in `src/trainers/__init__.py`
+
+Add two lines:
+
+```python
+from trainers.my_trainer import MyTrainer
+TRAINER_REGISTRY["my_trainer"] = MyTrainer
+```
+
+### Create `config/default/trainers/my_trainer.yaml`
+
+This file defines default hyperparameters and declares which network types your trainer supports. Compatibility with models and datasets is resolved automatically from `supported_net_types` — no separate registration needed.
+
+```yaml
+# config/default/trainers/my_trainer.yaml
+
+name: my_trainer
+supported_net_types: [fc, rec]   # fc | rec | conv — controls automatic compatibility
+
+# Hyperparameters — plain values or tunable blocks (for Optuna)
+lr:
+  value: 1.0e-3
+  type: float
+  min: 1.0e-5
+  max: 1.0e-1
+  log: true
+
+my_param:
+  value: 0.9
+  type: float
+  min: 0.5
+  max: 0.99
+
+loss_type:
+  value: ce_rate
+  type: null    # not tunable — keep fixed; options: ce_rate, mse_count, ce_count
+```
+
+Parameters marked `type: null` (or with no `type` key) are treated as plain values in both normal and Optuna runs. Parameters with a `type` are treated as tunable when `opt: true`.
+
+### Verify compatibility
+
+Run a dry-run to confirm your trainer appears and matches the expected combinations:
+
+```bash
+# Edit config/benchmarking.yaml to include your trainer, then:
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml --dry-run
+```
+
+---
+
+## Step 3 — Define and Run HPO (Optional)
+
+Hyperparameter optimisation (HPO) via Optuna is built into NeuroTrain and is **optional**. You can run a single training experiment with fixed hyperparameters, or run an HPO study to find the best configuration before the final benchmark. Both paths use the same `config/experiments.yaml` file — the only difference is setting `opt: true` or `opt: false`.
+
+### Running without HPO (fixed hyperparameters)
+
+Set `opt: false` (or omit it — false is the default). All parameters are used as plain values.
+
+```yaml
+# config/experiments.yaml
+my_trainer_mnist_fc:
+  opt: false
+  trainer:
+    name: my_trainer
+    lr: 1.0e-3          # plain value, used as-is
+    my_param: 0.9
+  model:
+    name: fc_snn
+  dataset:
+    name: MNIST
+    T: 25
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+```
+
+```bash
+python run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_run
+```
+
+### Running with HPO
+
+Set `opt: true` and replace any parameter you want to tune with a tunable block. Optuna samples values from the defined search space across `n_trials` trials.
+
+### Add your HPO experiment to `config/experiments.yaml`
+
+```yaml
+my_trainer_mnist_fc:
+  opt: true
+  optuna:
+    n_trials: 50
+    sampler: tpe          # tpe | random | cmaes
+    direction: maximize
+  trainer:
+    name: my_trainer
+    lr:
+      value: 1.0e-3
+      type: float
+      min: 1.0e-5
+      max: 1.0e-1
+      log: true
+    my_param:
+      value: 0.9
+      type: float
+      min: 0.5
+      max: 0.99
+  model:
+    name: fc_snn
+    beta:
+      value: 0.9
+      type: float
+      min: 0.8
+      max: 0.99
+  dataset:
+    name: MNIST
+    T:
+      value: 25
+      type: int
+      min: 10
+      max: 30
+      step: 5
+  runtime:
+    epochs: 20            # short runs during HPO
+    device: cuda
+    seed: 42
+```
+
+Run the study:
+
+```bash
+python run_exp_campaign.py --custom config/experiments.yaml \
+    --name my_trainer_hpo
+```
+
+Optuna writes results to `experiments/my_trainer_hpo/my_trainer_mnist_fc/optuna/`. The best config is in `best_params.yaml`.
+
+### Save best params to `config/paper.yaml`
+
+Copy the best hyperparameters from `best_params.yaml` into `config/paper.yaml` as plain scalar values (no tunable blocks needed):
+
+```yaml
+# config/paper.yaml
+
+my_trainer_mnist_fc:
+  name: my_trainer_mnist_fc
+  opt: false
+  trainer:
+    name: my_trainer
+    lr: 3.7e-3           # best from Optuna
+    my_param: 0.87       # best from Optuna
+  model:
+    name: fc_snn
+    beta: 0.93
+  dataset:
+    name: MNIST
+    T: 25
+  runtime:
+    epochs: 100          # full training run — longer than HPO
+    device: cuda
+    seed: 42
+```
+
+Repeat for each compatible trainer × model × dataset combination you want to include.
+
+---
+
+## Step 4 — Run Your Benchmark
+
+With your trainer registered and HPO configs in `config/paper.yaml`, you have two options.
+
+**Option A — Benchmark your trainer only**, without rerunning existing algorithms:
+
+```bash
+# Edit config/benchmarking.yaml to set:
+# trainers: [my_trainer]
+# then run:
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+    --name my_trainer_bench
+```
+
+Or use custom mode with your HPO-tuned configs:
+
+```bash
+python run_exp_campaign.py --custom config/paper.yaml \
+    --name my_trainer_paper
+```
+
+This is the recommended path when you want to add your algorithm to the comparison without rerunning all existing results.
+
+**Option B — Rerun the full benchmark**, including your trainer alongside all existing algorithms:
+
+```bash
+# Edit config/benchmarking.yaml: leave trainers: [] (empty = all)
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+    --name full_bench
+
+# Or reproduce the full paper results:
+make paper
+```
+
+Use this when you want a complete, fresh comparison — for example after updating shared components (network architectures, dataloaders) that affect all algorithms.
+
+### Inspecting results
+
+Per-experiment outputs:
+
+```
+experiments/<campaign>/<exp_name>/
+  config.yaml       # resolved config for this run
+  metrics.json      # train/test accuracy, loss, wall time
+  log.txt
+  optuna/           # only when opt: true
+    trials.csv
+    best_params.yaml
+    study.db        # SQLite — open with optuna-dashboard
+```
+
+When `opt: true`, NeuroTrain writes an SQLite study database. Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, and convergence plots in real time:
+
+```bash
+pip install optuna-dashboard
+optuna-dashboard sqlite:///experiments/<campaign>/<exp_name>/optuna/study.db
+# → opens at http://localhost:8080
+```
+
+![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](docs/figures/optuna_dashboard_screenshot.png)
+
+The parallel coordinate view is particularly useful for identifying which hyperparameters drive accuracy and where the search has converged — use it to decide whether to extend the study or commit the best config to `config/paper.yaml`.
+
+---
+
+## Add an Integration Test
+
+Add at least one test under `tests/` to pin a known-good result to a specific commit:
+
+```python
+# tests/my_trainer_mnist_fc.py
+"""
+Integration test: MyTrainer on MNIST with FC-SNN.
+Expected: test_acc > 0.92 at epoch 25.
+Commit: <hash>
+"""
+def test_my_trainer_mnist_fc():
+    # run via run_exp_campaign.py or directly via experiment.py
+    assert results["test_acc"] > 0.92
+```
+
+```bash
+python -m pytest tests/my_trainer_mnist_fc.py -v
+```
+
+---
+
+## Contributing
+
+Open a pull request including:
+- `src/trainers/my_trainer.py`
+- `config/default/trainers/my_trainer.yaml`
+- Your HPO entries in `config/paper.yaml`
+- Integration test with pinned result
+- A one-row summary for the algorithm table in `README.md`
+
+If you have questions or run into issues, open an issue in the repository.
