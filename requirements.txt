@@ -9,10 +9,10 @@ snntorch>=0.7.0
 tonic>=1.0.0  # For neuromorphic datasets (DVSGesture, etc.)
 
 # Hyperparameter Tuning
-ray[tune]>=2.6.0
+optuna>=4.8.0
 
 # Experiment Tracking
-tensorboard>=2.13.0
+optuna-dashboard>=0.20.0
 
 # Configuration
 pyyaml>=6.0
