@@ -11,20 +11,11 @@ NeuroTrain accompanies a survey paper providing a comprehensive taxonomy of SNN 
 
 Built on **[snnTorch](https://github.com/jeshraghian/snntorch)** (≥ 0.7), **[Tonic](https://github.com/neuromorphs/tonic)** (≥ 1.0), and **[NeuroBench](https://github.com/NeuroBench/neurobench)**.
 
-
+> ![SMILIES logo](docs/figures/LOGO_WEB.png) &nbsp; Developed at the **SMILIES Research Group**, Dept. of Control and Computer Engineering, Politecnico di Torino. &nbsp;·&nbsp; [Website](https://www.smilies.polito.it/) &nbsp;·&nbsp; [LinkedIn](https://www.linkedin.com/company/smilies-polito) &nbsp;·&nbsp; [𝕏](https://x.com/smiliespolito)
 
 > <a name="citation"></a>**If you use NeuroTrain in your research, please cite:**
 >
 > Caviglia, A., Marostica, F., Bardini, R., Savino, A., & Di Carlo, S. (2026). *NeuroTrain: surveying Local Learning Rules for Spiking Neural Networks with an Open Benchmarking Framework*. arXiv preprint. https://arxiv.org/abs/PLACEHOLDER
-
-
----
-![SMILIES logo](docs/figures/LOGO_WEB.png) 
-
-Developed at the **[SMILIES Research Group](https://www.smilies.polito.it/)**, Politecnico di Torino. 
-Follow us on [LinkedIn](https://www.linkedin.com/company/smilies-polito) and [𝕏](https://x.com/smiliespolito)!
-
----
 
 ## Quickstart
 
@@ -34,10 +25,10 @@ cd neurotrain
 pip install -r requirements.txt
 
 # Benchmark matrix: all trainers × models × datasets declared in config/benchmarking.yaml
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 
 # Custom experiment with optional Optuna HPO
-python3 run_exp_campaign.py --custom config/experiments.yaml --name my_exp
+python run_exp_campaign.py --custom config/experiments.yaml --name my_exp
 
 # Reproduce paper results (fill config/paper.yaml with best Optuna outputs first)
 make paper
@@ -49,6 +40,7 @@ make paper
 
 - [SNN Training Algorithms Benchmarking Results](#snn-training-algorithms-benchmarking-results)
 - [Benchmark Your SNN Training Algorithm](#benchmark-your-snn-training-algorithm)
+- [Run Custom Experiments](#run-custom-experiments)
 - [Under the Hood — How NeuroTrain Works](#under-the-hood--how-neurotrain-works)
   - [Design Principles](#design-principles)
   - [Repository Structure](#repository-structure)
@@ -99,7 +91,7 @@ Create `config/default/trainers/my_trainer.yaml` with default hyperparameters an
 Add your experiment to `config/experiments.yaml` with `opt: true` and tunable parameter blocks. Run:
 
 ```bash
-python3 run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_hpo
+python run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_hpo
 ```
 
 Optuna runs a study for each experiment and writes the best config to `experiments/<name>/<exp>/optuna/best_params.yaml`.
@@ -108,18 +100,40 @@ Optuna runs a study for each experiment and writes the best config to `experimen
 
 ```bash
 # Option A — your trainer only, against all compatible combinations
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 
 # Option B — rerun the full matrix including your trainer
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name full_bench
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name full_bench
 
 # Generate tables and heatmap from the campaign output
-python3 scripts/generate_results.py experiments/my_bench/
+python scripts/generate_results.py experiments/my_bench/
 ```
 
 ---
 
-# Under the Hood — How NeuroTrain Works
+# Run Custom Experiments
+
+NeuroTrain supports a wide range of customisation — from selecting a specific subset of algorithms for a campaign, to overriding individual hyperparameters, to adding entirely new trainers, models, and datasets. All combinations are supported.
+
+For a complete guide see **[`docs/HOW_TO_RUN_CUSTOM_EXPERIMENTS.md`](docs/HOW_TO_RUN_CUSTOM_EXPERIMENTS.md)**. A quick overview:
+
+- **Custom benchmarking campaign** — create your own `benchmarking.yaml` selecting any subset of trainers, models, and datasets:
+
+```bash
+python3 run_exp_campaign.py --benchmarking config/custom/my_campaign.yaml --name my_bench
+```
+
+- **Custom parameters** — override any default hyperparameter (trainer, model, or dataset) in `config/experiments.yaml` without touching the default configs:
+
+```bash
+python3 run_exp_campaign.py --custom config/experiments.yaml --name my_exp
+```
+
+- **New components** — add your own trainer ([guide](docs/HOW_TO_BENCHMARK_YOUR_TRAINER.md)), model, or dataset and use them in any campaign immediately after registration.
+
+- **HPO on any of the above** — add `opt: true` and tunable blocks to any experiment in either mode.
+
+---
 
 ## Design Principles
 
@@ -193,6 +207,7 @@ neurotrain/
 ├── hpc/                           # SLURM sbatch scripts
 ├── docs/
 │   ├── HOW_TO_BENCHMARK_YOUR_TRAINER.md
+│   ├── HOW_TO_RUN_CUSTOM_EXPERIMENTS.md
 │   ├── configs_guide.md
 │   └── figures/                   # framework.png, results_heatmap.png, LOGO_WEB.png
 ├── Makefile
@@ -224,7 +239,7 @@ optuna:
 ```
 
 ```bash
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 make bench                  # uses config/benchmarking.yaml by default
 make dry-bench              # print experiment list without running
 ```
@@ -275,7 +290,7 @@ my_tuned_experiment:
 ```
 
 ```bash
-python3 run_exp_campaign.py --custom config/experiments.yaml --name my_exp
+python run_exp_campaign.py --custom config/experiments.yaml --name my_exp
 make custom
 make dry-custom
 ```
@@ -365,19 +380,19 @@ experiments/<campaign>/
 
 ```bash
 # Basic: tables + heatmap
-python3 scripts/generate_results.py experiments/paper/
+python scripts/generate_results.py experiments/paper/
 
 # Include NeuroBench metrics table
-python3 scripts/generate_results.py experiments/paper/ --neurobench
+python scripts/generate_results.py experiments/paper/ --neurobench
 
 # Save outputs to a custom directory
-python3 scripts/generate_results.py experiments/paper/ --output docs/results/
+python scripts/generate_results.py experiments/paper/ --output docs/results/
 
 # Inject tables directly into README (between marker comments)
-python3 scripts/generate_results.py experiments/paper/ --readme README.md
+python scripts/generate_results.py experiments/paper/ --readme README.md
 
 # Skip the heatmap (text tables only)
-python3 scripts/generate_results.py experiments/paper/ --no-heatmap
+python scripts/generate_results.py experiments/paper/ --no-heatmap
 ```
 
 **Auto-injection into README:** the results tables in this file are bounded by HTML comment markers. Running the script with `--readme README.md` replaces the content between them automatically — no manual copy-paste needed after each benchmark run:
@@ -421,7 +436,7 @@ singularity build --fakeroot neurotrain.sif src/snn-training-benchmarking.def
 singularity exec --nv \
     --bind /path/to/neurotrain:/workspace \
     neurotrain.sif \
-    bash -c "cd /workspace && python3 run_exp_campaign.py \
+    bash -c "cd /workspace && python run_exp_campaign.py \
         --benchmarking config/benchmarking.yaml --name my_bench"
 ```
 
@@ -461,10 +476,10 @@ Paper results are stored in `config/paper.yaml` — one named experiment per tra
 # Reproduce all paper results
 make paper
 # equivalent to:
-python3 run_exp_campaign.py --custom config/paper.yaml --name paper
+python run_exp_campaign.py --custom config/paper.yaml --name paper
 
 # Generate the tables and heatmap from the paper campaign
-python3 scripts/generate_results.py experiments/paper/ --neurobench --readme README.md
+python scripts/generate_results.py experiments/paper/ --neurobench --readme README.md
 ```
 
 Each run logs the full config, seed, and git commit hash to `experiments/paper/<exp_name>/`, ensuring every result is traceable.
@@ -630,9 +645,9 @@ Each run logs the full config, seed, and git commit hash to `experiments/paper/<
 ## Testing
 
 ```bash
-python3 -m pytest tests/
-python3 tests/dataloaders/test_mnist_loader.py     # dataloader smoke test
-python3 tests/bptt_cifar10_vgg9.py                 # single integration test
+python -m pytest tests/
+python tests/dataloaders/test_mnist_loader.py     # dataloader smoke test
+python tests/bptt_cifar10_vgg9.py                 # single integration test
 ```
 
 ## HPC / SLURM
