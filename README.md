@@ -16,8 +16,10 @@ Built on **[snnTorch](https://github.com/jeshraghian/snntorch)** (≥ 0.7), **[T
 
 ![NeuroTrain framework overview — trainers, networks, and datasets are independently registered components wired at runtime; run_exp_campaign.py enumerates all valid combinations and aggregates results into per-dataset accuracy tables.](docs/figures/framework.png)
 
+## Quickstart
+
 ```bash
-git clone https://gitlabtsgroup.polito.it/neuromorphic/software/snn-training-benchmarking
+git clone https://github.com/smilies-polito/neurotrain
 cd snn-training-benchmarking
 pip install -r requirements.txt
 
@@ -30,12 +32,6 @@ python run_exp_campaign.py --custom config/experiments.yaml --name my_exp
 # Reproduce paper results (fill config/paper.yaml with best Optuna outputs first)
 make paper
 ```
-
-| Script | Mode | Use when |
-|---|---|---|
-| `run_exp_campaign.py --benchmarking <yaml>` | Benchmarking | Systematic matrix of trainer × model × dataset |
-| `run_exp_campaign.py --custom <yaml>` | Custom | Named experiments with per-experiment overrides and HPO |
-| `experiment.py <spec.json> <output_dir>` | Single run | Called internally; useful for debugging a single spec |
 
 ---
 
@@ -194,7 +190,7 @@ snn-training-benchmarking/
 
 ## Configuration System
 
-NeuroTrain has two operating modes, both launched via `run_exp_campaign.py`.
+NeuroTrain has two operating modes, both launched via `run_exp_campaign.py`. Internally, it spawns `experiment.py` once per resolved `ExperimentSpec` — you can also call `experiment.py <spec.json> <output_dir>` directly to debug a single run.
 
 ### Benchmarking mode
 
