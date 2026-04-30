@@ -24,9 +24,9 @@ If you find yourself modifying a network file to support your algorithm, or carr
 
 1. [Implement your trainer](#step-1--implement-your-trainer)
 2. [Add default config and register compatibility](#step-2--add-default-config-and-register)
-3. [Define and run HPO](#step-3--define-and-run-hpo)
+3. [Define and run HPO](#step-3--define-and-run-hpo-optional)
 4. [Run your benchmark](#step-4--run-your-benchmark)
-5. [Open a pull request](#contributing-back)
+5. [Open a pull request](#contributing)
 
 ---
 
@@ -298,12 +298,21 @@ Per-experiment outputs:
 ```
 experiments/<campaign>/<exp_name>/
   config.yaml       # resolved config for this run
-  metrics.json      # train/test accuracy, loss, wall time
+  metrics.json      # train/test accuracy, loss, wall time, neurobench{}
   log.txt
   optuna/           # only when opt: true
     trials.csv
     best_params.yaml
     study.db        # SQLite — open with optuna-dashboard
+```
+
+**NeuroBench evaluation:** set `neurobench: true` in the `runtime` block to automatically run a NeuroBench benchmark after training. Results are written under a `neurobench` key in `metrics.json` and included as `nb_*` columns in the campaign-level `summary.csv`. Metrics include activation sparsity, membrane updates, memory footprint, connection sparsity, and parameter count — enabling direct comparison of efficiency alongside accuracy across all algorithms.
+
+```yaml
+runtime:
+  epochs: 50
+  device: cuda
+  neurobench: true    # adds nb_* columns to summary.csv
 ```
 
 When `opt: true`, NeuroTrain writes an SQLite study database. Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, and convergence plots in real time:
@@ -317,6 +326,23 @@ optuna-dashboard sqlite:///experiments/<campaign>/<exp_name>/optuna/study.db
 ![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](docs/figures/optuna_dashboard_screenshot.png)
 
 The parallel coordinate view is particularly useful for identifying which hyperparameters drive accuracy and where the search has converged — use it to decide whether to extend the study or commit the best config to `config/paper.yaml`.
+
+### Generating results tables and heatmap
+
+Once your campaign has run, use `scripts/generate_results.py` to produce per-dataset Markdown accuracy tables and a heatmap PNG from `summary.csv`:
+
+```bash
+# Tables + heatmap
+python scripts/generate_results.py experiments/my_trainer_bench/
+
+# Also include NeuroBench metrics table
+python scripts/generate_results.py experiments/my_trainer_bench/ --neurobench
+
+# Inject tables directly into README.md
+python scripts/generate_results.py experiments/my_trainer_bench/ --readme README.md
+```
+
+Outputs: `results_tables.md`, `results_heatmap.png`, and optionally `neurobench_table.md`.
 
 ---
 
