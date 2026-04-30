@@ -20,8 +20,8 @@ Arguments:
 
 Options:
     --output DIR        Output directory for generated files (default: campaign_dir)
-    --readme PATH       If given, injects the Markdown tables into this README
-                        between <!-- RESULTS_START --> and <!-- RESULTS_END --> markers
+    --readme PATH       If given, injects the Markdown tables and heatmap into this
+                        README between <!-- RESULTS_START --> and <!-- RESULTS_END -->
     --neurobench        Also generate a NeuroBench metrics table
     --format FMT        Image format: png (default) or svg
     --min-acc FLOAT     Minimum accuracy to colour (default: 0.0)
@@ -31,6 +31,7 @@ Options:
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +40,69 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.ticker
+
+
+# ── Display name maps ──────────────────────────────────────────────────────
+# Maps internal lowercase keys to correctly capitalised display names.
+
+TRAINER_DISPLAY = {
+    "bptt":       "BPTT",
+    "ostl":       "OSTL",
+    "osttp":      "OSTTP",
+    "eprop":      "E-prop",
+    "es_d_rtrl":  "ESD-RTRL",
+    "etlp":       "ETLP",
+    "stsf":       "STSF",
+    "drtp":       "DRTP",
+    "ottt":       "OTTT",
+    "otpe":       "OTPE",
+    "decolle":    "DECOLLE",
+    "stop":       "STOP",
+    "tp":         "TP",
+    "ell":        "ELL",
+    "fell":       "FELL",
+    "bell":       "BELL",
+    "stllr":      "STLLR",
+}
+
+MODEL_DISPLAY = {
+    "fc_snn":        "FC-SNN",
+    "conv_snn":      "Conv-SNN",
+    "r_snn":         "R-SNN",
+    "vgg9_cifar10":  "VGG9 (CIFAR-10)",
+    "vgg9_svhn":     "VGG9 (SVHN)",
+    "vgg9_dvsgest":  "VGG9 (DVSGesture)",
+}
+
+DATASET_DISPLAY = {
+    "mnist":         "MNIST",
+    "fashionmnist":  "Fashion-MNIST",
+    "cifar10":       "CIFAR-10",
+    "svhn":          "SVHN",
+    "nmnist":        "N-MNIST",
+    "dvsgesture":    "DVSGesture",
+    "dvscifar10":    "DVS-CIFAR10",
+    "shd":           "SHD",
+}
+
+def display_trainer(name: str) -> str:
+    return TRAINER_DISPLAY.get(name.lower(), name.upper())
+
+def display_model(name: str) -> str:
+    return MODEL_DISPLAY.get(name.lower(), name)
+
+def display_dataset(name: str) -> str:
+    return DATASET_DISPLAY.get(name.lower(), name)
+
+
+# ── Typography constants ───────────────────────────────────────────────────
+
+FONT_SUPERTITLE = 18   # figure suptitle
+FONT_TITLE      = 16   # dataset subplot title
+FONT_AXIS_LABEL = 13   # x/y tick labels (trainer and model names)
+FONT_CELL_VALUE = 14   # accuracy value inside each cell
+FONT_COLORBAR   = 12   # colourbar label and ticks
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -97,21 +161,21 @@ def make_markdown_tables(df: pd.DataFrame) -> str:
     datasets = sorted(df["dataset"].unique())
 
     for dataset in datasets:
-        sub = df[df["dataset"] == dataset]
+        sub      = df[df["dataset"] == dataset]
         trainers = sorted(sub["trainer"].unique())
         models   = sorted(sub["model"].unique())
 
-        lines.append(f"### {dataset}\n")
+        lines.append(f"### {display_dataset(dataset)}\n")
         lines.append("*Test accuracy (mean ± std where multiple seeds available).*\n")
 
-        # Header
-        header = "| Algorithm | " + " | ".join(models) + " |"
+        model_labels = [display_model(m) for m in models]
+        header = "| Algorithm | " + " | ".join(model_labels) + " |"
         sep    = "|---" + "|---" * len(models) + "|"
         lines.append(header)
         lines.append(sep)
 
         for trainer in trainers:
-            row = f"| {trainer} |"
+            row = f"| {display_trainer(trainer)} |"
             for model in models:
                 cell = sub[(sub["trainer"] == trainer) & (sub["model"] == model)]
                 if cell.empty:
@@ -136,12 +200,12 @@ def make_markdown_tables(df: pd.DataFrame) -> str:
 # ── NeuroBench table ───────────────────────────────────────────────────────
 
 NEUROBENCH_COLS = {
-    "nb_ClassificationAccuracy":   "Accuracy (NB)",
-    "nb_ActivationSparsity":       "Act. Sparsity",
-    "nb_MembraneUpdates":          "Membrane Updates",
-    "nb_Footprint":                "Footprint (B)",
-    "nb_ConnectionSparsity":       "Conn. Sparsity",
-    "nb_ParameterCount":           "Parameters",
+    "nb_ClassificationAccuracy": "Accuracy (NB)",
+    "nb_ActivationSparsity":     "Act. Sparsity",
+    "nb_MembraneUpdates":        "Membrane Updates",
+    "nb_Footprint":              "Footprint (B)",
+    "nb_ConnectionSparsity":     "Conn. Sparsity",
+    "nb_ParameterCount":         "Parameters",
 }
 
 def make_neurobench_table(df: pd.DataFrame) -> str:
@@ -158,7 +222,11 @@ def make_neurobench_table(df: pd.DataFrame) -> str:
     lines.append("|---" * len(headers) + "|")
 
     for _, row in df[display_cols].sort_values(["dataset", "trainer", "model"]).iterrows():
-        cells = [str(row["trainer"]), str(row["model"]), str(row["dataset"])]
+        cells = [
+            display_trainer(str(row["trainer"])),
+            display_model(str(row["model"])),
+            display_dataset(str(row["dataset"])),
+        ]
         for c in nb_cols:
             val = row[c]
             try:
@@ -173,7 +241,8 @@ def make_neurobench_table(df: pd.DataFrame) -> str:
 
 # ── Heatmap ────────────────────────────────────────────────────────────────
 
-def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0) -> None:
+def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
+                 campaign_name: str = "") -> None:
     """
     Generate a heatmap PNG: one subplot per dataset,
     rows = trainers, columns = models, colour = test accuracy.
@@ -182,9 +251,16 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0) -> N
     trainers = sorted(df["trainer"].unique())
     models   = sorted(df["model"].unique())
 
+    trainer_labels = [display_trainer(t) for t in trainers]
+    model_labels   = [display_model(m)   for m in models]
+
     n_datasets = len(datasets)
-    fig_w = max(4 * len(models), 8)
-    fig_h = max(2.5 * len(trainers), 4) * n_datasets
+
+    # Generous cell sizing so text has room
+    cell_w = 2.8
+    cell_h = 1.6
+    fig_w  = max(cell_w * len(models) + 2.5, 10)
+    fig_h  = max(cell_h * len(trainers) + 1.5, 5) * n_datasets
 
     fig, axes = plt.subplots(
         n_datasets, 1,
@@ -196,10 +272,10 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0) -> N
     norm = mcolors.Normalize(vmin=min_acc, vmax=1.0)
 
     for i, dataset in enumerate(datasets):
-        ax = axes[i][0]
+        ax  = axes[i][0]
         sub = df[df["dataset"] == dataset]
 
-        # Build matrix: rows=trainers, cols=models
+        # Build accuracy matrix: rows = trainers, cols = models
         mat = np.full((len(trainers), len(models)), np.nan)
         for ri, trainer in enumerate(trainers):
             for ci, model in enumerate(models):
@@ -211,36 +287,55 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0) -> N
 
         im = ax.imshow(mat, cmap=cmap, norm=norm, aspect="auto")
 
-        # Axes labels
+        # Axis tick labels
         ax.set_xticks(range(len(models)))
-        ax.set_xticklabels(models, rotation=30, ha="right", fontsize=9)
+        ax.set_xticklabels(model_labels, rotation=30, ha="right",
+                           fontsize=FONT_AXIS_LABEL, fontweight="semibold")
         ax.set_yticks(range(len(trainers)))
-        ax.set_yticklabels(trainers, fontsize=9)
-        ax.set_title(dataset, fontsize=11, fontweight="bold", pad=8)
+        ax.set_yticklabels(trainer_labels,
+                           fontsize=FONT_AXIS_LABEL, fontweight="semibold")
+
+        # Dataset title
+        ax.set_title(display_dataset(dataset),
+                     fontsize=FONT_TITLE, fontweight="bold", pad=12)
+
+        # Subtle grid lines between cells
+        ax.set_xticks(np.arange(-0.5, len(models),  1), minor=True)
+        ax.set_yticks(np.arange(-0.5, len(trainers), 1), minor=True)
+        ax.grid(which="minor", color="white", linewidth=1.5)
+        ax.tick_params(which="minor", bottom=False, left=False)
 
         # Cell annotations
         for ri in range(len(trainers)):
             for ci in range(len(models)):
                 val = mat[ri, ci]
                 if not np.isnan(val):
-                    text_color = "white" if val > 0.6 else "black"
-                    ax.text(ci, ri, f"{val*100:.1f}%",
+                    text_color = "white" if val > 0.65 else "#1a1a1a"
+                    ax.text(ci, ri, f"{val * 100:.1f}%",
                             ha="center", va="center",
-                            fontsize=8, color=text_color, fontweight="bold")
+                            fontsize=FONT_CELL_VALUE, fontweight="bold",
+                            color=text_color)
                 else:
                     ax.text(ci, ri, "—",
                             ha="center", va="center",
-                            fontsize=8, color="#aaaaaa")
+                            fontsize=FONT_CELL_VALUE, color="#bbbbbb")
 
         # Colourbar
-        cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
-        cb.set_label("Test accuracy", fontsize=8)
+        cb = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.03)
+        cb.set_label("Test accuracy", fontsize=FONT_COLORBAR, labelpad=8)
+        cb.ax.tick_params(labelsize=FONT_COLORBAR - 1)
         cb.ax.yaxis.set_major_formatter(
-            matplotlib.ticker.FuncFormatter(lambda x, _: f"{x*100:.0f}%")
+            matplotlib.ticker.FuncFormatter(lambda x, _: f"{x * 100:.0f}%")
         )
 
-    fig.suptitle("NeuroTrain Benchmarking Results", fontsize=13, fontweight="bold", y=1.002)
-    plt.tight_layout()
+    timestamp = datetime.now().strftime("%Y-%m-%d  %H:%M")
+    title_parts = ["NeuroTrain — Benchmarking Results"]
+    if campaign_name:
+        title_parts.append(f"Campaign: {campaign_name}")
+    title_parts.append(timestamp)
+    fig.suptitle("\n".join(title_parts),
+                 fontsize=FONT_SUPERTITLE, fontweight="bold", y=1.002)
+    plt.tight_layout(h_pad=3.0)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Heatmap saved → {output_path}")
@@ -251,16 +346,51 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0) -> N
 START_MARKER = "<!-- RESULTS_START -->"
 END_MARKER   = "<!-- RESULTS_END -->"
 
-def inject_into_readme(readme_path: Path, md_tables: str) -> None:
-    """Replace content between RESULTS_START and RESULTS_END markers in README."""
+def inject_into_readme(
+    readme_path: Path,
+    md_tables: str,
+    campaign_dir: Path,
+    heatmap_path: Path | None = None,
+) -> None:
+    """
+    Replace content between RESULTS_START and RESULTS_END markers in README.
+
+    Injects:
+      - A provenance line identifying the source campaign
+      - The heatmap image (if generated), using a path relative to the README
+      - The per-dataset Markdown accuracy tables
+    """
     text = readme_path.read_text()
     if START_MARKER not in text or END_MARKER not in text:
         print(f"  WARNING: markers {START_MARKER} / {END_MARKER} not found in {readme_path}")
         print("  Add them to README.md around the results section to enable auto-injection.")
         return
-    before = text.split(START_MARKER)[0]
-    after  = text.split(END_MARKER)[1]
-    new_text = before + START_MARKER + "\n\n" + md_tables + "\n" + END_MARKER + after
+
+    # Build injected block
+    block_lines = [
+        f"*Results from campaign `{campaign_dir.name}`. "
+        f"Generated by `scripts/generate_results.py`.*",
+        "",
+    ]
+
+    if heatmap_path is not None and heatmap_path.exists():
+        # Express heatmap path relative to the README's directory
+        try:
+            rel = heatmap_path.resolve().relative_to(readme_path.resolve().parent)
+        except ValueError:
+            rel = heatmap_path.resolve()
+        block_lines += [
+            f"![NeuroTrain benchmarking results — test accuracy heatmap, "
+            f"algorithms (rows) × architecture–dataset combinations (cols)]({rel})",
+            "",
+        ]
+
+    block_lines.append(md_tables)
+    injected = "\n".join(block_lines)
+
+    before   = text.split(START_MARKER)[0]
+    after    = text.split(END_MARKER)[1]
+    new_text = before + START_MARKER + "\n\n" + injected + "\n" + END_MARKER + after
     readme_path.write_text(new_text)
     print(f"  README updated → {readme_path}")
 
@@ -300,31 +430,38 @@ def main():
           f"{df['trainer'].nunique()} trainers, "
           f"{df['model'].nunique()} models.")
 
-    # ── Markdown tables
+    # Markdown tables
     print("Generating Markdown tables ...")
     md_tables = make_markdown_tables(df)
-    md_path = output_dir / "results_tables.md"
+    md_path   = output_dir / "results_tables.md"
     md_path.write_text(md_tables)
     print(f"  Tables saved → {md_path}")
 
     if args.neurobench:
         print("Generating NeuroBench table ...")
-        nb_md = make_neurobench_table(df)
+        nb_md   = make_neurobench_table(df)
         nb_path = output_dir / "neurobench_table.md"
         nb_path.write_text(nb_md)
         print(f"  NeuroBench table saved → {nb_path}")
         md_tables += "\n" + nb_md
 
-    # ── README injection
-    if args.readme:
-        print(f"Injecting tables into {args.readme} ...")
-        inject_into_readme(args.readme.resolve(), md_tables)
-
-    # ── Heatmap
+    # Heatmap
+    heatmap_path = None
     if not args.no_heatmap:
         print("Generating heatmap ...")
         heatmap_path = output_dir / f"results_heatmap.{args.format}"
-        make_heatmap(df, heatmap_path, min_acc=args.min_acc)
+        make_heatmap(df, heatmap_path, min_acc=args.min_acc,
+                     campaign_name=campaign_dir.name)
+
+    # README injection
+    if args.readme:
+        print(f"Injecting into {args.readme} ...")
+        inject_into_readme(
+            readme_path=args.readme.resolve(),
+            md_tables=md_tables,
+            campaign_dir=campaign_dir,
+            heatmap_path=heatmap_path,
+        )
 
     print("Done.")
 
