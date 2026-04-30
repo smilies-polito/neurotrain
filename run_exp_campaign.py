@@ -149,6 +149,11 @@ def main() -> None:
             metrics = load_experiment_metrics(exp_out)
             if metrics:
                 all_metrics.append(metrics)
+                # ↓ write after every completed experiment
+                save_campaign_summary(campaign_dir, all_metrics)
+                log.info("Summary updated (%d/%d): %s",
+                         len(all_metrics), len(specs), campaign_dir / "summary.csv")
+
             else:
                 log.warning("No metrics returned by experiment '%s'.", spec.name)
                 failed.append(spec.name)
