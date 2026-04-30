@@ -14,10 +14,9 @@ NeuroTrain networks are plain snnTorch models: LIF neurons, standard PyTorch lay
 
 **2. All temporal state is reset between batches by the trainer.**
 
-snnTorch neurons carry membrane potential across timesteps within a sample. Between samples, `reset()` is called. Your trainer is responsible for resetting both the network's neuron states and any algorithm-specific state (eligibility traces, local error signals, running averages). This keeps each sample independent and ensures the benchmarking engine can safely pipeline batches.
+snnTorch neurons carry membrane potential across timesteps within each input sequence. At the start of every batch, `reset()` is called. Your trainer is responsible for resetting both the network's neuron states and any algorithm-specific state (eligibility traces, local error signals, running averages). This keeps batches independent and ensures that benchmark results are not affected by hidden state leakage across data samples.
 
-If you find yourself modifying a network file to support your algorithm, or carrying state across the `reset()` boundary without explicit intent, the decomposition is likely wrong.
-
+If you find yourself modifying a network file only to make your learning rule work, or carrying state across the `reset()` boundary without explicit intent, the decomposition is likely wrong.
 ---
 
 ## Workflow Overview
@@ -80,9 +79,8 @@ class MyTrainer(BaseTrainer):
 
 | Method | Called by | Expected behaviour |
 |---|---|---|
-| `train_sample(data, target)` | `campaign/training_loop.py` | One weight update per call; returns `(loss, pred)` |
-| `reset()` | `training_loop.py` at start of each batch | Clears all temporal state — neuron potentials, traces, accumulators |
-
+| `train_sample(data, target)` | `src/campaign/training_loop.py` | One weight update per call; returns `(loss, pred)` |
+| `reset()` | `src/campaign/training_loop.py` at the start of each batch | Clears all temporal state — neuron potentials, traces, accumulators |
 ---
 
 ## Step 2 — Add Default Config and Register
@@ -104,7 +102,7 @@ This file defines default hyperparameters and declares which network types your 
 # config/default/trainers/my_trainer.yaml
 
 name: my_trainer
-supported_net_types: [fc, rec]   # fc | rec | conv — controls automatic compatibility
+supported_net_types: [fc, rec]   # options include: fc | rec | conv | vgg9
 
 # Hyperparameters — plain values or tunable blocks (for Optuna)
 lr:
@@ -223,7 +221,7 @@ python3 run_exp_campaign.py --custom config/experiments.yaml \
     --name my_trainer_hpo
 ```
 
-Optuna writes results to `experiments/my_trainer_hpo/my_trainer_mnist_fc/optuna/`. The best config is in `best_params.yaml`.
+Optuna writes results to `experiments/my_trainer_hpo/experiments/my_trainer_mnist_fc/optuna/`. The best config is in `best_params.yaml`.
 
 ### Save best params to `config/paper.yaml`
 
@@ -257,7 +255,7 @@ Repeat for each compatible trainer × model × dataset combination you want to i
 
 ## Step 4 — Run Your Benchmark
 
-With your trainer registered and HPO configs in `config/paper.yaml`, you have two options.
+With your trainer registered and your HPO-tuned final configs saved in `config/paper.yaml`, you have two options.
 
 **Option A — Benchmark your trainer only**, without rerunning existing algorithms:
 
@@ -293,17 +291,28 @@ Use this when you want a complete, fresh comparison — for example after updati
 
 ### Inspecting results
 
-Per-experiment outputs:
+Campaign-level outputs:
 
-```
-experiments/<campaign>/<exp_name>/
-  config.yaml       # resolved config for this run
-  metrics.json      # train/test accuracy, loss, wall time, neurobench{}
-  log.txt
-  optuna/           # only when opt: true
-    trials.csv
-    best_params.yaml
-    study.db        # SQLite — open with optuna-dashboard
+```text
+experiments/<campaign>/
+  campaign.yaml
+  summary.json
+  summary.csv
+  experiments/
+    <exp_name>/
+      config.yaml
+      metrics.json
+      log.txt
+      trials/           # only when opt: true
+        trial_0000/
+          config.yaml
+          metrics.json
+        trial_0001/
+          ...
+      optuna/           # only when opt: true
+        trials.csv
+        best_params.yaml
+        study.db        # SQLite — open with optuna-dashboard
 ```
 
 **NeuroBench evaluation:** set `neurobench: true` in the `runtime` block to automatically run a NeuroBench benchmark after training. Results are written under a `neurobench` key in `metrics.json` and included as `nb_*` columns in the campaign-level `summary.csv`. Metrics include activation sparsity, membrane updates, memory footprint, connection sparsity, and parameter count — enabling direct comparison of efficiency alongside accuracy across all algorithms.
@@ -318,12 +327,11 @@ runtime:
 When `opt: true`, NeuroTrain writes an SQLite study database. Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, and convergence plots in real time:
 
 ```bash
-pip install optuna-dashboard
-optuna-dashboard sqlite:///experiments/<campaign>/<exp_name>/optuna/study.db
+optuna-dashboard sqlite:///experiments/<campaign>/experiments/<exp_name>/optuna/study.db
 # → opens at http://localhost:8080
 ```
 
-![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](docs/figures/optuna_dashboard_screenshot.png)
+![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](/docs/figures/optuna_dashboard_screenshot.png)
 
 The parallel coordinate view is particularly useful for identifying which hyperparameters drive accuracy and where the search has converged — use it to decide whether to extend the study or commit the best config to `config/paper.yaml`.
 
@@ -354,18 +362,18 @@ Add at least one test under `tests/` to pin a known-good result to a specific co
 # tests/my_trainer_mnist_fc.py
 """
 Integration test: MyTrainer on MNIST with FC-SNN.
-Expected: test_acc > 0.92 at epoch 25.
+Expected: test_accuracy > 0.92 at epoch 25.
 Commit: <hash>
 """
 def test_my_trainer_mnist_fc():
     # run via run_exp_campaign.py or directly via experiment.py
-    assert results["test_acc"] > 0.92
+    assert results["test_accuracy"] > 0.92
 ```
 
 ```bash
 python3 -m pytest tests/my_trainer_mnist_fc.py -v
 ```
-
+You can adapt one of the existing tests under `tests/` and assert on the `test_accuracy` field in `metrics.json`.
 ---
 
 ## Contributing
@@ -373,7 +381,7 @@ python3 -m pytest tests/my_trainer_mnist_fc.py -v
 Open a pull request including:
 - `src/trainers/my_trainer.py`
 - `config/default/trainers/my_trainer.yaml`
-- Your HPO entries in `config/paper.yaml`
+- Your HPO-tuned final entries in `config/paper.yaml`
 - Integration test with pinned result
 - A one-row summary for the algorithm table in `README.md`
 

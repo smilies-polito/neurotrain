@@ -18,6 +18,7 @@ class BaseTrainer(ABC, nn.Module):
         Train the model on a single sample.
         Must be implemented by subclasses.
         """
+        
         ...
 
     @abstractmethod
