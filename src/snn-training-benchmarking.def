@@ -30,7 +30,8 @@ From: ubuntu:22.04
     pip3 install --no-cache-dir torchvision
     pip3 install --no-cache-dir torchaudio  # Required for NeuroBench SpeechCommands
     pip3 install --no-cache-dir torchcodec  # Required for torchaudio audio loading
-    pip3 install --no-cache-dir tensorboard
+    pip3 install --no-cache-dir optuna>=4.8.0
+    pip3 install --no-cache-dir optuna-dashboard>=0.20.0
     pip3 install --no-cache-dir pytorch_lightning  # Required for NeuroBench WISDM dataset
     pip3 install --no-cache-dir pyyaml
     pip3 install --no-cache-dir tqdm
