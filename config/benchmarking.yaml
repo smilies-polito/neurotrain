@@ -18,7 +18,7 @@ runtime:
   epochs: 2
   device: cuda
   seed: 42
-  neurobench: false
+  neurobench: true
 
 # Set opt: true to run Optuna optimisation for every generated experiment.
 # Each experiment must define tunable attributes (see config/README.md).
@@ -27,7 +27,7 @@ opt: true
 # Optuna study settings — used when opt: true.
 # These are the global defaults; custom experiments.yaml can override per-experiment.
 optuna:
-  n_trials: 10          # number of trials per experiment
+  n_trials: 2          # number of trials per experiment
   direction: maximize   # maximize | minimize
   sampler: tpe          # tpe | random | cmaes
   pruner: null          # median | hyperband | null (no pruning)

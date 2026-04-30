@@ -378,10 +378,13 @@ def inject_into_readme(
         try:
             rel = heatmap_path.resolve().relative_to(readme_path.resolve().parent)
         except ValueError:
-            rel = heatmap_path.resolve()
+            rel = "../experiments/" + campaign_dir.name + "/" + heatmap_path.name
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         block_lines += [
             f"![NeuroTrain benchmarking results — test accuracy heatmap, "
-            f"algorithms (rows) × architecture–dataset combinations (cols)]({rel})",
+            f"algorithms (rows) × architecture–dataset combinations (cols). "
+            f"Campaign: {campaign_dir.name} — {timestamp}]({rel})",
+            f"*NeuroTrain — Benchmarking Results · Campaign: `{campaign_dir.name}` · {timestamp}*",
             "",
         ]
 
