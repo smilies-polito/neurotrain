@@ -98,12 +98,11 @@ def display_dataset(name: str) -> str:
 
 # ── Typography constants ───────────────────────────────────────────────────
 
-FONT_SUPERTITLE = 18   # figure suptitle
-FONT_TITLE      = 16   # dataset subplot title
-FONT_AXIS_LABEL = 13   # x/y tick labels (trainer and model names)
-FONT_CELL_VALUE = 14   # accuracy value inside each cell
-FONT_COLORBAR   = 12   # colourbar label and ticks
-
+FONT_SUPERTITLE = 20   # figure suptitle
+FONT_TITLE      = 17   # dataset subplot title
+FONT_AXIS_LABEL = 14   # x/y tick labels
+FONT_CELL_VALUE = 15   # accuracy value inside each cell
+FONT_COLORBAR   = 13   # colourbar label and ticks
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -245,7 +244,8 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
                  campaign_name: str = "") -> None:
     """
     Generate a heatmap PNG: one subplot per dataset,
-    rows = trainers, columns = models, colour = test accuracy.
+    arranged in a 2x3 grid (3 datasets per row, 2 rows).
+    Rows = trainers, columns = models, colour = test accuracy.
     """
     datasets = sorted(df["dataset"].unique())
     trainers = sorted(df["trainer"].unique())
@@ -256,23 +256,37 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
 
     n_datasets = len(datasets)
 
-    # Generous cell sizing so text has room
-    cell_w = 2.8
-    cell_h = 1.6
-    fig_w  = max(cell_w * len(models) + 2.5, 10)
-    fig_h  = max(cell_h * len(trainers) + 1.5, 5) * n_datasets
+    # Fixed layout: 2 rows, 3 columns
+    nrows, ncols = 2, 3
+    max_panels = nrows * ncols
+    if n_datasets > max_panels:
+        raise ValueError(
+            f"2x3 heatmap grid supports at most {max_panels} datasets, "
+            f"but found {n_datasets}: {datasets}"
+        )
+
+    # Slightly smaller subplot sizing so 3 panels fit per row
+    cell_w = 1.9
+    cell_h = 1.15
+
+    fig_w = max(cell_w * len(models) * ncols + 3.0, 16)
+    fig_h = max(cell_h * len(trainers) * nrows + 3.2, 11)
 
     fig, axes = plt.subplots(
-        n_datasets, 1,
+        nrows,
+        ncols,
         figsize=(fig_w, fig_h),
         squeeze=False,
     )
+    axes_flat = axes.ravel()
 
     cmap = plt.cm.YlGn
     norm = mcolors.Normalize(vmin=min_acc, vmax=1.0)
 
+    im = None
+
     for i, dataset in enumerate(datasets):
-        ax  = axes[i][0]
+        ax  = axes_flat[i]
         sub = df[df["dataset"] == dataset]
 
         # Build accuracy matrix: rows = trainers, cols = models
@@ -289,18 +303,31 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
 
         # Axis tick labels
         ax.set_xticks(range(len(models)))
-        ax.set_xticklabels(model_labels, rotation=30, ha="right",
-                           fontsize=FONT_AXIS_LABEL, fontweight="semibold")
+        ax.set_xticklabels(
+            model_labels,
+            rotation=28,
+            ha="right",
+            fontsize=FONT_AXIS_LABEL,
+            fontweight="semibold",
+        )
+
         ax.set_yticks(range(len(trainers)))
-        ax.set_yticklabels(trainer_labels,
-                           fontsize=FONT_AXIS_LABEL, fontweight="semibold")
+        ax.set_yticklabels(
+            trainer_labels,
+            fontsize=FONT_AXIS_LABEL,
+            fontweight="semibold",
+        )
 
         # Dataset title
-        ax.set_title(display_dataset(dataset),
-                     fontsize=FONT_TITLE, fontweight="bold", pad=12)
+        ax.set_title(
+            display_dataset(dataset),
+            fontsize=FONT_TITLE,
+            fontweight="bold",
+            pad=12,
+        )
 
         # Subtle grid lines between cells
-        ax.set_xticks(np.arange(-0.5, len(models),  1), minor=True)
+        ax.set_xticks(np.arange(-0.5, len(models), 1), minor=True)
         ax.set_yticks(np.arange(-0.5, len(trainers), 1), minor=True)
         ax.grid(which="minor", color="white", linewidth=1.5)
         ax.tick_params(which="minor", bottom=False, left=False)
@@ -311,35 +338,58 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
                 val = mat[ri, ci]
                 if not np.isnan(val):
                     text_color = "white" if val > 0.65 else "#1a1a1a"
-                    ax.text(ci, ri, f"{val * 100:.1f}%",
-                            ha="center", va="center",
-                            fontsize=FONT_CELL_VALUE, fontweight="bold",
-                            color=text_color)
+                    ax.text(
+                        ci, ri, f"{val * 100:.1f}%",
+                        ha="center", va="center",
+                        fontsize=FONT_CELL_VALUE,
+                        fontweight="bold",
+                        color=text_color,
+                    )
                 else:
-                    ax.text(ci, ri, "—",
-                            ha="center", va="center",
-                            fontsize=FONT_CELL_VALUE, color="#bbbbbb")
+                    ax.text(
+                        ci, ri, "—",
+                        ha="center", va="center",
+                        fontsize=FONT_CELL_VALUE,
+                        color="#bbbbbb",
+                    )
 
-        # Colourbar
-        cb = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.03)
-        cb.set_label("Test accuracy", fontsize=FONT_COLORBAR, labelpad=8)
-        cb.ax.tick_params(labelsize=FONT_COLORBAR - 1)
-        cb.ax.yaxis.set_major_formatter(
-            matplotlib.ticker.FuncFormatter(lambda x, _: f"{x * 100:.0f}%")
-        )
+    # Hide unused panels if fewer than 6 datasets
+    for ax in axes_flat[n_datasets:]:
+        ax.set_visible(False)
 
     timestamp = datetime.now().strftime("%Y-%m-%d  %H:%M")
     title_parts = ["NeuroTrain — Benchmarking Results"]
     if campaign_name:
         title_parts.append(f"Campaign: {campaign_name}")
     title_parts.append(timestamp)
-    fig.suptitle("\n".join(title_parts),
-                 fontsize=FONT_SUPERTITLE, fontweight="bold", y=1.002)
-    plt.tight_layout(h_pad=3.0)
+
+    fig.suptitle(
+        "\n".join(title_parts),
+        fontsize=FONT_SUPERTITLE,
+        fontweight="bold",
+        y=0.97,
+    )
+
+    # Leave room at the top for title + horizontal colorbar
+    plt.tight_layout(rect=[0.03, 0.03, 0.98, 0.82], h_pad=2.2, w_pad=2.0)
+
+    # One shared horizontal colourbar below the title
+    if im is not None:
+        cbar_ax = fig.add_axes([0.30, 0.845, 0.40, 0.022])  # [left, bottom, width, height]
+        cb = fig.colorbar(
+            im,
+            cax=cbar_ax,
+            orientation="horizontal",
+        )
+        cb.set_label("Test accuracy", fontsize=FONT_COLORBAR, labelpad=6)
+        cb.ax.tick_params(labelsize=FONT_COLORBAR - 1)
+        cb.ax.xaxis.set_major_formatter(
+            matplotlib.ticker.FuncFormatter(lambda x, _: f"{x * 100:.0f}%")
+        )
+
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Heatmap saved → {output_path}")
-
 
 # ── README injection ───────────────────────────────────────────────────────
 

@@ -40,6 +40,93 @@ from campaign.results import (
 
 log = logging.getLogger(__name__)
 
+class TeeStream:
+    """
+    Write everything to both the original terminal stream and a log file.
+    Used to save stdout/stderr while still showing output live.
+    """
+
+    def __init__(self, stream, log_file):
+        self.stream = stream
+        self.log_file = log_file
+
+    def write(self, data):
+        self.stream.write(data)
+        self.log_file.write(data)
+        self.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.log_file.flush()
+
+    def isatty(self):
+        return self.stream.isatty()
+
+    @property
+    def encoding(self):
+        return getattr(self.stream, "encoding", "utf-8")
+
+
+class TerminalLogger:
+    """
+    Context manager that saves stdout and stderr to files in campaign_dir.
+    """
+
+    def __init__(self, campaign_dir: Path):
+        self.campaign_dir = campaign_dir
+        self.stdout_path = campaign_dir / "terminal_stdout.log"
+        self.stderr_path = campaign_dir / "terminal_stderr.log"
+        self.combined_path = campaign_dir / "terminal.log"
+
+    def __enter__(self):
+        self._old_stdout = sys.stdout
+        self._old_stderr = sys.stderr
+
+        self._stdout_file = open(self.stdout_path, "a", buffering=1)
+        self._stderr_file = open(self.stderr_path, "a", buffering=1)
+        self._combined_file = open(self.combined_path, "a", buffering=1)
+
+        sys.stdout = TeeStream(
+            self._old_stdout,
+            TeeStream(self._stdout_file, self._combined_file),
+        )
+        sys.stderr = TeeStream(
+            self._old_stderr,
+            TeeStream(self._stderr_file, self._combined_file),
+        )
+
+        # Logging was configured before sys.stderr was replaced,
+        # so add explicit file handlers too.
+        self._log_handlers = []
+
+        stderr_handler = logging.FileHandler(self.stderr_path, mode="a")
+        stderr_handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        )
+        logging.getLogger().addHandler(stderr_handler)
+        self._log_handlers.append(stderr_handler)
+
+        combined_handler = logging.FileHandler(self.combined_path, mode="a")
+        combined_handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        )
+        logging.getLogger().addHandler(combined_handler)
+        self._log_handlers.append(combined_handler)
+
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        for handler in self._log_handlers:
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+
+        sys.stdout = self._old_stdout
+        sys.stderr = self._old_stderr
+
+        self._stdout_file.close()
+        self._stderr_file.close()
+        self._combined_file.close()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -129,46 +216,50 @@ def main() -> None:
     log.info("Campaign output: %s", campaign_dir)
 
     # ── Run experiments ─────────────────────────────────────────────────────
-    all_metrics: list[dict] = []
-    failed: list[str] = []
+    with TerminalLogger(campaign_dir):
+        log.info("Terminal stdout log: %s", campaign_dir / "terminal_stdout.log")
+        log.info("Terminal stderr log: %s", campaign_dir / "terminal_stderr.log")
+        log.info("Combined terminal log: %s", campaign_dir / "terminal.log")
 
-    for i, spec in enumerate(specs, 1):
-        exp_out = campaign_dir / "experiments" / spec.name
-        exp_out.mkdir(parents=True, exist_ok=True)
+        all_metrics: list[dict] = []
+        failed: list[str] = []
 
-        log.info(
-            "[%d/%d] Running: %s  (trainer=%s, model=%s, dataset=%s)",
-            i, len(specs), spec.name,
-            spec.trainer["name"], spec.model["name"], spec.dataset["name"],
-        )
+        for i, spec in enumerate(specs, 1):
+            exp_out = campaign_dir / "experiments" / spec.name
+            exp_out.mkdir(parents=True, exist_ok=True)
 
-        try:
-            spec.runtime["progress"] = not args.no_progress
-            _run_inline(spec, exp_out)
+            log.info(
+                "[%d/%d] Running: %s  (trainer=%s, model=%s, dataset=%s)",
+                i, len(specs), spec.name,
+                spec.trainer["name"], spec.model["name"], spec.dataset["name"],
+            )
 
-            metrics = load_experiment_metrics(exp_out)
-            if metrics:
-                all_metrics.append(metrics)
-                # ↓ write after every completed experiment
-                save_campaign_summary(campaign_dir, all_metrics)
-                log.info("Summary updated (%d/%d): %s",
-                         len(all_metrics), len(specs), campaign_dir / "summary.csv")
+            try:
+                spec.runtime["progress"] = not args.no_progress
+                _run_inline(spec, exp_out)
 
-            else:
-                log.warning("No metrics returned by experiment '%s'.", spec.name)
+                metrics = load_experiment_metrics(exp_out)
+                if metrics:
+                    all_metrics.append(metrics)
+                    save_campaign_summary(campaign_dir, all_metrics)
+                    log.info("Summary updated (%d/%d): %s",
+                            len(all_metrics), len(specs), campaign_dir / "summary.csv")
+
+                else:
+                    log.warning("No metrics returned by experiment '%s'.", spec.name)
+                    failed.append(spec.name)
+
+            except Exception as e:
+                log.error("Experiment '%s' failed: %s", spec.name, e)
                 failed.append(spec.name)
 
-        except Exception as e:
-            log.error("Experiment '%s' failed: %s", spec.name, e)
-            failed.append(spec.name)
+        # ── Write campaign summary ──────────────────────────────────────────────
+        if all_metrics:
+            save_campaign_summary(campaign_dir, all_metrics)
+            log.info("Summary written to: %s", campaign_dir / "summary.csv")
 
-    # ── Write campaign summary ──────────────────────────────────────────────
-    if all_metrics:
-        save_campaign_summary(campaign_dir, all_metrics)
-        log.info("Summary written to: %s", campaign_dir / "summary.csv")
-
-    # ── Print final report ──────────────────────────────────────────────────
-    _print_summary(all_metrics, failed, campaign_dir)
+        # ── Print final report ──────────────────────────────────────────────────
+        _print_summary(all_metrics, failed, campaign_dir)
 
 
 def _run_inline(spec: ExperimentSpec, out_dir: Path) -> None:

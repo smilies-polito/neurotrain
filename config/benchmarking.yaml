@@ -6,6 +6,8 @@
 # See config/README.md for full documentation.
 
 trainers:
+- stsf
+- tp
   
 
 models:
