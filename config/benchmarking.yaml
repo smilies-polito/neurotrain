@@ -6,17 +6,16 @@
 # See config/README.md for full documentation.
 
 trainers:
-  - bptt
+  
 
 models:
-  - fc_snn
+
 
 datasets:
-  - MNIST
 
 # Shared runtime settings (override defaults for all experiments)
 runtime:
-  epochs: 5
+  epochs: 2
   device: cuda
   seed: 42
   neurobench: false
@@ -28,7 +27,7 @@ opt: true
 # Optuna study settings — used when opt: true.
 # These are the global defaults; custom experiments.yaml can override per-experiment.
 optuna:
-  n_trials: 50          # number of trials per experiment
+  n_trials: 10          # number of trials per experiment
   direction: maximize   # maximize | minimize
   sampler: tpe          # tpe | random | cmaes
   pruner: null          # median | hyperband | null (no pruning)

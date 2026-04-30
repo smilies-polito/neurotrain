@@ -34,10 +34,10 @@ cd neurotrain
 pip install -r requirements.txt
 
 # Benchmark matrix: all trainers × models × datasets declared in config/benchmarking.yaml
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 
 # Custom experiment with optional Optuna HPO
-python run_exp_campaign.py --custom config/experiments.yaml --name my_exp
+python3 run_exp_campaign.py --custom config/experiments.yaml --name my_exp
 
 # Reproduce paper results (fill config/paper.yaml with best Optuna outputs first)
 make paper
@@ -99,7 +99,7 @@ Create `config/default/trainers/my_trainer.yaml` with default hyperparameters an
 Add your experiment to `config/experiments.yaml` with `opt: true` and tunable parameter blocks. Run:
 
 ```bash
-python run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_hpo
+python3 run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_hpo
 ```
 
 Optuna runs a study for each experiment and writes the best config to `experiments/<name>/<exp>/optuna/best_params.yaml`.
@@ -108,13 +108,13 @@ Optuna runs a study for each experiment and writes the best config to `experimen
 
 ```bash
 # Option A — your trainer only, against all compatible combinations
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 
 # Option B — rerun the full matrix including your trainer
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name full_bench
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name full_bench
 
 # Generate tables and heatmap from the campaign output
-python scripts/generate_results.py experiments/my_bench/
+python3 scripts/generate_results.py experiments/my_bench/
 ```
 
 ---
@@ -224,7 +224,7 @@ optuna:
 ```
 
 ```bash
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --name my_bench
 make bench                  # uses config/benchmarking.yaml by default
 make dry-bench              # print experiment list without running
 ```
@@ -275,7 +275,7 @@ my_tuned_experiment:
 ```
 
 ```bash
-python run_exp_campaign.py --custom config/experiments.yaml --name my_exp
+python3 run_exp_campaign.py --custom config/experiments.yaml --name my_exp
 make custom
 make dry-custom
 ```
@@ -365,19 +365,19 @@ experiments/<campaign>/
 
 ```bash
 # Basic: tables + heatmap
-python scripts/generate_results.py experiments/paper/
+python3 scripts/generate_results.py experiments/paper/
 
 # Include NeuroBench metrics table
-python scripts/generate_results.py experiments/paper/ --neurobench
+python3 scripts/generate_results.py experiments/paper/ --neurobench
 
 # Save outputs to a custom directory
-python scripts/generate_results.py experiments/paper/ --output docs/results/
+python3 scripts/generate_results.py experiments/paper/ --output docs/results/
 
 # Inject tables directly into README (between marker comments)
-python scripts/generate_results.py experiments/paper/ --readme README.md
+python3 scripts/generate_results.py experiments/paper/ --readme README.md
 
 # Skip the heatmap (text tables only)
-python scripts/generate_results.py experiments/paper/ --no-heatmap
+python3 scripts/generate_results.py experiments/paper/ --no-heatmap
 ```
 
 **Auto-injection into README:** the results tables in this file are bounded by HTML comment markers. Running the script with `--readme README.md` replaces the content between them automatically — no manual copy-paste needed after each benchmark run:
@@ -421,7 +421,7 @@ singularity build --fakeroot neurotrain.sif src/snn-training-benchmarking.def
 singularity exec --nv \
     --bind /path/to/neurotrain:/workspace \
     neurotrain.sif \
-    bash -c "cd /workspace && python run_exp_campaign.py \
+    bash -c "cd /workspace && python3 run_exp_campaign.py \
         --benchmarking config/benchmarking.yaml --name my_bench"
 ```
 
@@ -461,10 +461,10 @@ Paper results are stored in `config/paper.yaml` — one named experiment per tra
 # Reproduce all paper results
 make paper
 # equivalent to:
-python run_exp_campaign.py --custom config/paper.yaml --name paper
+python3 run_exp_campaign.py --custom config/paper.yaml --name paper
 
 # Generate the tables and heatmap from the paper campaign
-python scripts/generate_results.py experiments/paper/ --neurobench --readme README.md
+python3 scripts/generate_results.py experiments/paper/ --neurobench --readme README.md
 ```
 
 Each run logs the full config, seed, and git commit hash to `experiments/paper/<exp_name>/`, ensuring every result is traceable.
@@ -630,9 +630,9 @@ Each run logs the full config, seed, and git commit hash to `experiments/paper/<
 ## Testing
 
 ```bash
-python -m pytest tests/
-python tests/dataloaders/test_mnist_loader.py     # dataloader smoke test
-python tests/bptt_cifar10_vgg9.py                 # single integration test
+python3 -m pytest tests/
+python3 tests/dataloaders/test_mnist_loader.py     # dataloader smoke test
+python3 tests/bptt_cifar10_vgg9.py                 # single integration test
 ```
 
 ## HPC / SLURM

@@ -133,7 +133,7 @@ Run a dry-run to confirm your trainer appears and matches the expected combinati
 
 ```bash
 # Edit config/benchmarking.yaml to include your trainer, then:
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml --dry-run
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --dry-run
 ```
 
 ---
@@ -166,7 +166,7 @@ my_trainer_mnist_fc:
 ```
 
 ```bash
-python run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_run
+python3 run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_run
 ```
 
 ### Running with HPO
@@ -219,7 +219,7 @@ my_trainer_mnist_fc:
 Run the study:
 
 ```bash
-python run_exp_campaign.py --custom config/experiments.yaml \
+python3 run_exp_campaign.py --custom config/experiments.yaml \
     --name my_trainer_hpo
 ```
 
@@ -265,14 +265,14 @@ With your trainer registered and HPO configs in `config/paper.yaml`, you have tw
 # Edit config/benchmarking.yaml to set:
 # trainers: [my_trainer]
 # then run:
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml \
     --name my_trainer_bench
 ```
 
 Or use custom mode with your HPO-tuned configs:
 
 ```bash
-python run_exp_campaign.py --custom config/paper.yaml \
+python3 run_exp_campaign.py --custom config/paper.yaml \
     --name my_trainer_paper
 ```
 
@@ -282,7 +282,7 @@ This is the recommended path when you want to add your algorithm to the comparis
 
 ```bash
 # Edit config/benchmarking.yaml: leave trainers: [] (empty = all)
-python run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml \
     --name full_bench
 
 # Or reproduce the full paper results:
@@ -333,13 +333,13 @@ Once your campaign has run, use `scripts/generate_results.py` to produce per-dat
 
 ```bash
 # Tables + heatmap
-python scripts/generate_results.py experiments/my_trainer_bench/
+python3 scripts/generate_results.py experiments/my_trainer_bench/
 
 # Also include NeuroBench metrics table
-python scripts/generate_results.py experiments/my_trainer_bench/ --neurobench
+python3 scripts/generate_results.py experiments/my_trainer_bench/ --neurobench
 
 # Inject tables directly into README.md
-python scripts/generate_results.py experiments/my_trainer_bench/ --readme README.md
+python3 scripts/generate_results.py experiments/my_trainer_bench/ --readme README.md
 ```
 
 Outputs: `results_tables.md`, `results_heatmap.png`, and optionally `neurobench_table.md`.
@@ -363,7 +363,7 @@ def test_my_trainer_mnist_fc():
 ```
 
 ```bash
-python -m pytest tests/my_trainer_mnist_fc.py -v
+python3 -m pytest tests/my_trainer_mnist_fc.py -v
 ```
 
 ---
