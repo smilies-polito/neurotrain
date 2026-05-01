@@ -35,7 +35,7 @@ From: ubuntu:22.04
     pip3 install --no-cache-dir pytorch_lightning  # Required for NeuroBench WISDM dataset
     pip3 install --no-cache-dir pyyaml
     pip3 install --no-cache-dir tqdm
-    pip3 install --no-cache-dir -U "ray[all]"
+    pip3 install --no-cache-dir aedat==2.2.0
 
 
 %environment
