@@ -30,6 +30,7 @@ Options:
 
 import argparse
 import json
+import math
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -269,16 +270,15 @@ def make_heatmap(df: pd.DataFrame, output_path: Path, min_acc: float = 0.0,
 
     n_datasets = len(datasets)
 
-    # Fixed layout: 2 rows, 3 columns
-    nrows, ncols = 2, 3
-    max_panels = nrows * ncols
-    if n_datasets > max_panels:
+    # Dynamic layout: up to 4 columns, 2 rows (supports up to 8 datasets)
+    if n_datasets > 8:
         raise ValueError(
-            f"2x3 heatmap grid supports at most {max_panels} datasets, "
+            f"Heatmap grid supports at most 8 datasets, "
             f"but found {n_datasets}: {datasets}"
         )
+    ncols = min(n_datasets, 4)
+    nrows = math.ceil(n_datasets / ncols)
 
-    # Slightly smaller subplot sizing so 3 panels fit per row
     cell_w = 1.9
     cell_h = 1.15
 
