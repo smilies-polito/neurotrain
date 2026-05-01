@@ -69,3 +69,9 @@ shd:
   num_classes: 20
   hidden_sizes:
     value: [512]
+
+
+eprop:
+  hidden_sizes:
+    value: [256]
+    type: null
