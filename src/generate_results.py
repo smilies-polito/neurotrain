@@ -71,9 +71,9 @@ MODEL_DISPLAY = {
     "fc_snn":        "FC-SNN",
     "conv_snn":      "Conv-SNN",
     "r_snn":         "R-SNN",
-    "vgg9_cifar10":  "VGG9 (CIFAR-10)",
-    "vgg9_svhn":     "VGG9 (SVHN)",
-    "vgg9_dvsgest":  "VGG9 (DVSGesture)",
+    "vgg9_cifar10":  "VGG9",
+    "vgg9_svhn":     "VGG9",
+    "vgg9_dvsgest":  "VGG9",
 }
 
 DATASET_DISPLAY = {
@@ -85,6 +85,17 @@ DATASET_DISPLAY = {
     "dvsgesture":    "DVSGesture",
     "dvscifar10":    "DVS-CIFAR10",
     "shd":           "SHD",
+}
+
+DATASET_SUBTITLE = {
+    "mnist":         "Test accuracy, rate-coded input, 10 classes.",
+    "fashionmnist":  "Test accuracy, rate-coded input, 10 classes.",
+    "cifar10":       "Test accuracy, rate-coded input, 10 classes.",
+    "svhn":          "Test accuracy, rate-coded input, 10 classes.",
+    "nmnist":        "Test accuracy, event-based neuromorphic input, 10 classes.",
+    "dvsgesture":    "Test accuracy, event-based neuromorphic input, 11 gesture classes.",
+    "dvscifar10":    "Test accuracy, event-based neuromorphic input, 10 classes.",
+    "shd":           "Test accuracy, event-based neuromorphic input, 20 classes.",
 }
 
 def display_trainer(name: str) -> str:
@@ -166,7 +177,8 @@ def make_markdown_tables(df: pd.DataFrame) -> str:
         models   = sorted(sub["model"].unique())
 
         lines.append(f"### {display_dataset(dataset)}\n")
-        lines.append("*Test accuracy (mean ± std where multiple seeds available).*\n")
+        subtitle = DATASET_SUBTITLE.get(dataset.lower(), "Test accuracy (mean ± std where multiple seeds available).")
+        lines.append(f"*{subtitle}*\n")
 
         model_labels = [display_model(m) for m in models]
         header = "| Algorithm | " + " | ".join(model_labels) + " |"

@@ -5,17 +5,26 @@
 
 ![NeuroTrain framework overview — trainers, networks, and datasets are independently registered components wired at runtime; run_exp_campaign.py enumerates all valid combinations and aggregates results into per-dataset accuracy tables.](docs/figures/snn_framework.png)
 
-NeuroTrain is an open framework for implementing, comparing, and benchmarking SNN training algorithms under shared, controlled conditions. Trainers, networks, and datasets are fully decoupled — any combination can be benchmarked from a single config file. Hyperparameter optimization via [Optuna](https://optuna.org) is built-in: mark any parameter as tunable directly in YAML and set `opt: true` to run a study. This makes it possible to separate algorithmic contributions from experimental choices — something that is typically hard when algorithms live in heterogeneous, one-off codebases.
+NeuroTrain is an open framework for implementing, comparing, and benchmarking SNN training algorithms under shared, controlled conditions. Trainers, networks, and datasets are fully decoupled — any combination can be benchmarked from a single config file. Hyperparameter optimization via [Optuna](https://optuna.org) is built-in. This makes it possible to separate algorithmic contributions from experimental choices — something that is typically hard when algorithms live in heterogeneous, one-off codebases.
 
 NeuroTrain accompanies a survey paper providing a comprehensive taxonomy of SNN training algorithms — see the [paper](#citation) for background and the full algorithmic landscape.
 
 Built on **[snnTorch](https://github.com/jeshraghian/snntorch)** (≥ 0.7), **[Tonic](https://github.com/neuromorphs/tonic)** (≥ 1.0), and **[NeuroBench](https://github.com/NeuroBench/neurobench)**.
 
-> ![SMILIES logo](docs/figures/LOGO_WEB.png) &nbsp; Developed at the **SMILIES Research Group**, Dept. of Control and Computer Engineering, Politecnico di Torino. &nbsp;·&nbsp; [Website](https://www.smilies.polito.it/) &nbsp;·&nbsp; [LinkedIn](https://www.linkedin.com/company/smilies-polito) &nbsp;·&nbsp; [𝕏](https://x.com/smiliespolito)
 
 > <a name="citation"></a>**If you use NeuroTrain in your research, please cite:**
 >
 > Caviglia, A., Marostica, F., Bardini, R., Savino, A., & Di Carlo, S. (2026). *NeuroTrain: surveying Local Learning Rules for Spiking Neural Networks with an Open Benchmarking Framework*. arXiv preprint. https://arxiv.org/abs/PLACEHOLDER
+
+
+<p align="center">
+  <img src="docs/figures/LOGO_WEB.png" alt="SMILIES logo" height="40"/>
+  <br/>
+  Developed at the <strong>SMILIES Research Group</strong>, Dept. of Control and Computer Engineering, Politecnico di Torino.
+  <br/>
+  <a href="https://www.smilies.polito.it/">Website</a> · <a href="https://www.linkedin.com/company/smilies-polito">LinkedIn</a> · <a href="https://x.com/smiliespolito">𝕏</a>
+</p>
+
 
 ## Quickstart
 
@@ -35,38 +44,30 @@ make paper
 ```
 
 ---
-
 ## Contents
 
-- [SNN Training Algorithms Benchmarking Results](#snn-training-algorithms-benchmarking-results)
-- [Benchmark Your SNN Training Algorithm](#benchmark-your-snn-training-algorithm)
+- [Quickstart](#quickstart)
+- [Benchmark Your Algorithm](#benchmark-your-snn-training-algorithm)
 - [Run Custom Experiments](#run-custom-experiments)
-- [Under the Hood — How NeuroTrain Works](#under-the-hood--how-neurotrain-works)
-  - [Design Principles](#design-principles)
-  - [Repository Structure](#repository-structure)
-  - [Configuration System](#configuration-system)
-  - [NeuroBench Evaluation](#neurobench-evaluation)
-  - [Output Structure and Results Generation](#output-structure-and-results-generation)
-  - [Visualising HPO Results](#visualising-hpo-results)
-  - [Singularity / Apptainer](#singularity--apptainer)
-  - [Dependencies](#dependencies)
-- [Reproduce the Paper Benchmarking Results](#reproduce-the-paper-benchmarking-results)
-- [Development Status](#development-status)
-  - [Implemented Algorithms](#implemented-algorithms)
-  - [Networks and Datasets](#networks-and-datasets)
-  - [Validated Integration Results](#validated-integration-results)
-  - [Testing](#testing)
-  - [HPC / SLURM](#hpc--slurm)
-  - [Trainer Notes](#trainer-notes)
-- [License](#license)
+- [How NeuroTrain Works](#under-the-hood--how-neurotrain-works)
+- [Reproduce Paper Results](#reproduce-the-paper-benchmarking-results)
 
----
+<details>
+<summary>Advanced / Development</summary>
 
-# SNN Training Algorithms Benchmarking Results
+- [Configuration System](#configuration-system)
+- [NeuroBench Evaluation](#neurobench-evaluation)
+- [Output Structure and Results Generation](#output-structure-and-results-generation)
+- [Visualising HPO Results](#visualising-hpo-results)
+- [Singularity / Apptainer](#singularity--apptainer)
+- [Dependencies](#dependencies)
+- [Implemented Algorithms](#implemented-algorithms)
+- [Networks and Datasets](#networks-and-datasets)
+- [HPC / SLURM](#hpc--slurm)
+- [Trainer Notes](#trainer-notes)
+- [Testing](#testing)
 
-*Last updated: PLACEHOLDER DATE — updated with each major release. Full per-dataset tables and reproduction instructions: [Reproduce the Paper Benchmarking Results](#reproduce-the-paper-benchmarking-results).*
-
-![NeuroTrain benchmarking results — test accuracy heatmap, algorithms (rows) × dataset–architecture combinations (cols), colour-coded from low (light) to high (dark). Generated by scripts/generate_results.py from experiments/paper/summary.csv.](docs/figures/results_heatmap.png)
+</details>
 
 ---
 
@@ -370,51 +371,6 @@ experiments/<campaign>/
       study.db                 ← SQLite, open with optuna-dashboard
 ```
 
-### Generating results tables and heatmap
-
-`scripts/generate_results.py` reads `summary.csv` (or `summary.json`) from a campaign directory and produces:
-
-- **`results_tables.md`** — one Markdown accuracy table per dataset (trainer × model), with mean ± std where multiple seeds are available. Ready to paste into the README or a paper draft.
-- **`results_heatmap.png`** — one subplot per dataset, rows = trainers, columns = models, cells colour-coded by test accuracy, values annotated inline.
-- **`neurobench_table.md`** — NeuroBench metrics table across all experiments (with `--neurobench`).
-
-```bash
-# Basic: tables + heatmap
-python scripts/generate_results.py experiments/paper/
-
-# Include NeuroBench metrics table
-python scripts/generate_results.py experiments/paper/ --neurobench
-
-# Save outputs to a custom directory
-python scripts/generate_results.py experiments/paper/ --output docs/results/
-
-# Inject tables directly into README (between marker comments)
-python scripts/generate_results.py experiments/paper/ --readme README.md
-
-# Skip the heatmap (text tables only)
-python scripts/generate_results.py experiments/paper/ --no-heatmap
-```
-
-**Auto-injection into README:** the results tables in this file are bounded by HTML comment markers. Running the script with `--readme README.md` replaces the content between them automatically with the selected results:
-
-
-<!-- RESULTS_START -->
-
-*Results from campaign `vgg_bench_all`. Generated by `scripts/generate_results.py`.*
-
-![NeuroTrain benchmarking results — test accuracy heatmap, algorithms (rows) × architecture–dataset combinations (cols). Campaign: vgg_bench_all — 2026-05-01 14:16](docs/figures/campaign_results/vgg_bench_all_heatmap.png)
-*NeuroTrain — Benchmarking Results · Campaign: `vgg_bench_all` · 2026-05-01 14:16*
-
-### SVHN
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | vgg9 |
-|---|---|
-| OTTT | 19.6% |
-
-<!-- RESULTS_END -->
-
 
 ### Visualising HPO Results
 
@@ -498,8 +454,15 @@ pip install -r requirements.txt
 **Requirements:** Python ≥ 3.9, CUDA optional (MPS and CPU supported via `device: auto`).
 
 ---
+# Benchmarking Results
 
-# Reproduce the Paper Benchmarking Results
+*Last updated: PLACEHOLDER DATE — updated with each major release. Full per-dataset tables and reproduction instructions: [Reproduce the Paper Benchmarking Results](#reproduce-the-paper-benchmarking-results).*
+
+![NeuroTrain benchmarking results — test accuracy heatmap, algorithms (rows) × dataset–architecture combinations (cols), colour-coded from low (light) to high (dark). Generated by scripts/generate_results.py from experiments/paper/summary.csv.](docs/figures/campaign_results/vgg_bench_all_heatmap.png)
+
+---
+
+## Reproduce Benchmarking Results
 
 Paper results are stored in `config/paper.yaml` — one named experiment per trainer × model × dataset combination, with HPO-optimised hyperparameters as plain scalar values.
 
@@ -515,85 +478,28 @@ python scripts/generate_results.py experiments/paper/ --neurobench --readme READ
 
 Each run logs the full config, seed, and git commit hash to `experiments/paper/<exp_name>/`, ensuring every result is traceable.
 
+*Results will be published here upon paper release. Tables and heatmap are auto-generated from campaign outputs — see [Reproduce the Paper Benchmarking Results](#reproduce-the-paper-benchmarking-results) to run them yourself.*
+
 <!-- RESULTS_START -->
 
-### MNIST
+*Results from campaign `vgg_bench_all`. Generated by `scripts/generate_results.py`.*
 
-*Test accuracy, rate-coded input, 10 classes.*
-
-| Algorithm | FC-SNN | Conv-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | — | — | — |
-| OSTL | — | — | — |
-| E-prop | — | — | — |
-| ESD-RTRL | — | — | — |
-| ETLP | — | — | — |
-| STSF | — | — | — |
-| DRTP | — | — | — |
-| OTTT | — | — | — |
-
-### Fashion-MNIST
-
-*Test accuracy, rate-coded input, 10 classes.*
-
-| Algorithm | FC-SNN | Conv-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | — | — | — |
-| OSTL | — | — | — |
-| E-prop | — | — | — |
-| ESD-RTRL | — | — | — |
-| ETLP | — | — | — |
-| STSF | — | — | — |
-| DRTP | — | — | — |
-| OTTT | — | — | — |
-
-### CIFAR-10
-
-*Test accuracy, rate-coded input, 10 classes.*
-
-| Algorithm | Conv-SNN | VGG9 | R-SNN |
-|---|---|---|---|
-| BPTT | — | — | — |
-| E-prop | — | — | — |
-| ESD-RTRL | — | — | — |
-| DRTP | — | — | — |
-| OTTT | — | — | — |
-| STOP | — | — | — |
+![NeuroTrain benchmarking results — test accuracy heatmap, algorithms (rows) × architecture–dataset combinations (cols). Campaign: vgg_bench_all — 2026-05-01 14:55](docs/figures/campaign_results/vgg_bench_all_heatmap.png)
+*NeuroTrain — Benchmarking Results · Campaign: `vgg_bench_all` · 2026-05-01 14:55*
 
 ### SVHN
 
 *Test accuracy, rate-coded input, 10 classes.*
 
-| Algorithm | Conv-SNN | VGG9 | R-SNN |
-|---|---|---|---|
-| BPTT | — | — | — |
-| E-prop | — | — | — |
-| ESD-RTRL | — | — | — |
-| OTTT | — | — | — |
+| Algorithm | vgg9 |
+|---|---|
+| OTTT | 19.6% |
+| TP | 83.2% |
 
-### N-MNIST
+<!-- RESULTS_END -->
 
-*Test accuracy, event-based neuromorphic input, 10 classes.*
+---
 
-| Algorithm | FC-SNN | R-SNN |
-|---|---|---|
-| BPTT | — | — |
-| OSTL | — | — |
-| OSTTP | — | — |
-| E-prop | — | — |
-| ESD-RTRL | — | — |
-| ETLP | — | — |
-| OTTT | — | — |
+# License
 
-### DVSGesture
-
-*Test accuracy, event-based neuromorphic input, 11 gesture classes.*
-
-| Algorithm | Conv-SNN | VGG9 | R-SNN |
-|---|---|---|---|
-| BPTT | — | — | — |
-| E-prop | — | — | — |
-| ESD-RTRL | — | — | — |
-| DECOLLE | — | — | — |
-| OTTT | — | — | — |
-
+*To be added.*

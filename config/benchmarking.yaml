@@ -16,8 +16,7 @@ models:
 
 
 datasets:
-- shd
-- svhn
+
 
 # Shared runtime settings (override defaults for all experiments)
 runtime:
