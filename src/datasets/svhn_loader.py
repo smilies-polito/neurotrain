@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from torchvision.datasets import SVHN
 from torchvision.transforms import Compose, Normalize, RandomCrop, ToTensor
+from functools import partial
 from torch.utils.data import DataLoader
 
 from datasets.rate import Rate, DirectCoding, time_major_collate
@@ -27,6 +28,49 @@ def _seed_worker(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+def _svhn_target_transform(y: int) -> int:
+    """
+    Normalise SVHN labels to standard class indices.
+
+    SVHN is historically encoded as 1..10, where 10 represents digit 0.
+    Some torchvision versions already map 10 -> 0 internally, but this is
+    harmless in both cases:
+        10 % 10 = 0
+        0..9 % 10 = 0..9
+    """
+    return int(y) % 10
+
+
+def _checked_time_major_collate(
+    batch,
+    *,
+    dataset_name: str,
+    num_classes: int,
+):
+    """
+    Collate a batch and verify that targets are valid class indices.
+
+    This keeps dataset-specific label issues in the data layer and prevents
+    unclear CUDA device-side asserts during loss computation.
+    """
+    data, target = time_major_collate(batch)
+
+    target = torch.as_tensor(target, dtype=torch.long)
+
+    t_min = int(target.min().item())
+    t_max = int(target.max().item())
+
+    if t_min < 0 or t_max >= num_classes:
+        unique = sorted(target.unique().cpu().tolist())
+        raise ValueError(
+            f"Invalid labels in dataset '{dataset_name}'. "
+            f"Expected labels in [0, {num_classes - 1}], "
+            f"got min={t_min}, max={t_max}, unique={unique}. "
+            f"Fix this in the dataset target_transform."
+        )
+
+    return data, target
 
 
 def SVHNLoader(
@@ -88,8 +132,20 @@ def SVHNLoader(
         g = torch.Generator().manual_seed(seed)
         worker_init_fn = _seed_worker
 
+    collate_fn = partial(
+        _checked_time_major_collate,
+        dataset_name="svhn",
+        num_classes=10,
+        )
+
     trainloader = DataLoader(
-        SVHN(str(data_root), split="train", download=download, transform=train_transform),
+        SVHN(
+            str(data_root),
+            split="train",
+            download=download,
+            transform=train_transform,
+            target_transform=_svhn_target_transform,
+        ),
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
@@ -97,18 +153,23 @@ def SVHNLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
-        collate_fn=time_major_collate,
+        collate_fn=collate_fn,
     )
 
     testloader = DataLoader(
-        SVHN(str(data_root), split="test", download=download, transform=test_transform),
+        SVHN(
+            str(data_root),
+            split="test",
+            download=download,
+            transform=test_transform,
+            target_transform=_svhn_target_transform,),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
-        collate_fn=time_major_collate,
+        collate_fn=collate_fn,
     )
 
     return trainloader, testloader

@@ -63,3 +63,9 @@ dvsgesture:
   num_classes: 11
   hidden_sizes:
     value: [1024]
+
+shd:
+  in_shape: [700]  # 1 channel * 700 time steps
+  num_classes: 20
+  hidden_sizes:
+    value: [512]

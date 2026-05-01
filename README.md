@@ -464,17 +464,36 @@ python scripts/generate_results.py experiments/paper/ --no-heatmap
 
 ### Visualising HPO Results
 
-When `opt: true` is set, NeuroTrain writes an SQLite study database. Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, and convergence plots in real time:
+When `opt: true` is set, NeuroTrain saves an Optuna SQLite study database for each experiment:
 
-```bash
-optuna-dashboard sqlite:///experiments/<campaign>/<exp_name>/optuna/study.db
-# → opens at http://localhost:8080
+```text
+experiments/<campaign>/experiments/<exp_name>/optuna/study.db
 ```
 
-![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots for a NeuroTrain HPO study](docs/figures/optuna_dashboard_screenshot.png)
-*optuna-dashboard showing trial accuracy across 50 Optuna TPE trials for a trainer × model × dataset combination. Use the parallel coordinate view to identify which hyperparameters drive accuracy and where the search converged.*
+Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, parallel coordinate plots, and convergence behaviour in the browser.
 
-> **Note:** replace `docs/figures/optuna_dashboard_screenshot.png` with a screenshot from your own HPO campaign. See the [official repository](https://github.com/optuna/optuna-dashboard) for UI previews.
+Launch the dashboard using the **absolute path** to the study database:
+
+```bash
+optuna-dashboard "sqlite:////absolute/path/to/study.db"
+```
+
+For example:
+
+```bash
+optuna-dashboard "sqlite:////home/user/neurotrain/experiments/<campaign>/experiments/<exp_name>/optuna/study.db"
+```
+
+The dashboard is served at:
+
+```text
+http://localhost:8080
+```
+
+Using an absolute path avoids SQLite path-resolution issues, especially inside Singularity or cluster shells.
+
+![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots for a NeuroTrain HPO study](docs/figures/optuna-dashboard-screenshot.png)
+*optuna-dashboard for a trainer × model × dataset combination.*
 
 ## Singularity / Apptainer
 

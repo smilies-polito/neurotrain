@@ -4,7 +4,7 @@
 # through the campaign loader and matches the paper's CIFAR10/DVSGesture recipe.
 
 name: tp
-supported_net_types: [fc, rec, conv, vgg9]
+supported_net_types: [fc, rec, vgg9]
 lr:
   value: 1.0e-4
   type: float

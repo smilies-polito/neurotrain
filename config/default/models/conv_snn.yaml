@@ -45,3 +45,10 @@ dvsgesture:
 dvscifar10:
   in_shape: [2, 128, 128]  # 2 polarities, 128x128
   num_classes: 10
+
+shd:
+  in_shape: [700]  # 1 channel * 700 time steps
+  num_classes: 20
+  hidden_sizes:
+    value: [512]
+

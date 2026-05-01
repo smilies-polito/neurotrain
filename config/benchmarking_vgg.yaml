@@ -10,9 +10,7 @@ trainers:
   
 
 models:
-- fc_snn
-- r_snn
-- conv_snn
+- vgg9
 
 
 datasets:
@@ -25,7 +23,7 @@ runtime:
   device: cuda
   seed: 42
   neurobench: false
-  batch_size: 256
+  batch_size: 16
 
 
 
