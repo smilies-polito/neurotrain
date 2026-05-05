@@ -13,12 +13,13 @@ epochs used for exploration.
 
 ## Legend
 
-| Symbol | Meaning |
-| ------ | ------- |
-| 🟢 | Experiment successful |
-| 🔴 | Error while running |
-| ⚫ | Not supported — incompatible algorithm / architecture |
-| 🔵 | Not yet run |
+| Symbol | Meaning                                               |
+| ------ | ----------------------------------------------------- |
+| 🟢     | Experiment successful                                 |
+| 🟡     | We have results but with problems                     |
+| 🔴     | Error while running                                   |
+| ⚫      | Not supported — incompatible algorithm / architecture |
+| 🔵     | Not yet run                                           |
 
 > **Dataset groups** — Frame-based: `MNIST` `F-MNIST` `CIFAR10` `SVHN`
 > · Neuromorphic: `NMNIST` `DVSGest.` `DVSCifar10` `SHD`
@@ -45,46 +46,49 @@ Commit: `968f810153ca27300c9347a7be933628302bf732`
 ### DECOLLE
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
-| Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
-| ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      | 0.913 🟢 | 0.724 🟢 | 0.381 🟢 | 0.744 🟢 | 0.919 🟢 | 0.739 🟢 | 0.360 🟢 | 🔵 |
-| RC      | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
-| Conv    | 0.890 🟢 | 0.649 🟢 | 0.366 🟢 | 0.584 🟢 | 0.896 🟢 | 0.663 🟢 | 🔴 | ⚫ |
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. |  DVSCifar10  | SHD |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :----------: | :-: |
+| FC      | 0.913 🟢 | 0.724 🟢 | 0.381 🟢 | 0.744 🟢 | 0.919 🟢 | 0.739 🟢 |   0.360 🟢   | 🔵  |
+| RC      |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |      ⚫       |  ⚫  |
+| Conv    | 0.890 🟢 | 0.649 🟢 | 0.366 🟢 | 0.584 🟢 | 0.896 🟢 | 0.663 🟢 | 0.403 🟡 [1] |  ⚫  |
+##### Comments
+ 1. Got [[DECOLLE DVSCIFAR10 aedat error|this]] error. Very strange since it appeared after some time.
 
 ---
 
 ### EPROP
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
-> e-prop is designed for recurrent networks; FC and Conv are not applicable.
-
-| Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
-| ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
-| RC      | 0.967 🟢 | 0.828 🟢 | 🔴 | 🔴 | 0.953 🟢 | 🔴 | 🔴 | 🔵 |
-| Conv    | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
+| Network |  MNIST   | F-MNIST  | CIFAR10 |  SVHN  |  NMNIST  | DVSGest. | DVSCifar10 | SHD |
+| ------- | :------: | :------: | :-----: | :----: | :------: | :------: | :--------: | :-: |
+| FC      |    ⚫     |    ⚫     |    ⚫    |   ⚫    |    ⚫     |    ⚫     |     ⚫      |  ⚫  |
+| RC      | 0.967 🟢 | 0.828 🟢 | 🔴 [1]  | 🔴 [1] | 0.953 🟢 |  🔴 [2]  |   🔴 [2]   | 🔵  |
+| Conv    |    ⚫     |    ⚫     |    ⚫    |   ⚫    |    ⚫     |    ⚫     |     ⚫      |  ⚫  |
+1. It was trying to use a multi-layer RSNN, fixed already and waiting to be run.
+2. CUDA out of memory, need to reduce batch size.
 
 ---
 
 ### ESD_RTRL
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
-| Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
-| ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      | 0.969 🟢 | 0.847 🟢 | 0.400 🟢 | 0.688 🟢 | 🔵 | 0.697 🟢 | 🔵 | 🔵 |
-| RC      | 0.879 🟢 | 0.735 🟢 | 0.277 🟢 | 🔴 | 🔵 | 0.553 🟢 | 🔵 | 🔵 |
-| Conv    | 0.986 🟢 | 🔴 | 🔴 | 🔴 | 🔵 | 🔴 | 🔵 | ⚫ |
+| Network |  MNIST   | F-MNIST  | CIFAR10  |     SVHN     | NMNIST | DVSGest. | DVSCifar10 | SHD |
+| ------- | :------: | :------: | :------: | :----------: | :----: | :------: | :--------: | :-: |
+| FC      | 0.969 🟢 | 0.847 🟢 | 0.400 🟢 |   0.688 🟢   |   🔵   | 0.697 🟢 |  0.334 🟢  | 🔵  |
+| RC      | 0.879 🟢 | 0.735 🟢 | 0.277 🟢 | 0.097 🟡 [1] |   🔵   | 0.553 🟢 |     🔵     | 🔵  |
+| Conv    | 0.986 🟢 | 0.829 🟢 | 0.470 🟢 |      🔵      |   🔵   | 0.583 🟢 |     🔵     |  ⚫  |
+1. Accuracy stayed at random, better to run this again since it is very strange.
 
 ---
 
 ### ETLP
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
-| Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
-| ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      | 0.925 🟢 | 0.792 🟢 | 0.301 🟢 | 0.221 🟢 | 🔵 | 🔵 | 🔵 | 🔵 |
-| RC      | 0.915 🟢 | 0.809 🟢 | 0.301 🟢 | 🔴 | 🔵 | 🔵 | 🔵 | 🔵 |
-| Conv    | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | ⚫ |
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   | NMNIST | DVSGest. | DVSCifar10 | SHD |
+| ------- | :------: | :------: | :------: | :------: | :----: | :------: | :--------: | :-: |
+| FC      | 0.925 🟢 | 0.792 🟢 | 0.301 🟢 | 0.221 🟢 |   🔵   |    🔵    |     🔵     | 🔵  |
+| RC      | 0.915 🟢 | 0.809 🟢 | 0.301 🟢 | 0.337 🟢 |   🔵   |    🔵    |     🔵     | 🔵  |
+| Conv    |    ⚫     |    ⚫     |    ⚫     |    ⚫     |   ⚫    |    ⚫     |     ⚫      |  ⚫  |
 
 ---
 
@@ -147,11 +151,200 @@ Config files live in `config/vgg9/`.
 > - **TPnet** — TP-style head: leaky-integrator readout, atan surrogate, conv_gain = 1.8
 > - **OTTTnet** — OTTT-style head: global linear readout, sigmoid surrogate, scale_after_lif = 2.74
 
-| Trainer | Net variant | CIFAR10 | SVHN | DVSGesture | DVSCifar10 |
-| ------- | :---------: | :-----: | :--: | :--------: | :--------: |
-| TP      | TPnet       | 🔵 | 🔵 | 🔵 | 🔵 |
-| TP      | OTTTnet     | 🔵 | 🔵 | 🔵 | 🔵 |
-| OTTT    | TPnet       | 🔵 | 🔵 | 🔵 | 🔵 |
-| OTTT    | OTTTnet     | 🔵 | 🔵 | 🔵 | 🔵 |
-| BPTT    | TPnet       | 🔵 | 🔵 | 🔵 | 🔵 |
-| BPTT    | OTTTnet     | 🔵 | 🔵 | 🔵 | 🔵 |
+| Trainer | Net variant |   CIFAR10   |   SVHN   |  DVSGesture  |  DVSCifar10  |
+| ------- | :---------: | :---------: | :------: | :----------: | :----------: |
+| TP      |    TPnet    |  0.723 🟢   | 0.921 🟡 | 0.666 🟡 [2] |   0.506 🟢   |
+| TP      |   OTTTnet   |  0.729 🟢   | 0.924 🟡 | 0.610 🟡 [2] |   0.451 🟢   |
+| OTTT    |    TPnet    |   🔴 [4]    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
+| OTTT    |   OTTTnet   |   🔴 [4]    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
+| BPTT    |    TPnet    |  0.855 🟢   | 0.946 🟡 | 0.765 🟡 [3] | 0.639 🟡 [3] |
+| BPTT    |   OTTTnet   | 0.10 🟡 [1] | 0.913 🟡 | 0.091 🔴 [2] | 0.085 🟡 [1] |
+1. In these trial the accuracy always ended up at random of worse but some trial got a growing accuracy in the first epoch and then completely died.
+2. Died almost immediately.
+3. Extreme overfitting.
+4. Error on OTTT trainer that I thought I had fixed locally but apparently not.
+#### Comments on VGG Trials
+###### BPTT on OTTT-net with CIFAR10
+Here only one trial got some kinda good results that died completely for some reason.
+
+Output of terminal:
+```
+2026-04-26 09:09:53,393 [INFO] Using device: cuda
+2026-04-26 09:09:53,393 [INFO] Loading dataset: cifar10 (T=6, batch=128)
+2026-04-26 09:09:54,572 [INFO] Building network: vgg9
+2026-04-26 09:09:54,626 [INFO] Building trainer: bptt
+2026-04-26 09:09:54,626 [INFO] Training for 10 epochs...
+2026-04-26 09:11:46,760 [INFO] Epoch 1/10 — loss: 1.5965  train_acc: 0.4155  test_acc: 0.5141
+2026-04-26 09:13:38,696 [INFO] Epoch 2/10 — loss: 1.2689  train_acc: 0.5546  test_acc: 0.5930
+2026-04-26 09:15:30,699 [INFO] Epoch 3/10 — loss: 1.1450  train_acc: 0.6002  test_acc: 0.6024
+2026-04-26 09:17:22,644 [INFO] Epoch 4/10 — loss: 1.0567  train_acc: 0.6367  test_acc: 0.6495
+2026-04-26 09:19:14,577 [INFO] Epoch 5/10 — loss: 0.9861  train_acc: 0.6627  test_acc: 0.6672
+2026-04-26 09:21:06,626 [INFO] Epoch 6/10 — loss: 0.9327  train_acc: 0.6818  test_acc: 0.6924
+2026-04-26 09:22:58,625 [INFO] Epoch 7/10 — loss: 0.9362  train_acc: 0.6808  test_acc: 0.1000
+2026-04-26 09:24:50,238 [INFO] Epoch 8/10 — loss: 2.3026  train_acc: 0.0988  test_acc: 0.1000
+2026-04-26 09:26:41,890 [INFO] Epoch 9/10 — loss: 2.3026  train_acc: 0.0974  test_acc: 0.1000
+2026-04-26 09:28:33,488 [INFO] Epoch 10/10 — loss: 2.3026  train_acc: 0.0991  test_acc: 0.1000
+2026-04-26 09:28:33,489 [INFO] Training done in 1118.9 s. Final test accuracy: 0.1000
+```
+
+Configuration:
+```yaml
+name: bptt_otttnet_cifar10_opt_t1
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 4.207988669606632e-05
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: vgg9
+  net_type: vgg9
+  in_channels: 3
+  num_classes: 10
+  input_shape:
+  - 3
+  - 32
+  - 32
+  head_type: global_linear
+  use_tp_pool: false
+  channels:
+  - 64
+  - 128
+  - 256
+  - 256
+  - 512
+  - 512
+  - 512
+  - 512
+  beta: 0.4076362190319798
+  threshold: 0.5580836121681995
+  conv_gain: 1.0
+  scale_after_lif: 2.74
+  surrogate_kind: sigmoid
+  surrogate_slope: 4.0
+  pool_after_blocks:
+  - 2
+  - 4
+  algorithm_name: bptt
+dataset:
+  name: cifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 6
+  seed: 867
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 10
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: true
+  batch_size: 128
+  progress: false
+optuna: {}
+```
+###### BPTT on OTTT-net with DVSCIFAR10
+Again we got trials where the accuracy grows and then drops.
+
+Terminal output:
+```
+2026-04-26 17:18:37,497 [INFO] Using device: cuda
+2026-04-26 17:18:37,497 [INFO] Loading dataset: dvscifar10 (T=10, batch=32)
+2026-04-26 17:18:37,542 [INFO] Building network: vgg9
+2026-04-26 17:18:37,621 [INFO] Building trainer: bptt
+2026-04-26 17:18:37,621 [INFO] Training for 10 epochs...
+2026-04-26 17:25:17,360 [INFO] Epoch 1/10 — loss: 2.0481  train_acc: 0.2537  test_acc: 0.3130
+2026-04-26 17:31:57,040 [INFO] Epoch 2/10 — loss: 1.8655  train_acc: 0.3462  test_acc: 0.3580
+2026-04-26 17:38:36,929 [INFO] Epoch 3/10 — loss: 1.7715  train_acc: 0.3908  test_acc: 0.4230
+2026-04-26 17:45:17,096 [INFO] Epoch 4/10 — loss: 1.6936  train_acc: 0.4235  test_acc: 0.4330
+2026-04-26 17:51:57,244 [INFO] Epoch 5/10 — loss: 1.6325  train_acc: 0.4511  test_acc: 0.4460
+2026-04-26 17:58:37,520 [INFO] Epoch 6/10 — loss: 1.6160  train_acc: 0.4504  test_acc: 0.0850
+2026-04-26 18:05:15,558 [INFO] Epoch 7/10 — loss: 2.3026  train_acc: 0.1016  test_acc: 0.0850
+2026-04-26 18:11:53,677 [INFO] Epoch 8/10 — loss: 2.3026  train_acc: 0.1015  test_acc: 0.0850
+2026-04-26 18:18:31,791 [INFO] Epoch 9/10 — loss: 2.3026  train_acc: 0.1015  test_acc: 0.0850
+2026-04-26 18:25:09,822 [INFO] Epoch 10/10 — loss: 2.3026  train_acc: 0.1015  test_acc: 0.0850
+2026-04-26 18:25:09,822 [INFO] Training done in 3992.2 s. Final test accuracy: 0.0850
+```
+
+Configuration:
+```yaml
+name: bptt_otttnet_dvscifar10_opt_t1
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 4.207988669606632e-05
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: vgg9
+  net_type: vgg9
+  in_channels: 2
+  num_classes: 10
+  input_shape:
+  - 2
+  - 128
+  - 128
+  head_type: global_linear
+  use_tp_pool: false
+  channels:
+  - 64
+  - 128
+  - 256
+  - 256
+  - 512
+  - 512
+  - 512
+  - 512
+  beta: 0.4076362190319798
+  threshold: 0.5580836121681995
+  conv_gain: 1.0
+  scale_after_lif: 2.74
+  surrogate_kind: sigmoid
+  surrogate_slope: 4.0
+  pool_after_blocks:
+  - 2
+  - 4
+  - 6
+  algorithm_name: bptt
+dataset:
+  name: dvscifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 867
+  pin_memory: false
+  num_workers: 4
+  train_fraction: 0.9
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 10
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: true
+  batch_size: 32
+  progress: false
+optuna: {}
+```
