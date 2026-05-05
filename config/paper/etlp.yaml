@@ -1,0 +1,463 @@
+
+# ══════════════════════════════════════════════════════════════
+#                             MNIST                            
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp1 ───────────── #
+etlp_fc_mnist:
+  name: etlp_fc_snn_mnist
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.03808557563179262
+    surrogate_scale: 0.2661354003489156
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 0.8487274427066044
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9031048219684529
+    threshold: 0.8667127980955606
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 788
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ───────────── Exp2 ───────────── #
+etlp_r_mnist:
+  name: etlp_r_snn_mnist
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.023089547806898543
+    surrogate_scale: 0.4392400294167339
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.889334909302872
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9367214640348973
+    threshold: 0.6154734350421972
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 395
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════
+#                          FashionMNIST                        
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp1 ───────────── #
+etlp_fc_fmnist:
+  name: etlp_fc_snn_fashionmnist
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.002463768595899745
+    surrogate_scale: 0.9296868115208051
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 0.2681357538986471
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 800
+    num_classes: 10
+    beta: 0.8372367438596376
+    threshold: 0.5452272889105381
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 326
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ───────────── Exp2 ───────────── #
+etlp_r_fmnist:
+  name: etlp_r_snn_fashionmnist
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.045686733804889856
+    surrogate_scale: 0.3455965303942452
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.7853908525752766
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9080886618598021
+    threshold: 0.8011027116421578
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 892
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════
+#                              SVHN                            
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp1 ───────────── #
+etlp_fc_svhn:
+  name: etlp_fc_snn_svhn
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.001091776497082577
+    surrogate_scale: 0.4961851543215208
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.5666263058925587
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8049976433814588
+    threshold: 0.6235513560055568
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 957
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ───────────── Exp2 ───────────── #
+etlp_r_svhn:
+  name: etlp_r_snn_svhn
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.005031183309640775
+    surrogate_scale: 0.46757120968323856
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.5377393894365423
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.8134606871533842
+    threshold: 0.5745377415508842
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 29
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════
+#                            CIFAR10                           
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp1 ───────────── #
+etlp_fc_cifar10:
+  name: etlp_fc_snn_cifar10
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.009469076869896835
+    surrogate_scale: 0.25599825576144386
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.8928838503303382
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.9200199819645493
+    threshold: 0.6073857283472773
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 263
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ───────────── Exp2 ───────────── #
+etlp_r_cifar10:
+  name: etlp_r_snn_cifar10
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.007926979133382535
+    surrogate_scale: 0.4371345852728469
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.6624079056401957
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.8496117575941794
+    threshold: 0.5432660808883824
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 685
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+

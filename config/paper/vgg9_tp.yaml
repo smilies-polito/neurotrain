@@ -1,0 +1,593 @@
+tp_otttnet_cifar10:
+  name: tp_otttnet_cifar10_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00014867167179068166
+    alpha: 0.4174410757039846
+    beta: 0.563950957910326
+    vth: 0.4737083077110927
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    algorithm_name: tp
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 887
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}
+
+tp_otttnet_dvscifar10:
+  name: tp_otttnet_dvscifar10_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00024289169469748895
+    alpha: 0.9436714480253212
+    beta: 0.7380743053027208
+    vth: 1.018390181036444
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 10
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    algorithm_name: tp
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 157
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}
+
+tp_otttnet_dvsgesture:
+  name: tp_otttnet_dvsgesture_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00024289169469748895
+    alpha: 0.9436714480253212
+    beta: 0.8586770314875884
+    vth: 1.018390181036444
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 11
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    algorithm_name: tp
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 157
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}
+
+tp_otttnet_svhn:
+  name: tp_otttnet_svhn_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 4.768785415482607e-05
+    alpha: 0.33598770838196546
+    beta: 0.7571306514997965
+    vth: 0.8183340223705389
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    algorithm_name: tp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 292
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}
+
+tp_tpnet_cifar10:
+  name: tp_tpnet_cifar10_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00017648250675988955
+    alpha: 0.5791396725266317
+    beta: 0.6722544985518655
+    vth: 0.36326210131781284
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    algorithm_name: tp
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 362
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}
+
+tp_tpnet_dvscifar10:
+  name: tp_tpnet_dvscifar10_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00024289169469748895
+    alpha: 0.9436714480253212
+    beta: 0.7380743053027208
+    vth: 1.018390181036444
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 10
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    algorithm_name: tp
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 157
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}
+
+tp_tpnet_dvsgesture:
+  name: tp_tpnet_dvsgesture_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00024289169469748895
+    alpha: 0.9436714480253212
+    beta: 0.8586770314875884
+    vth: 1.018390181036444
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 11
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    algorithm_name: tp
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 157
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}
+
+tp_tpnet_svhn:
+  name: tp_tpnet_svhn_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 4.768785415482607e-05
+    alpha: 0.33598770838196546
+    beta: 0.7571306514997965
+    vth: 0.8183340223705389
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.53
+    threshold: 1.0
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    algorithm_name: tp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 292
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 10
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}

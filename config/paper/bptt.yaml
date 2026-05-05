@@ -1,0 +1,1091 @@
+
+# ══════════════════════════════════════════════════════════════════
+#                         M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_mnist:
+  name: bptt_fc_snn_mnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0007341097743455104
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9035286940710116
+    threshold: 0.5027200585006146
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 158
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_mnist:
+  name: bptt_r_snn_mnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0005881407144910462
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9653791364569585
+    threshold: 0.599097319267341
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 142
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_mnist:
+  name: bptt_conv_snn_mnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0017811706354097221
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 1
+    - 28
+    - 28
+    num_classes: 10
+    beta: 0.8077423744653517
+    threshold: 0.531629428807855
+    algorithm_name: bptt
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 732
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                    F a s h i o n - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_fmnist:
+  name: bptt_fc_snn_fashionmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0003010115466076811
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 800
+    num_classes: 10
+    beta: 0.834129631870491
+    threshold: 0.5212196427495224
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 331
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_fmnist:
+  name: bptt_r_snn_fashionmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.00046720320668219384
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8035636071518378
+    threshold: 0.59046223612679
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 887
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_fmnist:
+  name: bptt_conv_snn_fashionmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0020503317945303997
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 1
+    - 28
+    - 28
+    num_classes: 10
+    beta: 0.814625565002045
+    threshold: 0.6303162979975727
+    algorithm_name: bptt
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 328
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                        N - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_nmnist:
+  name: bptt_fc_snn_nmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.000675401688356139
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 2312
+    hidden_sizes:
+    - 512
+    num_classes: 10
+    beta: 0.830648822833962
+    threshold: 0.5039806857364453
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 675
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_nmnist:
+  name: bptt_r_snn_nmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0007317377002526046
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 2312
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8685970409653175
+    threshold: 0.5318433980390838
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 616
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_nmnist:
+  name: bptt_conv_snn_nmnist
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.003477725933328848
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 2
+    - 34
+    - 34
+    num_classes: 10
+    beta: 0.821215369930887
+    threshold: 0.5366621006050525
+    algorithm_name: bptt
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 910
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                        C I F A R - 1 0
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_cifar10:
+  name: bptt_fc_snn_cifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 1.9146069757683583e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8504181459517844
+    threshold: 0.5853853689703641
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 757
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_cifar10:
+  name: bptt_r_snn_cifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 4.292048304614148e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.8259362335427967
+    threshold: 0.6707057398813092
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 120
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_cifar10:                    
+  name: bptt_conv_snn_cifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0006665625745885325
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 3
+    - 32
+    - 32
+    num_classes: 10
+    beta: 0.9420703200923082
+    threshold: 0.8325239048555805
+    algorithm_name: bptt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 405
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════════
+#                          S V H N
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_svhn:
+  name: bptt_fc_snn_svhn
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 3.067588120036416e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8091236944154161
+    threshold: 0.6135448839574934
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 877
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_svhn:
+  name: bptt_r_snn_svhn
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 6.342740756840459e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.8794983238869462
+    threshold: 0.9285908927901373
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 330
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+    
+# ------------- Exp3 ------------- #
+bptt_conv_svhn:
+  name: bptt_conv_snn_svhn
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0006446297850891286
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 3
+    - 32
+    - 32
+    num_classes: 10
+    beta: 0.984777775555609
+    threshold: 1.0015309620062005
+    algorithm_name: bptt
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 39
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - C I F A R 1 0
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_dvscifar10:
+  name: bptt_fc_snn_dvscifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 2.4706424626974e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.9245763343221751
+    threshold: 0.5717892856105268
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 889
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_dvscifar10:
+  name: bptt_r_snn_dvscifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 2.270172216222036e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 512
+    num_classes: 10
+    beta: 0.8615191530953201
+    threshold: 1.1429940513494796
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 121
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_dvscifar10:
+  name: bptt_conv_snn_dvscifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 2.000659908613101e-05
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 2
+    - 128
+    - 128
+    num_classes: 10
+    beta: 0.8968248309349395
+    threshold: 0.7779391507185941
+    algorithm_name: bptt
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 357
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - G e s t u r e
+# ══════════════════════════════════════════════════════════════════
+
+# ------------- Exp1 ------------- #
+bptt_fc_dvsgesture:
+  name: bptt_fc_snn_dvsgesture
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.000248946863955394
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 2048
+    num_classes: 11
+    beta: 0.8205591306624722
+    threshold: 0.8572843717119688
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 226
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp2 ------------- #
+bptt_r_dvsgesture:
+  name: bptt_r_snn_dvsgesture
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.00024215589203941516
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    num_classes: 11
+    beta: 0.8705357801725531
+    threshold: 1.3833347292582523
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: bptt
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 542
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ------------- Exp3 ------------- #
+bptt_conv_dvsgesture:
+  name: bptt_conv_snn_dvsgesture
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0013850708971327216
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 2
+    - 128
+    - 128
+    num_classes: 11
+    beta: 0.8598096731996487
+    threshold: 0.6895162330832787
+    algorithm_name: bptt
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 425
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                          S H D
+# ══════════════════════════════════════════════════════════════════
+
+

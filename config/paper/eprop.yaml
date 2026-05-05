@@ -1,0 +1,186 @@
+
+# ══════════════════════════════════════════════════════════════
+#                             MNIST                            
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp2 ───────────── #
+eprop_r_mnist:
+  name: eprop_r_snn_mnist
+  opt: false
+  trainer:
+    name: eprop
+    supported_net_types:
+    - rec
+    lr: 7.73213578526648e-05
+    gamma: 0.42741704165681893
+    dt: null
+    tau_mem: null
+    tau_out: null
+    threshold: null
+    lr_layer_norm:
+    - 1.0
+    - 1.0
+    - 1.0
+    use_optimizer: true
+    update_last: false
+    update_every: 1
+    seq_batch_size: 1
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8982756401807899
+    threshold: 0.8635400568262814
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: eprop
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 998
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════
+#                          FashionMNIST                        
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp2 ───────────── #
+eprop_r_fmnist:
+  name: eprop_r_snn_fashionmnist
+  opt: false
+  trainer:
+    name: eprop
+    supported_net_types:
+    - rec
+    lr: 3.636109043430363e-05
+    gamma: 0.486948133194878
+    dt: null
+    tau_mem: null
+    tau_out: null
+    threshold: null
+    lr_layer_norm:
+    - 1.0
+    - 1.0
+    - 1.0
+    use_optimizer: true
+    update_last: false
+    update_every: 1
+    seq_batch_size: 1
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9853074610927735
+    threshold: 1.2986212098996053
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: eprop
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 608
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════
+#                             NMNIST                           
+# ══════════════════════════════════════════════════════════════
+# ───────────── Exp2 ───────────── #
+eprop_r_nmnist:
+  name: eprop_r_snn_nmnist
+  opt: false
+  trainer:
+    name: eprop
+    supported_net_types:
+    - rec
+    lr: 4.6533711330288377e-05
+    gamma: 0.3040738330178423
+    dt: null
+    tau_mem: null
+    tau_out: null
+    threshold: null
+    lr_layer_norm:
+    - 1.0
+    - 1.0
+    - 1.0
+    use_optimizer: true
+    update_last: false
+    update_every: 1
+    seq_batch_size: 1
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 2312
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8130722515354999
+    threshold: 0.5510649251739665
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: eprop
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 372
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 50
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
