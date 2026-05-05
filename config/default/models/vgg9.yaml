@@ -88,8 +88,3 @@ dvsgesture:
   input_shape: [2, 128, 128]
   pool_after_blocks: [2, 4, 6]
 
-shd:
-  in_shape: [700]  # 1 channel * 700 time steps
-  num_classes: 20
-  hidden_sizes:
-    value: [512]
