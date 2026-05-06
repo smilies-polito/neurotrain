@@ -18,6 +18,7 @@ YAML config (tunable blocks: {value, type, min, max, list}).  Study artefacts
 (trials.csv, best_params.yaml) are written to <output_dir>/optuna/.
 """
 
+import gc
 import json
 import logging
 import random
@@ -190,7 +191,11 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
             nb_results = {"error": str(e)}
 
     # Free GPU memory so successive Optuna trials don't accumulate allocations.
+    # gc.collect() must run before empty_cache(): it resolves Python reference cycles
+    # (e.g. trainer ↔ network via hooks/synapse_layers) so their GPU tensors are
+    # finalised first; empty_cache() then returns all freed CUDA memory to the allocator.
     del trainer, train_loader, test_loader, network
+    gc.collect()
     torch.cuda.empty_cache()
 
     return {
@@ -256,7 +261,8 @@ def main(spec_path: str, output_dir: str) -> None:
         save_experiment_config(trial_dir, trial_spec)
         save_experiment_metrics(trial_dir, metrics)
 
-        # Free GPU memory before the next trial
+        # Free GPU memory before the next trial (gc before empty_cache — same reason as above)
+        gc.collect()
         torch.cuda.empty_cache()
         return float(metrics["test_accuracy"])
 

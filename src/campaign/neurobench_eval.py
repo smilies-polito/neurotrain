@@ -141,9 +141,14 @@ def run_neurobench(
         ],
         metric_list=[static_metrics, workload_metrics],
     )
-    
-    results = benchmark.run()
-    
+
+    try:
+        results = benchmark.run()
+    finally:
+        # Explicitly delete NeuroBench wrappers so they don't keep 'network' alive
+        # through the exception traceback when an OOM is raised inside benchmark.run().
+        del benchmark, nb_model, wrapped_model
+
     return results
 
 
