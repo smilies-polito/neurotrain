@@ -79,6 +79,9 @@ vgg9-ottt-otttnet-dvsgesture:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/ottt_otttnet_dvsgesture.yaml --name vgg9_ottt_otttnet_dvsgesture
 vgg9-ottt-otttnet-dvscifar10:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/ottt_otttnet_dvscifar10.yaml --name vgg9_ottt_otttnet_dvscifar10
+vgg9-ottt-all: \
+	vgg9-ottt-tpnet-cifar10 vgg9-ottt-tpnet-svhn vgg9-ottt-tpnet-dvsgesture vgg9-ottt-tpnet-dvscifar10 \
+	vgg9-ottt-otttnet-cifar10 vgg9-ottt-otttnet-svhn vgg9-ottt-otttnet-dvsgesture vgg9-ottt-otttnet-dvscifar10
 
 ## BPTT trainer
 vgg9-bptt-tpnet-cifar10:
