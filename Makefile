@@ -151,6 +151,9 @@ sbatch-vgg9-ottt-otttnet-dvsgesture: hpc-mkdir
 	sbatch hpc/vgg9_ottt_otttnet_dvsgesture.sbatch
 sbatch-vgg9-ottt-otttnet-dvscifar10: hpc-mkdir
 	sbatch hpc/vgg9_ottt_otttnet_dvscifar10.sbatch
+sbatch-vgg9-ottt-all: \
+	sbatch-vgg9-ottt-tpnet-cifar10 sbatch-vgg9-ottt-tpnet-svhn sbatch-vgg9-ottt-tpnet-dvsgesture sbatch-vgg9-ottt-tpnet-dvscifar10 \
+	sbatch-vgg9-ottt-otttnet-cifar10 sbatch-vgg9-ottt-otttnet-svhn sbatch-vgg9-ottt-otttnet-dvsgesture sbatch-vgg9-ottt-otttnet-dvscifar10
 
 ## BPTT trainer
 sbatch-vgg9-bptt-tpnet-cifar10: hpc-mkdir

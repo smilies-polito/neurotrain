@@ -56,3 +56,4 @@ bptt_otttnet_dvscifar10_opt:
     device: cuda
     batch_size: 32
     seed: 42
+    neurobench: false

@@ -72,3 +72,4 @@ tp_otttnet_svhn_opt:
     device: cuda
     batch_size: 128
     seed: 42
+    neurobench: false

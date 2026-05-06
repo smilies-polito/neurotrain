@@ -61,3 +61,4 @@ ottt_tpnet_cifar10_opt:
     device: cuda
     batch_size: 128
     seed: 42
+    neurobench: false
