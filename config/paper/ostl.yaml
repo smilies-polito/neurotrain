@@ -1,0 +1,244 @@
+
+# ══════════════════════════════════════════════════════════════════
+#                         M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+# -──────────── Exp1 ───────────── #
+ostl_fc_snn_mnist:
+  name: ostl_fc_snn_mnist
+  opt: false
+  trainer:
+    name: ostl
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.09931265977901692
+    grad_clip: 0.0
+    use_optimizer: false
+    deferred: false
+    feedback_alignment: false
+    ostl_complete: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8910387969913464
+    threshold: 0.5378778828795349
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ostl
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 639
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# -──────────── Exp2 ───────────── #
+ostl_r_snn_mnist:
+  name: ostl_r_snn_mnist
+  opt: false
+  trainer:
+    name: ostl
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.09917371568634348
+    grad_clip: 0.0
+    use_optimizer: false
+    deferred: false
+    feedback_alignment: false
+    ostl_complete: false
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8918155532123131
+    threshold: 0.6932720830052557
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ostl
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 899
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                    F a s h i o n - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+# -──────────── Exp1 ───────────── #
+ostl_fc_snn_fashionmnist:
+  name: ostl_fc_snn_fashionmnist
+  opt: false
+  trainer:
+    name: ostl
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.08534411322932896
+    grad_clip: 0.0
+    use_optimizer: false
+    deferred: false
+    feedback_alignment: false
+    ostl_complete: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 800
+    num_classes: 10
+    beta: 0.8490096924317532
+    threshold: 0.5187346409137472
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ostl
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 685
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════════
+#                        N - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════
+#                        C I F A R - 1 0
+# ══════════════════════════════════════════════════════════════════
+
+# -──────────── Exp1 ───────────── #
+ostl_fc_snn_cifar10:
+  name: ostl_fc_snn_cifar10
+  opt: false
+  trainer:
+    name: ostl
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.09700193611801282
+    grad_clip: 0.0
+    use_optimizer: false
+    deferred: false
+    feedback_alignment: false
+    ostl_complete: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8400151310093047
+    threshold: 0.9820134975275803
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ostl
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 451
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════════
+#                          S V H N
+# ══════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - C I F A R 1 0
+# ══════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - G e s t u r e
+# ══════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════
+#                          S H D
+# ══════════════════════════════════════════════════════════════════
