@@ -197,6 +197,7 @@ def run_study(
             objective,
             n_trials=cfg["n_trials"],
             timeout=cfg["timeout"],
+            gc_after_trial=True,  # force gc.collect() between trials to prevent GPU memory accumulation
         )
     finally:
         _write_artifacts(study, out_dir)

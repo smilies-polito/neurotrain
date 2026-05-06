@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal smoke test for SVHNLoader."""
+"""Smoke test for SVHNLoader — verifies label normalisation (0-9) and batch shapes."""
 
 from __future__ import annotations
 
@@ -19,43 +19,43 @@ if str(SRC_DIR) not in sys.path:
 
 from datasets.svhn_loader import SVHNLoader
 
+T = 10
+B = 32
+
+
+def check_split(data: torch.Tensor, target: torch.Tensor, split: str) -> None:
+    print(f"[{split}]")
+    print(f"\t data.shape={tuple(data.shape)}  expected [{T}, {B}, 3, 32, 32]")
+    print(f"\t target.shape={tuple(target.shape)}  dtype={target.dtype}")
+    print(f"\t label range: min={target.min().item()}  max={target.max().item()}")
+    print(f"\t unique labels: {sorted(target.unique().tolist())}")
+
+    assert data.shape == (T, B, 3, 32, 32), f"unexpected data shape: {tuple(data.shape)}"
+    assert target.dtype == torch.long, f"target dtype should be long, got {target.dtype}"
+    assert target.min().item() >= 0, "labels must be >= 0"
+    assert target.max().item() <= 9, "labels must be <= 9 — raw SVHN label 10 not normalised"
+    print("\t OK (labels in [0, 9])")
+
 
 def main() -> None:
     torch.set_printoptions(precision=3, sci_mode=False)
 
     train_loader, test_loader = SVHNLoader(
-        batch_size=5,
-        T=10,
+        batch_size=B,
+        T=T,
         pin_memory=False,
         seed=0,
         num_workers=0,
     )
 
     train_data, train_target = next(iter(train_loader))
-    print(f"[TRAIN] \n\t data.shape={tuple(train_data.shape)} exprected [batch, timesteps, channels, height, width] \n\t data.ndim={train_data.ndim} \n\t dtype={train_data.dtype}")
-    print(f"\t target.shape={tuple(train_target.shape)} \n\t target.ndim={train_target.ndim} \n\t dtype={train_target.dtype}")
-    print(f"\t sample_target={train_target[0]}")
+    check_split(train_data, train_target, "TRAIN")
+
     x = train_data[0, 0, 0]
-    print(f"\t sample_data: shape={tuple(x.shape)} min={x.min().item():.3f} max={x.max().item():.3f} mean={x.float().mean().item():.3f} nnz={(x!=0).sum().item()}")
-    x = x.squeeze()
-    s = "\n".join("".join("1" if v else "." for v in row) for row in (x > 0).tolist())
-    print("\t sample_data:\n" + s)
-    print("BAD VALUES in sample_data!" if not torch.all((x == 0) | (x == 1)) else "OK (all 0/1)")
-
-
+    print(f"\t sample pixel: shape={tuple(x.shape)} min={x.min().item():.3f} max={x.max().item():.3f} mean={x.mean().item():.3f}")
 
     test_data, test_target = next(iter(test_loader))
-    assert test_data.size(0) == test_target.size(0), "test batch size mismatch"
-    print(f"[TEST] \n\t data.shape={tuple(test_data.shape)} exprected [batch, timesteps, channels, height, width] \n\t data.ndim={test_data.ndim} \n\t dtype={test_data.dtype}")
-    print(f"\t target.shape={tuple(test_target.shape)} \n\t target.ndim={test_target.ndim} \n\t dtype={test_target.dtype}")
-    print(f"\t sample_target={test_target[0]}")
-    x = test_data[0, 0, 0]  
-    print(f"\t sample_data: shape={tuple(x.shape)} min={x.min().item():.3f} max={x.max().item():.3f} mean={x.float().mean().item():.3f} nnz={(x!=0).sum().item()}")
-    x = x.squeeze()
-    s = "\n".join("".join("1" if v else "." for v in row) for row in (x > 0).tolist())
-    print("\t sample_data:\n" + s)
-    print("BAD VALUES in sample_data!" if not torch.all((x == 0) | (x == 1)) else "OK (all 0/1)")
-
+    check_split(test_data, test_target, "TEST")
 
 
 if __name__ == "__main__":

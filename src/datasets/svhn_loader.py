@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from torchvision.datasets import SVHN
 from torchvision.transforms import Compose, Normalize, RandomCrop, ToTensor
-from functools import partial
 from torch.utils.data import DataLoader
 
 from datasets.rate import Rate, DirectCoding, time_major_collate
@@ -40,37 +39,6 @@ def _svhn_target_transform(y: int) -> int:
         0..9 % 10 = 0..9
     """
     return int(y) % 10
-
-
-def _checked_time_major_collate(
-    batch,
-    *,
-    dataset_name: str,
-    num_classes: int,
-):
-    """
-    Collate a batch and verify that targets are valid class indices.
-
-    This keeps dataset-specific label issues in the data layer and prevents
-    unclear CUDA device-side asserts during loss computation.
-    """
-    data, target = time_major_collate(batch)
-
-    target = torch.as_tensor(target, dtype=torch.long)
-
-    t_min = int(target.min().item())
-    t_max = int(target.max().item())
-
-    if t_min < 0 or t_max >= num_classes:
-        unique = sorted(target.unique().cpu().tolist())
-        raise ValueError(
-            f"Invalid labels in dataset '{dataset_name}'. "
-            f"Expected labels in [0, {num_classes - 1}], "
-            f"got min={t_min}, max={t_max}, unique={unique}. "
-            f"Fix this in the dataset target_transform."
-        )
-
-    return data, target
 
 
 def SVHNLoader(
@@ -132,12 +100,6 @@ def SVHNLoader(
         g = torch.Generator().manual_seed(seed)
         worker_init_fn = _seed_worker
 
-    collate_fn = partial(
-        _checked_time_major_collate,
-        dataset_name="svhn",
-        num_classes=10,
-        )
-
     trainloader = DataLoader(
         SVHN(
             str(data_root),
@@ -153,7 +115,7 @@ def SVHNLoader(
         generator=g,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
-        collate_fn=collate_fn,
+        collate_fn=time_major_collate,
     )
 
     testloader = DataLoader(
@@ -162,14 +124,15 @@ def SVHNLoader(
             split="test",
             download=download,
             transform=test_transform,
-            target_transform=_svhn_target_transform,),
+            target_transform=_svhn_target_transform,
+        ),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
         worker_init_fn=worker_init_fn,
         persistent_workers=(num_workers > 0),
-        collate_fn=collate_fn,
+        collate_fn=time_major_collate,
     )
 
     return trainloader, testloader

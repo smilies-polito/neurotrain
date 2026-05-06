@@ -7,7 +7,7 @@ bptt_tpnet_svhn_opt:
   name: bptt_tpnet_svhn_opt
   opt: true
   optuna:
-    n_trials: 200
+    n_trials: 50
     direction: maximize
     sampler: tpe
     pruner: null

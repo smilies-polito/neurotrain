@@ -36,10 +36,22 @@ ottt_vgg9_cifar10:
     - 512
     - 512
     - 512
-    beta: 0.5
-    threshold: 1.0
+    beta:
+        value: 0.5
+        type: float
+        min: 0.3
+        max: 0.99
+    threshold:
+        value: 1.0
+        type: float
+        min: 0.5
+        max: 1.5
     conv_gain: 1.0
-    scale_after_lif: 2.74
+    scale_after_lif:
+        value: 2.74
+        type: float
+        min: 1.5
+        max: 3.5
     surrogate_kind: sigmoid
     surrogate_slope: 4.0
     pool_after_blocks:

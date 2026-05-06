@@ -2,7 +2,7 @@ ottt_vgg9_dvsgesture:
   name: ottt_vgg9_dvsgesture
   opt: false
   optuna:
-    n_trials: 200
+    n_trials: 50
   trainer:
     name: ottt
     lr:

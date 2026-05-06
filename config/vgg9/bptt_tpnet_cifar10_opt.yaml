@@ -8,7 +8,7 @@ bptt_tpnet_cifar10_opt:
   name: bptt_tpnet_cifar10_opt
   opt: true
   optuna:
-    n_trials: 200
+    n_trials: 50
     direction: maximize
     sampler: tpe
     pruner: null

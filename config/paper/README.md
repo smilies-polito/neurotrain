@@ -98,7 +98,7 @@ Commit: `968f810153ca27300c9347a7be933628302bf732`
 | Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
 | ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
 | FC      | 0.967 🟢 | 0.838 🟢 | 0.395 🟢 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
-| RC      | 0.967 🟢 |   🔵   |    🔵   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
+| RC      | 0.967 🟢 |   🔵   |    0.396   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
 | Conv    |   ⚫     |   ⚫   |    ⚫   | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
 
 ---
@@ -225,7 +225,11 @@ model:
   beta: 0.4076362190319798
   threshold: 0.5580836121681995
   conv_gain: 1.0
-  scale_after_lif: 2.74
+  scale_after_lif:
+        value: 2.74
+        type: float
+        min: 1.5
+        max: 3.5
   surrogate_kind: sigmoid
   surrogate_slope: 4.0
   pool_after_blocks:
@@ -316,7 +320,11 @@ model:
   beta: 0.4076362190319798
   threshold: 0.5580836121681995
   conv_gain: 1.0
-  scale_after_lif: 2.74
+  scale_after_lif:
+        value: 2.74
+        type: float
+        min: 1.5
+        max: 3.5
   surrogate_kind: sigmoid
   surrogate_slope: 4.0
   pool_after_blocks:

@@ -9,6 +9,7 @@
 #SBATCH --output=hpc/slurm_outputs/vgg9_tp_tpnet_svhn-%j.out
 #SBATCH --error=hpc/slurm_outputs/vgg9_tp_tpnet_svhn-%j.err
 
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
     python3 run_exp_campaign.py --custom config/vgg9/tp_tpnet_svhn_opt.yaml --no-progress --name vgg9_tp_tpnet_svhn_opt

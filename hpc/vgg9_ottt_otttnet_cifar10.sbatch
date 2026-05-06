@@ -9,6 +9,7 @@
 #SBATCH --output=hpc/slurm_outputs/vgg9_ottt_otttnet_cifar10-%j.out
 #SBATCH --error=hpc/slurm_outputs/vgg9_ottt_otttnet_cifar10-%j.err
 
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 apptainer exec --nv --bind "${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}" \
     hpc/snn-training-benchmarking.sif \
     python3 run_exp_campaign.py --custom config/vgg9/ottt_otttnet_cifar10_opt.yaml --no-progress --name vgg9_ottt_otttnet_cifar10_opt

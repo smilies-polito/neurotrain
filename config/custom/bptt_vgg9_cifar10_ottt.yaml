@@ -8,7 +8,11 @@ bptt_vgg9_cifar10_ottt:
     name: vgg9
     default:
       head_type: global_linear
-      scale_after_lif: 2.74
+      scale_after_lif:
+        value: 2.74
+        type: float
+        min: 1.5
+        max: 3.5
       surrogate_kind: sigmoid
       surrogate_slope: 4.0
       conv_gain: 1.0

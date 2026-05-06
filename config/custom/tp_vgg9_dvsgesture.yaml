@@ -2,7 +2,7 @@ tp_vgg9_dvsgesture:
   name: tp_vgg9_dvsgesture
   opt: false
   optuna:
-    n_trials: 200
+    n_trials: 50
   trainer:
     name: tp
     lr:

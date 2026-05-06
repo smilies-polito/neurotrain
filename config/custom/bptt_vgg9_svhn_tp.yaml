@@ -11,7 +11,11 @@ bptt_vgg9_svhn_tp:
       use_tp_pool: true
       conv_gain: 1.8
       surrogate_kind: atan
-      beta: 0.53
+      beta:
+        value: 0.53
+        type: float
+        min: 0.3
+        max: 0.99
   dataset:
     name: svhn
     T: 10
