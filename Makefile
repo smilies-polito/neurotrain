@@ -9,7 +9,7 @@ HPC_SLURM_OUT ?= hpc/slurm_outputs
 
 
 
-# ── Main entry points ───────────────────────────────────────────────────────
+# ── Test and generic runs ───────────────────────────────────────────────────────
 
 ## Run a benchmarking campaign
 bench:
@@ -21,7 +21,6 @@ bench-opt:
 dry-bench:
 	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) --dry-run
 
-
 ## Run custom experiments
 custom:
 	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
@@ -29,9 +28,32 @@ custom:
 dry-custom:
 	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) --dry-run
 
+
+# ── Paper reproducibility runs ───────────────────────────────────────────────────────
+
 ## Run paper experiments (fill config/paper.yaml with best Optuna results first)
-paper:
-	$(PYTHON) run_exp_campaign.py --custom config/paper.yaml --name paper
+paper-bptt:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/bptt.yaml --name paper_bptt
+paper-decolle:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/decolle.yaml --name paper_decolle
+paper-eprop:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/eprop.yaml --name paper_eprop
+paper-esd_rtrl:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/esd_rtrl.yaml --name paper_esd_rtrl
+paper-ell:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/ell.yaml --name paper_ell
+paper-etlp:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/etlp.yaml --name paper_etlp
+paper-ostl:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/ostl.yaml --name paper_ostl
+paper-osttp:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/osttp.yaml --name paper_osttp
+paper-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/ottt.yaml --name paper_ottt
+paper-stsf:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/stsf.yaml --name paper_stsf
+paper-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/tp.yaml --name
 
 ## Paper VGG9 winning configurations — local single-run
 paper-vgg9-tp:
