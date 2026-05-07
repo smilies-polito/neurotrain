@@ -1,0 +1,345 @@
+
+# ══════════════════════════════════════════════════════════════════
+#                         M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_mnist:
+  name: stsf_fc_snn_mnist
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.0988065090342665
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.8839973981502931
+    threshold: 0.9803896520362848
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 4
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                    F a s h i o n - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_fashionmnist:
+  name: stsf_fc_snn_fashionmnist
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.059054470541484674
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 800
+    num_classes: 10
+    beta: 0.9571002543698183
+    threshold: 0.8030757822116943
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 424
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                        N - M N I S T
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_nmnist:
+  name: stsf_fc_snn_nmnist
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.04979704625607576
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 2312
+    hidden_sizes:
+    - 512
+    num_classes: 10
+    beta: 0.9460175762691392
+    threshold: 0.6370334067983814
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    seed: 215
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                        C I F A R - 1 0
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_cifar10:
+  name: stsf_fc_snn_cifar10
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.042182892982293385
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.9455593182975268
+    threshold: 0.7211730854486093
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 935
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════════
+#                          S V H N
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_svhn:
+  name: stsf_fc_snn_svhn
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.06050442761605115
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.955906022908686
+    threshold: 1.2246078179749578
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 869
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - C I F A R 1 0
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_dvscifar10:
+  name: stsf_fc_snn_dvscifar10
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.0161471327493751
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8294528344000938
+    threshold: 0.6040490659562138
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 560
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+
+# ══════════════════════════════════════════════════════════════════
+#                      D V S - G e s t u r e
+# ══════════════════════════════════════════════════════════════════
+
+stsf_fc_snn_dvsgesture:
+  name: stsf_fc_snn_dvsgesture
+  opt: false
+  trainer:
+    name: stsf
+    supported_net_types:
+    - fc
+    lr: 0.0385259550249485
+    use_optimizer: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 2048
+    num_classes: 11
+    beta: 0.8513697561695043
+    threshold: 1.2637473949148528
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: stsf
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 517
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    progress: true
+  optuna: {}
+
+# ══════════════════════════════════════════════════════════════════
+#                          S H D
+# ══════════════════════════════════════════════════════════════════

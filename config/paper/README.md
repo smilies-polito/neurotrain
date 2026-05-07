@@ -107,8 +107,8 @@ Commit: `968f810153ca27300c9347a7be933628302bf732`
 
 | Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
 | ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      |   🔵  |   🔵   |    🔵   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
-| RC      |   🔵  |   🔵   |    🔵   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
+| FC      |   0.924  |   0.816   |    0.313   | 0.385 | 0.915 | 🔵 | 🔵 | 🔵 |
+| RC      |   0.917  |   0.807   |    0.339   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
 | Conv    |   ⚫  |   ⚫   |    ⚫   | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
 
 ---
@@ -127,9 +127,9 @@ Commit: `968f810153ca27300c9347a7be933628302bf732`
 
 | Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
 | ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
-| FC      | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
-| RC      | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
-| Conv    | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 | ⚫ |
+| FC      | 0.932 | 0.806 | 0.254 | 0.290 | 0.901 | 0.659 | 0.191 | 🔵 |
+| RC      | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
+| Conv    | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
 
 ---
 
@@ -156,8 +156,8 @@ Config files live in `config/vgg9/`.
 | ------- | :---------: | :---------: | :------: | :----------: | :----------: |
 | TP      |    TPnet    |  0.723 🟢   | 0.921 🟡 | 0.666 🟡 [2] |   0.506 🟢   |
 | TP      |   OTTTnet   |  0.729 🟢   | 0.924 🟡 | 0.610 🟡 [2] |   0.451 🟢   |
-| OTTT    |    TPnet    |   🔴 [4]    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
-| OTTT    |   OTTTnet   |   🔴 [4]    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
+| OTTT    |    TPnet    |   0.774    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
+| OTTT    |   OTTTnet   |   0.717    |  0.915  |    🔴 [4]    |    🔴 [4]    |
 | BPTT    |    TPnet    |  0.855 🟢   | 0.946 🟡 | 0.765 🟡 [3] | 0.639 🟡 [3] |
 | BPTT    |   OTTTnet   | 0.10 🟡 [1] | 0.913 🟡 | 0.091 🔴 [2] | 0.085 🟡 [1] |
 1. In these trial the accuracy always ended up at random of worse but some trial got a growing accuracy in the first epoch and then completely died.
