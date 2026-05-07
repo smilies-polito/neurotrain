@@ -50,7 +50,7 @@ decolle_fc_mnist:
     num_workers: 4
     direct_coding: false
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -104,7 +104,7 @@ decolle_conv_mnist:
     num_workers: 4
     direct_coding: false
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -164,7 +164,7 @@ decolle_fc_fashion_mnist:
     num_workers: 4
     direct_coding: false
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -218,7 +218,7 @@ decolle_conv_fashion_mnist:
     num_workers: 4
     direct_coding: false
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -278,7 +278,7 @@ decolle_fc_nmnist:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -332,7 +332,7 @@ decolle_conv_nmnist:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -394,7 +394,7 @@ decolle_fc_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -449,7 +449,7 @@ decolle_conv_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -517,7 +517,7 @@ decolle_fc_dvs_cifar10:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -573,7 +573,7 @@ decolle_conv_dvs_cifar10:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -634,7 +634,7 @@ decolle_fc_dvs_gesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
@@ -689,7 +689,7 @@ decolle_conv_dvs_gesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 5
+    epochs: 50
     device: cuda
     seed: 42
     log_level: INFO
