@@ -33,6 +33,14 @@ dry-custom:
 paper:
 	$(PYTHON) run_exp_campaign.py --custom config/paper.yaml --name paper
 
+## Paper VGG9 winning configurations — local single-run
+paper-vgg9-tp:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_tp.yaml --name paper_vgg9_tp
+paper-vgg9-ottt:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_ottt.yaml --name paper_vgg9_ottt
+paper-vgg9-bptt:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_bptt.yaml --name paper_vgg9_bptt
+
 bench-tp-vgg9-cifar10:
 	$(PYTHON) run_exp_campaign.py --benchmarking config/benchmarking/tp_vgg9_cifar10.yaml
 
@@ -181,6 +189,18 @@ opt-vgg9-matrix: \
 	sbatch-vgg9-ottt-otttnet-cifar10 sbatch-vgg9-ottt-otttnet-svhn sbatch-vgg9-ottt-otttnet-dvsgesture sbatch-vgg9-ottt-otttnet-dvscifar10 \
 	sbatch-vgg9-bptt-tpnet-cifar10 sbatch-vgg9-bptt-tpnet-svhn sbatch-vgg9-bptt-tpnet-dvsgesture sbatch-vgg9-bptt-tpnet-dvscifar10 \
 	sbatch-vgg9-bptt-otttnet-cifar10 sbatch-vgg9-bptt-otttnet-svhn sbatch-vgg9-bptt-otttnet-dvsgesture sbatch-vgg9-bptt-otttnet-dvscifar10
+
+## Paper VGG9 winning configurations — HPC (sbatch)
+paper-vgg9-tp-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp.sbatch
+paper-vgg9-ottt-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt.sbatch
+paper-vgg9-bptt-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt.sbatch
+
+## Submit all paper VGG9 HPC jobs
+paper-vgg9-all-hpc: paper-vgg9-tp-hpc paper-vgg9-ottt-hpc paper-vgg9-bptt-hpc
+
 
 
 

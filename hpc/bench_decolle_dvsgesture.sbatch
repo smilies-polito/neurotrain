@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --output=hpc/slurm_outputs/bench_decolle_dvsgesture-%j.out
 #SBATCH --error=hpc/slurm_outputs/bench_decolle_dvsgesture-%j.err
 

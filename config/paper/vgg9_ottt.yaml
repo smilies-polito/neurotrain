@@ -1,5 +1,7 @@
+####################### TPNET Varian ########################
+
 ottt_tpnet_cifar10:
-  name: ottt_tpnet_cifar10_opt
+  name: ottt_tpnet_cifar10
   opt: false
   trainer:
     name: ottt
@@ -62,7 +64,7 @@ ottt_tpnet_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -132,7 +134,7 @@ ottt_otttnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -202,7 +204,7 @@ ottt_otttnet_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO

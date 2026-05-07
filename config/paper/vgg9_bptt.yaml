@@ -1,11 +1,11 @@
-# OTTTNET results
+####################### OTTTNET Varian ########################
 
 # bptt_otttnet_cifar10: FAILED
 # bptt_otttnet_dvscifar10: FAILED
 # bptt_otttnet_dvsgesture: FAILED
 
 bptt_otttnet_svhn:
-  name: bptt_otttnet_svhn_opt
+  name: bptt_otttnet_svhn
   opt: false
   trainer:
     name: bptt
@@ -66,7 +66,7 @@ bptt_otttnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -76,10 +76,10 @@ bptt_otttnet_svhn:
   optuna: {}
 
 
-# TPNET results
+####################### TPNET Variant ########################
 
 bptt_tpnet_cifar10:
-  name: bptt_tpnet_cifar10_opt_t24
+  name: bptt_tpnet_cifar10
   opt: false
   trainer:
     name: bptt
@@ -138,7 +138,7 @@ bptt_tpnet_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -148,7 +148,7 @@ bptt_tpnet_cifar10:
   optuna: {}
 
 bptt_tpnet_dvsgesture:
-  name: bptt_tpnet_dvsgesture_opt
+  name: bptt_tpnet_dvsgesture
   opt: false
   trainer:
     name: bptt
@@ -208,7 +208,7 @@ bptt_tpnet_dvsgesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -218,7 +218,7 @@ bptt_tpnet_dvsgesture:
   optuna: {}
 
 bptt_tpnet_svhn:
-  name: bptt_tpnet_svhn_opt
+  name: bptt_tpnet_svhn
   opt: false
   trainer:
     name: bptt
@@ -277,7 +277,7 @@ bptt_tpnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO

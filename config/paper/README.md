@@ -158,8 +158,8 @@ Config files live in `config/vgg9/`.
 | TP      |   OTTTnet   |  0.729 🟢   | 0.924 🟡 | 0.610 🟡 [2] |   0.451 🟢   |
 | OTTT    |    TPnet    |   0.774    |  🔴 [4]  |    🔴 [4]    |    🔴 [4]    |
 | OTTT    |   OTTTnet   |   0.717    |  0.915  |    🔴 [4]    |    🔴 [4]    |
-| BPTT    |    TPnet    |  0.855 🟢   | 0.946 🟡 | 0.765 🟡 [3] | 0.639 🟡 [3] |
-| BPTT    |   OTTTnet   | 0.10 🟡 [1] | 0.913 🟡 | 0.091 🔴 [2] | 0.085 🟡 [1] |
+| BPTT    |    TPnet    |  0.855 🟢   | 0.946 🟢 | 0.765 🟡 [3] | 0.639 🟡 [3] |
+| BPTT    |   OTTTnet   | 0.10 🟡 [1] | 0.913 🟢 | 0.091 🔴 [2] | 0.085 🟡 [1] |
 1. In these trial the accuracy always ended up at random of worse but some trial got a growing accuracy in the first epoch and then completely died.
 2. Died almost immediately.
 3. Extreme overfitting.

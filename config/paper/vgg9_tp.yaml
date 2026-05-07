@@ -71,7 +71,7 @@ tp_otttnet_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -155,7 +155,7 @@ tp_otttnet_dvscifar10:
     download: true
     use_cache: true
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -238,7 +238,7 @@ tp_otttnet_dvsgesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -320,7 +320,7 @@ tp_otttnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -401,7 +401,7 @@ tp_tpnet_cifar10:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -484,7 +484,7 @@ tp_tpnet_dvscifar10:
     download: true
     use_cache: true
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -566,7 +566,7 @@ tp_tpnet_dvsgesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
@@ -647,7 +647,7 @@ tp_tpnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 10
+    epochs: 200
     device: cuda
     seed: 42
     log_level: INFO
