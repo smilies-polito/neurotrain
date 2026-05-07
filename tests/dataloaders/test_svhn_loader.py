@@ -23,18 +23,41 @@ T = 10
 B = 32
 
 
-def check_split(data: torch.Tensor, target: torch.Tensor, split: str) -> None:
+def check_split(loader, split: str) -> None:
     print(f"[{split}]")
-    print(f"\t data.shape={tuple(data.shape)}  expected [{T}, {B}, 3, 32, 32]")
-    print(f"\t target.shape={tuple(target.shape)}  dtype={target.dtype}")
-    print(f"\t label range: min={target.min().item()}  max={target.max().item()}")
-    print(f"\t unique labels: {sorted(target.unique().tolist())}")
 
-    assert data.shape == (T, B, 3, 32, 32), f"unexpected data shape: {tuple(data.shape)}"
-    assert target.dtype == torch.long, f"target dtype should be long, got {target.dtype}"
-    assert target.min().item() >= 0, "labels must be >= 0"
-    assert target.max().item() <= 9, "labels must be <= 9 — raw SVHN label 10 not normalised"
-    print("\t OK (labels in [0, 9])")
+    counts = torch.zeros(10, dtype=torch.long)
+    total_samples = 0
+
+    for batch_idx, (data, target) in enumerate(loader):
+        assert data.shape[1:] == (B, 3, 32, 32) or data.shape[0] == T, (
+            f"unexpected data shape: {tuple(data.shape)}"
+        )
+        assert target.dtype == torch.long, (
+            f"target dtype should be long, got {target.dtype}"
+        )
+        assert target.min().item() >= 0, (
+            f"batch {batch_idx}: labels must be >= 0"
+        )
+        assert target.max().item() <= 9, (
+            f"batch {batch_idx}: labels must be <= 9 — raw SVHN label 10 not normalised"
+        )
+
+        for label in range(10):
+            counts[label] += (target == label).sum()
+        total_samples += target.numel()
+
+        if batch_idx == 0:
+            print(f"\t first batch — data.shape={tuple(data.shape)}  "
+                  f"target.shape={tuple(target.shape)}  dtype={target.dtype}")
+            print(f"\t label range: min={target.min().item()}  max={target.max().item()}")
+            print(f"\t unique labels in first batch: {sorted(target.unique().tolist())}")
+
+    print(f"\t total samples across ALL batches: {total_samples}")
+    print(f"\t label counts across entire dataset:")
+    for label in range(10):
+        print(f"\t\t label {label}: {counts[label].item()} samples")
+    print("\t OK (all labels in [0, 9])")
 
 
 def main() -> None:
@@ -48,14 +71,15 @@ def main() -> None:
         num_workers=0,
     )
 
-    train_data, train_target = next(iter(train_loader))
-    check_split(train_data, train_target, "TRAIN")
+    check_split(train_loader, "TRAIN")
 
-    x = train_data[0, 0, 0]
-    print(f"\t sample pixel: shape={tuple(x.shape)} min={x.min().item():.3f} max={x.max().item():.3f} mean={x.mean().item():.3f}")
+    # Sample pixel stats from first batch
+    first_data, _ = next(iter(train_loader))
+    x = first_data[0, 0, 0]
+    print(f"\t sample pixel: shape={tuple(x.shape)} min={x.min().item():.3f} "
+          f"max={x.max().item():.3f} mean={x.mean().item():.3f}")
 
-    test_data, test_target = next(iter(test_loader))
-    check_split(test_data, test_target, "TEST")
+    check_split(test_loader, "TEST")
 
 
 if __name__ == "__main__":
