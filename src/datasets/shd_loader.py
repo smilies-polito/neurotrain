@@ -8,10 +8,47 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+import h5py
 from tonic import transforms as tonic_transforms, DiskCachedDataset
 from tonic.datasets import SHD
+from tonic.io import make_structured_array
 
 from datasets.rate import time_major_collate
+
+
+class _SHDFixed(SHD):
+    """Thin SHD subclass that fixes a float16 overflow bug in tonic's HSD.__getitem__.
+
+    tonic stores spike times as float16 (seconds) and multiplies by 1e6 to get
+    microseconds *while still in float16*, which overflows for any time > ~0.065 s
+    (float16 max ≈ 65504).  SHD recordings last up to ~1 s, so almost all events
+    are silently dropped, producing all-zero frames.
+
+    Fix: cast times to float64 before the multiply.
+
+    tonic stores data under ``<save_to>/<ClassName>/``, so passing the same
+    ``save_to`` as the original SHD class will resolve to ``<save_to>/_SHDFixed/``.
+    If the original ``SHD`` data directory exists, copy or symlink it there once;
+    otherwise tonic will download the files automatically on first use.
+    """
+
+    def __getitem__(self, index):
+        import os
+        file = h5py.File(
+            os.path.join(self.location_on_system, self.data_filename), "r"
+        )
+        events = make_structured_array(
+            file["spikes/times"][index].astype(np.float64) * 1e6,  # cast BEFORE *1e6
+            file["spikes/units"][index],
+            1,
+            dtype=self.dtype,
+        )
+        target = file["labels"][index].astype(int)
+        if self.transform is not None:
+            events = self.transform(events)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+        return events, target
 
 
 DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent / "Data"
@@ -83,8 +120,8 @@ def SHDLoader(
         ]
     )
 
-    train_ds = SHD(save_to=str(Path(data_root) / "SHD"), train=True, transform=transform)
-    test_ds = SHD(save_to=str(Path(data_root) / "SHD"), train=False, transform=transform)
+    train_ds = _SHDFixed(save_to=str(Path(data_root) / "SHD"), train=True, transform=transform)
+    test_ds = _SHDFixed(save_to=str(Path(data_root) / "SHD"), train=False, transform=transform)
 
     # Wrap with disk cache to avoid re-processing raw events on every access.
     if use_cache:
