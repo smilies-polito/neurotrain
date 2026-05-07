@@ -1,0 +1,15 @@
+ottt_fc_snn_mnist:
+  trainer:
+    name: ottt
+    lr: 0.1
+  model:
+    name: fc_snn
+  dataset:
+    name: MNIST
+  runtime:
+    epochs: 1
+    batch_size: 256
+    seed: 42
+    device: cuda
+    neurobench: false
+  opt: false

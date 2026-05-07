@@ -43,22 +43,9 @@ class OTTTTrainer(BaseTrainer):
         lr: float,                                       # Learning rate for optimizer updates
         batch_size: int,                                 # Batch size for training (used for loss scaling; not a dataloader batch size)
         online_updates: bool = True,
-<<<<<<< Updated upstream
-        constant_input_per_timestep: bool = False,       # True when the dataset feeds the same frame every timestep (direct/analog coding)
-        loss_lambda: Optional[float] = None,             # CE/MSE interpolation used by official CIFAR OTTT recipe
-        grad_clip: Optional[float] = None,               # Element-wise gradient clip before optimizer step
-        sanitize_grads: Optional[bool] = None,           # Replace NaN/Inf grads with finite values before step
-=======
-<<<<<<< Updated upstream
-        loss_lambda: Optional[float] = None,    # CE/MSE interpolation used by official CIFAR OTTT recipe
-        grad_clip: Optional[float] = None,      # Element-wise gradient clip before optimizer step
-        sanitize_grads: Optional[bool] = None,  # Replace NaN/Inf grads with finite values before step
-=======
         loss_lambda: float = 0.0,                        # CE/MSE interpolation weight (0 = pure CE)
         grad_clip: float = 0.0,                          # Element-wise gradient clip before optimizer step (0 = disabled)
         sanitize_grads: bool = False,                    # Replace NaN/Inf grads with finite values before step
->>>>>>> Stashed changes
->>>>>>> Stashed changes
         optimizer: Optional[torch.optim.Optimizer] = None,
     ):
         super().__init__()
@@ -69,31 +56,10 @@ class OTTTTrainer(BaseTrainer):
         # Falls back to 0.5 (tau=2.0) if the network doesn't expose beta.
         self.trace_decay = float(getattr(self.network, "beta", 0.5))
         self.online_updates = bool(online_updates)
-<<<<<<< Updated upstream
-        self.constant_input_per_timestep = bool(constant_input_per_timestep)
-=======
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-        if loss_lambda is None:
-            loss_lambda = 0.05 if self.constant_input_per_timestep else 0.0
-        self.loss_lambda = float(loss_lambda)
-        if grad_clip is None:
-            grad_clip = 0.2 if self.constant_input_per_timestep else 0.0
-        self.grad_clip = float(grad_clip)
-        if self.grad_clip < 0.0:
-            raise ValueError("OTTTTrainer requires grad_clip >= 0.")
-        if sanitize_grads is None:
-<<<<<<< Updated upstream
-            sanitize_grads = self.constant_input_per_timestep
-=======
-            sanitize_grads = static_input_recipe
-=======
         self.loss_lambda = float(loss_lambda)
         self.grad_clip = float(grad_clip)
         if self.grad_clip < 0.0:
             raise ValueError("OTTTTrainer requires grad_clip >= 0.")
->>>>>>> Stashed changes
->>>>>>> Stashed changes
         self.sanitize_grads = bool(sanitize_grads)
         self._external_optimizer = optimizer
         # Official OTTT training defaults to SGD with momentum when no optimizer is supplied.
@@ -242,17 +208,6 @@ class OTTTTrainer(BaseTrainer):
         hooks = self._register_trace_hooks()
         total_loss = torch.tensor(0.0, device=device)
         spk_sum = None
-<<<<<<< Updated upstream
-        x_const = data.mean(dim=0) if self.constant_input_per_timestep else None
-=======
-<<<<<<< Updated upstream
-        use_constant_input = bool(
-            getattr(self.network, "constant_input_per_timestep", False)
-        )
-        x_const = data.mean(dim=0) if use_constant_input else None
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 
         try:
             with torch.enable_grad():

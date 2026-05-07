@@ -11,29 +11,12 @@ lr:
   max: 5.0e-1
   log: true
 online_updates: true
-<<<<<<< Updated upstream
-# CE/MSE interpolation weight. Paper: 0.05 (CIFAR10/SVHN), 0.001 (DVS datasets).
-loss_lambda:
-  value: 0.05
-=======
 # CE/MSE interpolation weight. 0 = pure cross-entropy. Tune via Optuna for each dataset.
 loss_lambda:
   value: 0.0
->>>>>>> Stashed changes
   type: float
   min: 1.0e-4
   max: 0.5
   log: true
-<<<<<<< Updated upstream
-grad_clip: null
-sanitize_grads: null
-# When true, collapses each batch to its temporal mean before feeding the network
-# (correct behaviour for static datasets like CIFAR10/SVHN).
-# null = auto-detected from dataset type; set explicitly if needed.
-constant_input_per_timestep:
-  value: false
-  type: null
-=======
 grad_clip: 0.0
 sanitize_grads: false
->>>>>>> Stashed changes

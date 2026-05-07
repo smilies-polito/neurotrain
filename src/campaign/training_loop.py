@@ -71,29 +71,15 @@ def evaluate(
     network: torch.nn.Module,
     test_loader: DataLoader,
     device: torch.device,
-<<<<<<< Updated upstream
-    constant_input_per_timestep: bool = False,
-=======
->>>>>>> Stashed changes
     progress: bool = False,
 ) -> float:
     """
     Evaluate network accuracy on the test set.
 
     Args:
-<<<<<<< Updated upstream
-        network:                    Trained SNN (must implement reset() and forward()).
-        test_loader:                Test DataLoader (time-major [T, B, ...]).
-        device:                     Torch device.
-        constant_input_per_timestep: If True, use the temporal mean of the input
-                                    sequence as a static frame repeated every timestep
-                                    (direct/analog coding datasets). Passed in from the
-                                    dataset config rather than read off the network.
-=======
         network:     Trained SNN (must implement reset() and forward()).
         test_loader: Test DataLoader (time-major [T, B, ...]).
         device:      Torch device.
->>>>>>> Stashed changes
 
     Returns:
         Test accuracy as a float in [0, 1].
@@ -115,22 +101,13 @@ def evaluate(
         data   = data.to(device, non_blocking=non_blocking)
         target = target.to(device, non_blocking=non_blocking)
 
-<<<<<<< Updated upstream
-        x_const = data.mean(dim=0) if constant_input_per_timestep else None
-
-=======
->>>>>>> Stashed changes
         network.reset()
         spk_sum  = None
         last_mem = None
         T = data.size(0)
 
         for t in range(T):
-<<<<<<< Updated upstream
-            x_t = x_const if x_const is not None else data[t]
-=======
             x_t = data[t]
->>>>>>> Stashed changes
             out = network(x_t)
 
             # Networks return (spk_rec, mem_rec)

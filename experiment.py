@@ -84,13 +84,6 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     dataset_name = ds_cfg.pop("name")
     batch_size   = spec.runtime.get("batch_size", 256)
     T            = ds_cfg.get("T", 25)
-<<<<<<< Updated upstream
-    # Whether the dataset repeats the same static frame every timestep.
-    # Derived from direct_coding in the dataset YAML; used to configure OTTT
-    # and the evaluator — not stored on the network.
-    constant_input_per_timestep = bool(ds_cfg.get("direct_coding", False))
-=======
->>>>>>> Stashed changes
 
     if dataset_name not in LOADER_REGISTRY:
         raise ValueError(
@@ -131,27 +124,11 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     TrainerClass = TRAINER_REGISTRY[trainer_name]
 
     log.info("Building trainer: %s", trainer_name)
-<<<<<<< Updated upstream
-    # Inject constant_input_per_timestep for trainers that accept it (OTTT).
-    # Passing it as a kwarg to trainers that don't accept it is harmless — they
-    # will forward it via **kwargs or ignore it if their signature doesn't include it.
-    import inspect as _inspect
-    _trainer_sig = _inspect.signature(TrainerClass.__init__).parameters
-    _extra: dict = {}
-    if "constant_input_per_timestep" in _trainer_sig:
-        _extra["constant_input_per_timestep"] = constant_input_per_timestep
-=======
->>>>>>> Stashed changes
     trainer = TrainerClass(
         network=network,
         lr=t_cfg.pop("lr", 1e-3),
         batch_size=batch_size,
-<<<<<<< Updated upstream
-        **_extra,
-        **{k: v for k, v in _strip_metadata(t_cfg).items() if v is not None and k not in _extra},
-=======
         **{k: v for k, v in _strip_metadata(t_cfg).items() if v is not None},
->>>>>>> Stashed changes
     )
     trainer = trainer.to(device)
 
@@ -165,13 +142,7 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
 
     for epoch in range(1, epochs + 1):
         train_metrics = train_one_epoch(trainer, train_loader, device, progress=progress)
-<<<<<<< Updated upstream
-        test_acc      = evaluate(network, test_loader, device,
-                                 constant_input_per_timestep=constant_input_per_timestep,
-                                 progress=progress)
-=======
         test_acc      = evaluate(network, test_loader, device, progress=progress)
->>>>>>> Stashed changes
 
         epoch_metrics.append({
             "epoch":          epoch,
