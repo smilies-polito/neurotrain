@@ -140,7 +140,10 @@ def run_training(
     trainer = OTTTTrainer(
         network=network, lr=lr, batch_size=batch_size,
         online_updates=True,
+<<<<<<< Updated upstream
         constant_input_per_timestep=True,
+=======
+>>>>>>> Stashed changes
         loss_lambda=loss_lambda,
         optimizer=optimizer,
     ).to(device)
