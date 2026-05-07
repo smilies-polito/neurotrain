@@ -1,12 +1,15 @@
 """
 Trace Propagation (TP) Trainer.
 
-Supports FCSNN, RSNN, and generic CNN architectures (e.g. VGG9) in a single unified class.
+Supports FCSNN, RSNN, and generic CNN architectures (e.g. ConvSNN, VGG9) in a single unified class.
 
 Architecture detection (duck-typing):
   FCSNN        → hasattr(network, 'synapses')
   RSNN         → hasattr(network, 'input_layers')
-  VGG9 (CNN)   → hasattr(network, 'VGG9_CFG')
+  ConvSNN      → hasattr(network, 'conv1') + hasattr(network, 'fc') + hasattr(network, 'lif_out')
+                 pool_before_spike=True  (conv → pool → LIF ordering)
+  VGG9 (CNN)   → hasattr(network, 'conv1') + hasattr(network, 'head')
+                 pool_before_spike=False (conv → LIF → pool ordering)
 
 Design note — student path via network.forward():
   The TP algorithm requires two forward paths through the same weight matrices:
@@ -62,16 +65,27 @@ Design note — batch size constraint (paper Sec 3.2):
 
 from typing import List, Optional, Tuple
 
+import snntorch as snn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from networks._components import LeakyIntegrator
 from trainers.base_trainer import BaseTrainer
+
+# -----------------------------------------------------------------------------
+# Supported layer types for the CNN probe.
+# To add support for a new layer kind, extend the appropriate set and add a
+# probe rule in `_probe_pool_placement` / `_find_output_layer`.
+# -----------------------------------------------------------------------------
+_SUPPORTED_WEIGHT_TYPES = (nn.Conv2d, nn.Linear)
+_SUPPORTED_POOL_TYPES = (nn.MaxPool2d, nn.AvgPool2d, nn.AdaptiveAvgPool2d)
+_SUPPORTED_SPIKE_TYPES = (snn.Leaky,)
 
 
 class TPTrainer(BaseTrainer):
     """
-    Unified Trace Propagation trainer for FCSNN, RSNN, and VGG9-based CNNs.
+    Unified Trace Propagation trainer for FCSNN, RSNN, ConvSNN, and VGG9-based CNNs.
 
     Args:
         network:                  The SNN.  Its forward() provides the student path.
@@ -127,13 +141,16 @@ class TPTrainer(BaseTrainer):
         self.vth = vth               # V_th: target-path spike threshold (Eq 2)
         self.surrogate_scale = surrogate_scale
         self.train_target_propagator = train_target_propagator
+        self._input_shape = tuple(input_shape) if input_shape is not None else None
 
-        # Extract learnable weight blocks and output layer from the network
+        # Extract learnable weight blocks and output layer from the network.
+        # For CNN networks, layout (block list + pool placement) is discovered
+        # by tracing a dummy forward — no hand-written branches per architecture.
         self._extract_layers()
 
         # Initialize projection matrix S (Alg 1 line 14: for l=1, W_l = S)
         # S projects the one-hot target c* ∈ R^C to the first hidden layer's space
-        self.S = self._init_S(input_shape)
+        self.S = self._init_S()
 
         # Optimizer: includes all network params + S.
         # network.parameters() already covers recurrent weights for RSNN.
@@ -153,21 +170,30 @@ class TPTrainer(BaseTrainer):
 
     def _extract_layers(self):
         """
-        Build self.blocks, self.output_layer, self.recurrent_weights.
+        Build self.blocks, self.output_layer, self.recurrent_weights, self.pool_before_spike.
+
+        Strategy:
+          - FC and recurrent networks expose their layer order explicitly
+            (synapses / input_layers + recurrent_layers) → use it directly.
+          - CNN networks are discovered by walking conv{i}/pool{i} attributes
+            in numerical order and probing pool placement (before/after spike)
+            via forward-hook call ordering on a single dummy forward.
+            See _probe_pool_placement and _find_output_layer.
 
         blocks: list of (weight_layer, pool_fn_or_None) for each hidden block.
-          - weight_layer is nn.Linear for FC/Rec, WSConv2d for CNN.
-          - pool_fn is None for FC/Rec, MaxPool/AdaptiveAvgPool for CNN.
-            For VGG9: pool_fn is stored for the TARGET path (the student path
-            already has pooling applied by network.forward()).
-        output_layer: the final nn.Linear (used as pure integrator during training).
+          - weight_layer is nn.Linear for FC/Rec, nn.Conv2d for CNN.
+          - pool_fn is None for FC/Rec; MaxPool/AvgPool/AdaptiveAvgPool for CNN.
+        output_layer: the final nn.Linear (used as a pure integrator during training).
         recurrent_weights: list of nn.Linear recurrent modules (RSNN only; empty otherwise).
-          Needed so the trainer can explicitly request their gradient via autograd.grad().
+        pool_before_spike: True for ConvSNN-style (conv → pool → LIF);
+          False for VGG9-style (conv → LIF → pool). Single uniform value across blocks.
         """
         if hasattr(self.network, 'synapses'):          # FCSNN
             self.blocks = [(w, None) for w in self.network.synapses[:-1]]
             self.output_layer = self.network.synapses[-1]
             self.recurrent_weights: List[nn.Linear] = []
+            self.pool_before_spike = False
+            self._validate_integrator_output()
 
         elif hasattr(self.network, 'input_layers'):    # RSNN
             # Recurrent weights (rlif.recurrent) are used inside network.forward().
@@ -178,28 +204,254 @@ class TPTrainer(BaseTrainer):
             self.recurrent_weights = [
                 rlif.recurrent for rlif in self.network.recurrent_layers
             ]
+            self.pool_before_spike = False
+            self._validate_integrator_output()
 
-        elif hasattr(self.network, 'VGG9_CFG'):        # VGG9 CNN architecture
-            # pool_fn stored for the TARGET path; network.forward() already applies
-            # pool before returning spk_list[l] (student path).
-            self.blocks = []
-            for i, (_, _, _) in enumerate(self.network.VGG9_CFG, start=1):
-                conv = getattr(self.network, f'conv{i}')
-                pool = getattr(self.network, f'pool{i}', None)
-                self.blocks.append((conv, pool))
-            self.output_layer = self.network.head.fc
+        elif hasattr(self.network, 'conv1'):           # CNN family — probe
             self.recurrent_weights = []
+            self._probe_cnn()
 
         else:
             raise ValueError(
-                "TPTrainer supports FCSNN (synapses), RSNN (input_layers), "
-                "or VGG9-based CNNs (VGG9_CFG). Unknown network type."
+                "TPTrainer: unsupported network. Expected one of:\n"
+                "  - FCSNN: exposes `synapses` (ModuleList of nn.Linear).\n"
+                "  - RSNN: exposes `input_layers`, `recurrent_layers`, `fc_out`.\n"
+                "  - CNN: exposes `conv1`, `conv2`, ... and (optionally) "
+                "`pool1`, `pool2`, ... in forward order, plus an integrator-style "
+                "output (LeakyIntegrator head, or `lif_out` with out_integrator=True)."
             )
 
         self.n_blocks = len(self.blocks)
         self.n_classes = self.output_layer.out_features
 
-    def _init_S(self, input_shape: Optional[Tuple]) -> nn.Linear:
+    # -------------------------------------------------------------------------
+    # CNN probe — discover blocks, output, and pool placement from a vanilla net.
+    # -------------------------------------------------------------------------
+
+    def _probe_cnn(self):
+        """
+        Discover the CNN block list, output layer, and pool placement by tracing
+        a dummy forward through `network`. No config required.
+        """
+        # 1. Block list: walk conv{i}/pool{i} attributes in numerical order.
+        self.blocks = []
+        i = 1
+        while hasattr(self.network, f'conv{i}'):
+            conv = getattr(self.network, f'conv{i}')
+            if not isinstance(conv, _SUPPORTED_WEIGHT_TYPES):
+                raise ValueError(
+                    f"TPTrainer: conv{i} is of type {type(conv).__name__}; "
+                    f"expected one of {[t.__name__ for t in _SUPPORTED_WEIGHT_TYPES]}."
+                )
+            pool = getattr(self.network, f'pool{i}', None)
+            if pool is not None and not isinstance(pool, _SUPPORTED_POOL_TYPES):
+                raise ValueError(
+                    f"TPTrainer: pool{i} is of type {type(pool).__name__}; "
+                    f"expected one of {[t.__name__ for t in _SUPPORTED_POOL_TYPES]}."
+                )
+            self.blocks.append((conv, pool))
+            i += 1
+        if not self.blocks:
+            raise ValueError(
+                "TPTrainer: no `conv{i}` attributes found on network. "
+                "CNN networks must expose conv1, conv2, ... in forward order."
+            )
+
+        # 2. Output layer.
+        self.output_layer = self._find_output_layer()
+
+        # 3. Pool placement (uniform single bool).
+        self.pool_before_spike = self._probe_pool_placement()
+
+        # 4. Output must be integrator-compatible (TP Sec 3.1).
+        self._validate_integrator_output()
+
+    def _find_output_layer(self) -> nn.Linear:
+        """
+        Locate the trainable output linear layer for TP. Reject network shapes
+        that TP cannot model.
+        """
+        net = self.network
+        # VGG9 TP-style: head is a LeakyIntegrator wrapping nn.Linear.
+        head = getattr(net, 'head', None)
+        if head is not None:
+            if isinstance(head, LeakyIntegrator):
+                return head.fc
+            if isinstance(head, nn.Linear):
+                # OTTT-style: plain Linear preceded by global pool. TP requires
+                # an integrator-style output; reject explicitly.
+                raise ValueError(
+                    "TPTrainer: network exposes a plain nn.Linear `head` "
+                    "(e.g. OTTT-style VGG9 with head_type='global_linear'). "
+                    "TP requires an integrator-style output (paper Sec 3.1). "
+                    "Use head_type='leaky_integrator' instead."
+                )
+            raise ValueError(
+                f"TPTrainer: unsupported `head` module type {type(head).__name__}. "
+                "Supported: LeakyIntegrator (with .fc)."
+            )
+        # ConvSNN-style: separate fc + lif_out modules.
+        if hasattr(net, 'fc') and hasattr(net, 'lif_out'):
+            if not isinstance(net.fc, nn.Linear):
+                raise ValueError(
+                    f"TPTrainer: network.fc is {type(net.fc).__name__}; expected nn.Linear."
+                )
+            return net.fc
+        # RSNN-style: fc_out (handled in _extract_layers, but kept here for completeness).
+        if hasattr(net, 'fc_out') and isinstance(net.fc_out, nn.Linear):
+            return net.fc_out
+        raise ValueError(
+            "TPTrainer: cannot identify output layer. Supported patterns: "
+            "VGG9-style `head` of type LeakyIntegrator, ConvSNN-style "
+            "`fc`+`lif_out`, or RSNN-style `fc_out`."
+        )
+
+    def _probe_pool_placement(self) -> bool:
+        """
+        Determine whether pools fire BEFORE or AFTER the spike on a per-block
+        basis by inspecting forward-hook call ordering during a single dummy
+        forward. Returns one uniform bool (raises on mixed placement).
+
+        - pool_before_spike=True  → conv → pool → lif  (e.g. ConvSNN)
+        - pool_before_spike=False → conv → lif → pool  (e.g. VGG9 TP-style)
+        """
+        # If no block has a pool, the value is irrelevant — pick False.
+        if not any(p is not None for _, p in self.blocks):
+            return False
+
+        block_convs = {conv: idx for idx, (conv, _) in enumerate(self.blocks)}
+        block_pools = {p for _, p in self.blocks if p is not None}
+
+        events: List[Tuple[str, nn.Module]] = []
+
+        def make_hook(kind):
+            def hook(_mod, _inp, _out):
+                events.append((kind, _mod))
+            return hook
+
+        handles = []
+        try:
+            for m in self.network.modules():
+                if m in block_convs:
+                    handles.append(m.register_forward_hook(make_hook('conv')))
+                elif m in block_pools:
+                    handles.append(m.register_forward_hook(make_hook('pool')))
+                elif isinstance(m, _SUPPORTED_SPIKE_TYPES):
+                    handles.append(m.register_forward_hook(make_hook('lif')))
+
+            input_shape = self._resolve_input_shape()
+            dev = next(self.network.parameters()).device
+            dummy = torch.zeros(1, *input_shape, device=dev)
+            self.network.reset()
+            with torch.no_grad():
+                self.network(dummy)
+            self.network.reset()
+        finally:
+            for h in handles:
+                h.remove()
+
+        # Walk events: for each conv that belongs to a block, scan forward until
+        # the next conv-in-block (or end), recording first 'pool' and first 'lif'.
+        decisions: List[Optional[bool]] = []
+        n = len(events)
+        i = 0
+        while i < n:
+            kind, mod = events[i]
+            if kind != 'conv' or mod not in block_convs:
+                i += 1
+                continue
+            block_idx = block_convs[mod]
+            # Skip blocks without a pool (decision irrelevant).
+            if self.blocks[block_idx][1] is None:
+                i += 1
+                continue
+            pool_pos: Optional[int] = None
+            lif_pos: Optional[int] = None
+            j = i + 1
+            while j < n and not (events[j][0] == 'conv' and events[j][1] in block_convs):
+                if events[j][0] == 'pool' and events[j][1] is self.blocks[block_idx][1] and pool_pos is None:
+                    pool_pos = j
+                elif events[j][0] == 'lif' and lif_pos is None:
+                    lif_pos = j
+                j += 1
+            if pool_pos is not None and lif_pos is not None:
+                decisions.append(pool_pos < lif_pos)
+            elif pool_pos is not None and lif_pos is None:
+                # Pool fired but no LIF before next block — unusual; treat as before-spike.
+                decisions.append(True)
+            i = j if j > i else i + 1
+
+        valid = [d for d in decisions if d is not None]
+        if not valid:
+            return False
+        if any(valid) and not all(valid):
+            raise ValueError(
+                "TPTrainer: mixed pool placement detected — some blocks pool "
+                "before spike (conv→pool→LIF) and others after (conv→LIF→pool). "
+                "TP target-path replay requires a single uniform placement."
+            )
+        return valid[0]
+
+    def _validate_integrator_output(self):
+        """
+        Verify the network's output is integrator-style (no spike, no decay)
+        as required by TP Sec 3.1. Accepts:
+          - LeakyIntegrator head (always integrator-style by construction).
+          - snn.Leaky `lif_out` with threshold ≥ 1e6 (never fires) and beta ≈ 1.
+          - Networks that explicitly set self.out_integrator = True.
+        """
+        net = self.network
+        # 1. LeakyIntegrator head — always OK.
+        if isinstance(getattr(net, 'head', None), LeakyIntegrator):
+            return
+        # 2. Explicit flag wins (mirrors FCSNN/RSNN/ConvSNN out_integrator pattern).
+        if bool(getattr(net, 'out_integrator', False)):
+            return
+        # 3. Inspect lif_out (or final neuron in `neurons`) directly.
+        out_neuron = None
+        if hasattr(net, 'lif_out') and isinstance(net.lif_out, _SUPPORTED_SPIKE_TYPES):
+            out_neuron = net.lif_out
+        elif hasattr(net, 'neurons') and len(net.neurons) > 0:
+            cand = net.neurons[-1]
+            if isinstance(cand, _SUPPORTED_SPIKE_TYPES):
+                out_neuron = cand
+        if out_neuron is not None:
+            thr = float(getattr(out_neuron, 'threshold', 1.0))
+            beta = getattr(out_neuron, 'beta', 1.0)
+            if torch.is_tensor(beta):
+                beta = float(beta.detach().mean().item())
+            else:
+                beta = float(beta)
+            if thr >= 1e6 and beta >= 0.999:
+                return
+            raise ValueError(
+                "TPTrainer requires an integrator-style output (TP Sec 3.1) — "
+                f"the output neuron has threshold={thr:g}, beta={beta:g}. "
+                "Construct the network with out_integrator=True (sets beta=1.0, "
+                "threshold=1e9) so it accumulates without firing."
+            )
+        # 4. No recognizable output neuron and no flag → reject.
+        raise ValueError(
+            "TPTrainer: cannot verify the network output is integrator-style. "
+            "Supported markers: LeakyIntegrator head, network.out_integrator=True, "
+            "or snn.Leaky lif_out with threshold≥1e6 and beta≈1."
+        )
+
+    def _resolve_input_shape(self) -> Tuple[int, ...]:
+        """Resolve the dummy-forward input shape from constructor arg or net attrs."""
+        if self._input_shape is not None:
+            return tuple(self._input_shape)
+        for attr in ('input_shape', 'in_shape'):
+            s = getattr(self.network, attr, None)
+            if s is not None:
+                return tuple(s)
+        raise ValueError(
+            "TPTrainer: probing requires input_shape=(C, H, W). Pass it via "
+            "TPTrainer(..., input_shape=(C,H,W)) or expose network.input_shape "
+            "/ network.in_shape."
+        )
+
+    def _init_S(self) -> nn.Linear:
         """
         Initialize projection matrix S ∈ R^{C × H_1}.
         S projects the one-hot target c* from C classes to the first hidden
@@ -210,14 +462,7 @@ class TPTrainer(BaseTrainer):
         if isinstance(layer, nn.Linear):
             s_out_size = layer.out_features
         else:
-            if input_shape is None:
-                input_shape = getattr(self.network, 'input_shape', None)
-            if input_shape is None:
-                raise ValueError(
-                    "TPTrainer requires input_shape=(C, H, W) for CNN networks "
-                    "(e.g. input_shape=(2, 128, 128) for DVSGesture). "
-                    "Pass it explicitly or expose network.input_shape."
-                )
+            input_shape = self._resolve_input_shape()
             with torch.no_grad():
                 dev = next(self.network.parameters()).device
                 dummy = torch.zeros(1, *input_shape, device=dev)
@@ -260,13 +505,17 @@ class TPTrainer(BaseTrainer):
                 rlif.spk = rlif.spk.detach()
             self.network.lif_out.mem = self.network.lif_out.mem.detach()
 
-        elif hasattr(self.network, 'VGG9_CFG'):        # VGG9 CNN architecture
+        elif hasattr(self.network, 'conv1'):           # ConvSNN or VGG9
             # init_hidden=True: snntorch stores membrane inside lif{i}.mem.
-            for i in range(1, self.network._num_blocks + 1):
+            for i in range(1, self.n_blocks + 1):
                 lif = getattr(self.network, f'lif{i}')
                 if lif.mem is not None:
                     lif.mem = lif.mem.detach()
-            self.network.head.mem = self.network.head.mem.detach()
+            if hasattr(self.network, 'head') and hasattr(self.network.head, 'mem'):
+                if self.network.head.mem is not None:
+                    self.network.head.mem = self.network.head.mem.detach()
+            elif hasattr(self.network, 'lif_out') and self.network.lif_out.mem is not None:
+                self.network.lif_out.mem = self.network.lif_out.mem.detach()
 
     # -------------------------------------------------------------------------
     # Spike function with ArcTan surrogate gradient — used for the TARGET path
@@ -375,7 +624,7 @@ class TPTrainer(BaseTrainer):
             self._detach_network_hidden()
             spk_rec, mem_rec = self.network(x_t)
             # spk_rec[l] for l in range(n_blocks) = hidden student spikes at layer l.
-            # For VGG9: pooling is already applied inside network.forward().
+            # Pooling is already applied inside network.forward() for all CNN architectures.
 
             # ----------------------------------------------------------
             # Target path (Alg 1 lines 12-20) — trainer-emulated
@@ -392,16 +641,23 @@ class TPTrainer(BaseTrainer):
                 if l == 0:
                     # Alg 1 line 14: W_l = S, s̃_0^t = c*
                     linear_t = self.S(cur_t)   # [B, s_out_size]
-                    # For CNN (VGG9): S outputs flat; reshape to match block-0 spatial output.
-                    # block 0 has no pooling in VGG9_CFG so spk_rec[0] has the conv output shape.
+                    # For CNN: S outputs flat; reshape to match block-0 student spike shape.
+                    # The reshape already aligns spatial dimensions — pool_fn is NOT applied
+                    # here regardless of pool_before_spike, preventing double-pooling.
                     if not isinstance(layer, nn.Linear):
                         linear_t = linear_t.view(B, *spk_rec[0].shape[1:])
                 else:
-                    # Alg 1 lines 16-19: same W_l as student
-                    linear_t = layer(cur_t)
+                    # Alg 1 lines 16-19: same W_l as student.
+                    # pool_before_spike=True (ConvSNN): pool is part of the effective weight
+                    #   (conv → pool → LIF), so apply pool_fn to conv output before v_t.
+                    # pool_before_spike=False (VGG9): pool is applied to spikes after threshold,
+                    #   so compute v_t from raw conv output and pool spk_t_raw below.
+                    if pool_fn is not None and self.pool_before_spike:
+                        linear_t = pool_fn(layer(cur_t))  # pool before membrane (ConvSNN-style)
+                    else:
+                        linear_t = layer(cur_t)           # pool after spike or no pool
 
                 v_prev_t = v_t[l] if v_t[l] is not None else torch.zeros_like(linear_t)
-                # Reset uses the pre-pool spike (same shape as v_t[l]).
                 s_prev_raw = s_t_raw[l] if s_t_raw[l] is not None else torch.zeros_like(linear_t)
 
                 v_t[l] = (
@@ -410,10 +666,11 @@ class TPTrainer(BaseTrainer):
                     - self.vth * s_prev_raw.detach()
                 )
 
-                spk_t_raw = self._spike(v_t[l])          # pre-pool (for reset term)
+                spk_t_raw = self._spike(v_t[l])
                 s_t_raw[l] = spk_t_raw
-                if pool_fn is not None:
-                    spk_t = pool_fn(spk_t_raw)            # post-pool (input to next layer)
+                # Pool after spike only for VGG9-style (l>0); l=0 is handled by the reshape above.
+                if pool_fn is not None and not self.pool_before_spike and l > 0:
+                    spk_t = pool_fn(spk_t_raw)            # post-spike pool (VGG9-style)
                 else:
                     spk_t = spk_t_raw
                 s_t[l] = spk_t

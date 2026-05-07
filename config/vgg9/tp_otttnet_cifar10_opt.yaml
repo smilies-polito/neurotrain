@@ -39,7 +39,7 @@ tp_otttnet_cifar10_opt:
   model:
     name: vgg9
     default:
-      head_type: global_linear
+      head_type: leaky_integrator
       use_tp_pool: false
       surrogate_kind: sigmoid
       surrogate_slope: 4.0

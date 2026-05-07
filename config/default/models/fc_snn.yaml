@@ -20,7 +20,7 @@ default:
     min: 0.5
     max: 1.5
   reset_mechanism: subtract
-  out_integrator: false  # set true when pairing with the TP trainer for eval consistency
+  out_integrator: false
 
 mnist:
   in_shape: [784]
@@ -69,3 +69,7 @@ shd:
   num_classes: 20
   hidden_sizes:
     value: [512]
+
+# TP trainer section — enforces integrator-style output for eval consistency
+tp:
+  out_integrator: true

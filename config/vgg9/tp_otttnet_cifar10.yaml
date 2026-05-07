@@ -9,7 +9,7 @@ tp_otttnet_cifar10:
   model:
     name: vgg9
     default:
-      head_type: global_linear
+      head_type: leaky_integrator
       use_tp_pool: false
       surrogate_kind: sigmoid
       surrogate_slope: 4.0
@@ -40,6 +40,6 @@ tp_otttnet_cifar10:
   runtime:
     epochs: 200
     device: cuda
-    batch_size: 128
+    batch_size: 64
     seed: 42
     neurobench: false
