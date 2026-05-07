@@ -145,9 +145,17 @@ def run_training(
     trainer = OTTTTrainer(
         network=network, lr=lr, batch_size=batch_size,
         online_updates=True,
+<<<<<<< Updated upstream
         constant_input_per_timestep=True,   # CIFAR-10 direct coding
         loss_lambda=loss_lambda,
         optimizer=optimizer,
+=======
+<<<<<<< Updated upstream
+=======
+        loss_lambda=loss_lambda,
+        optimizer=optimizer,
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     ).to(device)
 
     best_test_acc = final_test_acc = final_train_loss = 0.0

@@ -141,10 +141,6 @@ def run_training(
         network=network,
         lr=lr,
         batch_size=batch_size,
-        # Pass trace_decay=beta so the trace time constant matches the membrane time constant.
-        # OTTTTrainer default would use tau=2 (trace_decay=0.5) from network.tau which RSNN
-        # does not expose; passing beta directly ensures consistency with the LIF dynamics.
-        trace_decay=beta,
         online_updates=True,
     ).to(device)
 
