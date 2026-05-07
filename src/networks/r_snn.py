@@ -52,6 +52,7 @@ class RSNN(BaseSNN):
 
         self.in_shape = tuple(int(v) for v in in_shape)
         self._n_classes = int(num_classes)
+        self.out_integrator = bool(out_integrator)
 
         hidden_sizes = [int(v) for v in hidden_sizes]
         if not hidden_sizes:

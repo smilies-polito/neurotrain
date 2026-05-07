@@ -30,6 +30,7 @@ class ConvSNN(BaseSNN):
         beta: float = 0.95,
         threshold: float = 1.0,
         spike_grad=None,
+        out_integrator: bool = False,
     ) -> None:
         super().__init__()
 
@@ -40,6 +41,7 @@ class ConvSNN(BaseSNN):
             raise ValueError("in_shape must be (C, H, W).")
         self.in_shape = tuple(int(v) for v in in_shape)
         self._n_classes = int(num_classes)
+        self.out_integrator = bool(out_integrator)
 
         if spike_grad is None:
             spike_grad = surrogate.fast_sigmoid(slope=25)
@@ -66,7 +68,15 @@ class ConvSNN(BaseSNN):
 
         # --- Classifier: flat_features -> num_classes ---
         self.fc = nn.Linear(flat_features, self._n_classes, bias=False)
-        self.lif_out = snn.Leaky(beta=beta, threshold=threshold, spike_grad=spike_grad, init_hidden=True, output=True)
+        if self.out_integrator:
+            # Pure Leaky Integrator: never fires, no decay (matches TP Sec 3.1).
+            # Use mem_rec[-1] at the final timestep for prediction during eval.
+            self.lif_out = snn.Leaky(
+                beta=1.0, threshold=1e9, spike_grad=spike_grad,
+                init_hidden=True, output=True,
+            )
+        else:
+            self.lif_out = snn.Leaky(beta=beta, threshold=threshold, spike_grad=spike_grad, init_hidden=True, output=True)
 
         # Minimal registry list (synapses + neurons)
         self.layers = nn.ModuleList([self.conv1, self.lif1, self.conv2, self.lif2, self.fc, self.lif_out])
@@ -82,6 +92,7 @@ class ConvSNN(BaseSNN):
         print(f"  {'Flat Features':<25} {flat_features}")
         print(f"  {'Beta':<25} {beta}")
         print(f"  {'Threshold':<25} {threshold}")
+        print(f"  {'Out Integrator':<25} {self.out_integrator}")
         print(f"{'='*60}\n")
 
     def forward(self, x: torch.Tensor):
