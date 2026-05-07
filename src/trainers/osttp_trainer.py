@@ -374,6 +374,7 @@ class OSTTPTrainer(BaseTrainer):
 
         output_sum = torch.zeros(B, self.n_classes, device=device, dtype=dtype)
         total_loss = torch.zeros((), device=device, dtype=dtype)
+        last_mem_out = output_sum  # will be overwritten at each timestep
 
         # -----------------------------------------------------------------------
         # TIME LOOP — Algorithm from Ortner et al. (2023)
@@ -390,7 +391,7 @@ class OSTTPTrainer(BaseTrainer):
             # Output readout: membrane of the last spiking layer
             y_out = mem_rec[-1]
             spk_out = spk_rec[-1]  # Extract the actual spikes
-            
+            last_mem_out = y_out   # Track final-timestep membrane for integrator predictions
             output_sum.add_(spk_out)  # Accumulate spikes for the prediction metric
             total_loss = total_loss + self._loss_value(y_out, y_star) # Keep using membrane for the loss
 
@@ -490,7 +491,8 @@ class OSTTPTrainer(BaseTrainer):
             self.optimizer.zero_grad(set_to_none=True)
 
         loss = total_loss / float(T)
-        pred = output_sum.argmax(dim=1, keepdim=True)
+        use_mem_pred = bool(getattr(self.network, "out_integrator", False))
+        pred = last_mem_out.argmax(dim=1, keepdim=True) if use_mem_pred else output_sum.argmax(dim=1, keepdim=True)
         return loss.detach(), pred
 
     def reset(self) -> None:

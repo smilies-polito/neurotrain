@@ -1,0 +1,58 @@
+# Test experiment: BPTT with Recurrent SNN on SHD dataset
+#
+# This configuration combines:
+# - BPTT trainer: Backpropagation Through Time
+# - RSNN model: Recurrent SNN with LIF neurons
+# - SHD dataset: Spiking Heidelberg Digits (20 classes, 700 cochlear channels)
+#
+# Key design choices:
+#   out_integrator: true
+#     The output layer is a pure Leaky Integrator (threshold=1e9, never fires).
+#     The BPTT trainer detects this and switches to cross-entropy on the
+#     final-timestep membrane potential — the standard approach in the
+#     SNN-BPTT literature (Yin et al. 2021). This avoids the dead-gradient
+#     problem caused by a spiking output layer that rarely fires.
+#
+#   T: 50
+#     Halving the sequence length reduces BPTT depth and gradient vanishing
+#     without losing the temporal structure of the SHD spike trains.
+#
+#   grad_clip: 1.0
+#     Caps gradient norm to prevent occasional exploding gradients caused
+#     by the recurrent weight matrix during early training.
+#
+#   beta: 0.9, hidden: 128 neurons
+#     Conservative recurrent size keeps training fast while matching
+#     typical SHD baselines; beta=0.9 (tau≈10 bins) matches the ~10 ms
+#     membrane time constant used in published SHD experiments.
+
+bptt_rsnn_shd:
+  name: bptt_rsnn_shd_test
+  trainer:
+    name: bptt
+    lr: 5.0e-4             # Slightly conservative; prevents early instability
+    loss_type: ce_rate     # Only used when out_integrator=false; ignored here
+    grad_clip: 1.0         # Clip gradient norm — important for BPTT through recurrence
+    use_optimizer: true
+  model:
+    name: r_snn
+    in_shape: [700]        # SHD: 700 cochlear channels
+    hidden_sizes: [128]    # Compact recurrent layer; scales well on SHD
+    num_classes: 20        # SHD has 20 digit classes
+    beta: 0.9              # Membrane decay (tau ≈ 10 time bins at T=50)
+    threshold: 1.0         # Spike threshold for hidden layer
+    reset_mechanism: subtract
+    out_integrator: true   # Output layer accumulates membrane; BPTT uses mem[-1] loss
+  dataset:
+    name: SHD
+    T: 50                  # Shorter sequence → shallower BPTT graph → stronger gradients
+    pin_memory: false
+    num_workers: 4
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 100
+    device: cuda
+    seed: 42
+    batch_size: 256        # Larger batch → more stable gradient estimates
+    neurobench: false

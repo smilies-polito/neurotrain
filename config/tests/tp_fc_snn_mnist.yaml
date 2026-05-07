@@ -1,0 +1,21 @@
+tp_fc_snn_mnist:
+  trainer:
+    name: tp
+  model:
+    name: fc_snn
+    out_integrator: true
+  dataset:
+    name: MNIST
+  runtime:
+    epochs: 5
+    device: cuda
+    seed: 42
+    neurobench: false
+  opt: true
+  optuna:
+    n_trials: 50
+    direction: maximize
+    sampler: tpe
+    pruner: null
+    timeout: null
+    storage: null

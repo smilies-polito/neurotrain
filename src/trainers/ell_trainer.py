@@ -203,6 +203,13 @@ class ELLTrainer(BaseTrainer):
                 the exact optimization decomposition is an implementation choice.
         """
         super().__init__()
+
+        if getattr(network, "out_integrator", False):
+            raise ValueError(
+                f"{self.__class__.__name__} requires a spiking output layer; "
+                "out_integrator=True is not supported."
+            )
+
         self.network = network
         self.lr = lr
         self.batch_size = batch_size

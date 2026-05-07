@@ -54,6 +54,12 @@ class OSTLTrainer(BaseTrainer):
         super().__init__()
         del kwargs
 
+        if getattr(network, "out_integrator", False):
+            raise ValueError(
+                f"{self.__class__.__name__} requires a spiking output layer; "
+                "out_integrator=True is not supported."
+            )
+
         self.network = network
         self.lr = float(lr)
         self.batch_size = int(batch_size)

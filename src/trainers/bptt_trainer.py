@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import snntorch.functional as SF
 
 from trainers.base_trainer import BaseTrainer
@@ -116,21 +117,35 @@ class BPTTTrainer(BaseTrainer):
             spk_out = torch.stack(spk_rec, dim=0)
             mem_out = torch.stack(mem_rec, dim=0)
             
-            # Compute loss using snnTorch's functional loss
-            # These functions expect [num_steps, batch, num_classes] format
-            loss = self.loss_fn(spk_out, target)
-            
+            # Choose loss based on whether the output layer is a pure integrator.
+            # When out_integrator=True the output Leaky never fires (threshold=1e9),
+            # so spk_out is all-zeros and spike-based losses give a flat gradient.
+            # Instead use cross-entropy on the final-timestep membrane potential,
+            # which gives a dense, well-conditioned gradient signal — the standard
+            # approach in the SNN-BPTT literature (Yin et al. 2021, etc.).
+            use_mem_loss = bool(getattr(self.network, "out_integrator", False))
+            if use_mem_loss:
+                # mem_out: [T, B, C] — take the last timestep
+                loss = F.cross_entropy(mem_out[-1], target)
+            else:
+                # These functions expect [num_steps, batch, num_classes] format
+                loss = self.loss_fn(spk_out, target)
+
             # Backward pass
             self.optimizer.zero_grad()
             loss.backward()
             if self.grad_clip is not None:
                 nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
             self.optimizer.step()
-        
-        # Compute predictions from spike sum (no gradients needed)
+
+        # Compute predictions (no gradients needed)
         with torch.no_grad():
-            spk_sum = spk_out.sum(dim=0)  # Sum over time
-            pred = spk_sum.argmax(dim=1, keepdim=True)
+            if use_mem_loss:
+                # Use final-timestep membrane for argmax (integrator accumulates across T)
+                pred = mem_out[-1].argmax(dim=1, keepdim=True)
+            else:
+                spk_sum = spk_out.sum(dim=0)  # Sum over time
+                pred = spk_sum.argmax(dim=1, keepdim=True)
         
         return loss.detach(), pred
 
