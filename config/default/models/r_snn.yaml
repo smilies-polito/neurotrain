@@ -75,6 +75,12 @@ eprop:
   hidden_sizes:
     value: [256]
     type: null
+  # E-prop trains with a κ-smoothed analog readout; beta=1.0 sum is a good-enough approximation
+  out_integrator: true
+
+# ES-D-RTRL predicts from final timestep membrane → integrator head avoids spike-reset noise
+esd_rtrl:
+  out_integrator: true
 
 # TP trainer section — enforces integrator-style output for eval consistency
 tp:

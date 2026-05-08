@@ -73,3 +73,11 @@ shd:
 # TP trainer section — enforces integrator-style output for eval consistency
 tp:
   out_integrator: true
+
+# DECOLLE applies CE loss to output membrane directly → integrator head matches training readout
+decolle:
+  out_integrator: true
+
+# ES-D-RTRL predicts from final timestep membrane → integrator head avoids spike-reset noise
+esd_rtrl:
+  out_integrator: true
