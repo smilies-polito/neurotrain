@@ -13,7 +13,6 @@ ottt_otttnet_svhn:
     loss_lambda: 0.00011916299962955152
     grad_clip: null
     sanitize_grads: null
-    constant_input_per_timestep: false
   model:
     name: vgg9
     net_type: vgg9

@@ -15,7 +15,6 @@ ottt_tpnet_cifar10:
     loss_lambda: 0.0011946697137851401
     grad_clip: null
     sanitize_grads: null
-    constant_input_per_timestep: false
   model:
     name: vgg9
     net_type: vgg9
@@ -88,7 +87,6 @@ ottt_otttnet_svhn:
     loss_lambda: 0.00011916299962955152
     grad_clip: null
     sanitize_grads: null
-    constant_input_per_timestep: false
   model:
     name: vgg9
     net_type: vgg9
@@ -158,7 +156,6 @@ ottt_otttnet_cifar10:
     loss_lambda: 0.06237820535466996
     grad_clip: null
     sanitize_grads: null
-    constant_input_per_timestep: false
   model:
     name: vgg9
     net_type: vgg9

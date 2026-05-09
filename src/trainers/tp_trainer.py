@@ -711,19 +711,23 @@ class TPTrainer(BaseTrainer):
                 # Eq 15: y_l^t soft target (softmax of negative distances)
                 # For spatial tensors (conv layers) use spatial-mean distance
                 # (same as z_l): compute pairwise distance per spatial position
-                # and average.  Intermediate shape is [S, B, B] ≈ O(S·B²·C)
-                # rather than O(B²·C·H·W), preventing OOM.
+                # and average.
+                # Memory-efficient form: ||a-b||² = ||a||² + ||b||² - 2<a,b>
+                # avoids materializing the [S,B,B,C] intermediate from the
+                # naive expansion (t0.unsqueeze(2)-t0.unsqueeze(1)).pow(2).sum(-1),
+                # which can reach 4+ GB at B=128.  Peak memory is now [S,B,B].
+                # .clamp(min=0) guards against tiny negatives from FP cancellation.
                 t0_raw = eps_in_target if l == 0 else eps_t[l - 1]
                 if t0_raw.dim() > 2:
-                    t0 = t0_raw.flatten(2).permute(2, 0, 1)   # [S, B, C]
-                    dist = (
-                        (t0.unsqueeze(2) - t0.unsqueeze(1) + 1e-9).pow(2).sum(-1)
-                    ).sqrt().mean(0)                           # [B, B]
+                    t0 = t0_raw.flatten(2).permute(2, 0, 1)        # [S, B, C]
+                    norms = t0.pow(2).sum(-1)                       # [S, B]
+                    cross = t0 @ t0.transpose(-1, -2)               # [S, B, B]
+                    dist = (norms.unsqueeze(-1) + norms.unsqueeze(-2) - 2 * cross).clamp(min=0).sqrt().mean(0)  # [B, B]
                 else:
-                    t0 = t0_raw                                # [B, F]
-                    dist = (
-                        (t0.unsqueeze(1) - t0.unsqueeze(0)).pow(2).sum(-1) + 1e-9
-                    ).sqrt()                                   # [B, B]
+                    t0 = t0_raw                                     # [B, F]
+                    norms = t0.pow(2).sum(-1)                       # [B]
+                    cross = t0 @ t0.t()                             # [B, B]
+                    dist = (norms.unsqueeze(1) + norms.unsqueeze(0) - 2 * cross).clamp(min=0).sqrt()           # [B, B]
                 y_l = F.softmax(-dist, dim=1).detach()   # [B, B]
 
                 # Eq 13: E_l^t = -Σ y_l * log softmax(z_l)
