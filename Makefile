@@ -440,7 +440,8 @@ opt-tp: hpc-mkdir
 	sbatch hpc/bench_tp_dvsgesture.sbatch
 	sbatch hpc/bench_tp_dvscifar10.sbatch
 
-
+opt-shd: hpc-mkdir
+	sbatch hpc/bench_shd.sbatch
 
 #  ▗▄▄▖▗▖   ▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖▗▖ ▗▖▗▄▄▖ 
 # ▐▌   ▐▌   ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌ ▐▌▐▌ ▐▌

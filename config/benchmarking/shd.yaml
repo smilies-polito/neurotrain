@@ -1,0 +1,26 @@
+trainers:
+
+models:
+- fc_snn
+- r_snn
+- conv_snn
+
+datasets:
+- shd
+
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  neurobench: false
+  batch_size: 256
+
+opt: true
+
+optuna:
+  n_trials: 20          # number of trials per experiment
+  direction: maximize   # maximize | minimize
+  sampler: tpe          # tpe | random | cmaes
+  pruner: null          # median | hyperband | null (no pruning)
+  timeout: null         # max seconds per study (null = unlimited)
+  storage: null         # e.g. sqlite:///experiments/my_campaign/optuna.db
