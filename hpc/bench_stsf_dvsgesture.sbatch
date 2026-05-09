@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-stsf-dvsgesture
+#SBATCH --job-name=stsf-dvsgesture
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-stsf
+#SBATCH --job-name=stsf
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

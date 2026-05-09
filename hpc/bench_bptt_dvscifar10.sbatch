@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-bptt-dvscifar10
+#SBATCH --job-name=bptt-dvscifar10
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

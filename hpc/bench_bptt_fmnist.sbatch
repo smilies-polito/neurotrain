@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-bptt-fmnist
+#SBATCH --job-name=bptt-fmnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

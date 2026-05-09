@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-eprop-nmnist
+#SBATCH --job-name=eprop-nmnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

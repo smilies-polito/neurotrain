@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-decolle-dvsgesture
+#SBATCH --job-name=decolle-dvsgesture
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

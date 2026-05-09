@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-vgg9-tp-otttnet-dvscifar10
+#SBATCH --job-name=vgg9-tp-otttnet-dvscifar10
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

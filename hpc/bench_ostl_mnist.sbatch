@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-ostl-mnist
+#SBATCH --job-name=ostl-mnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

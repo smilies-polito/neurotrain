@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-decolle-mnist
+#SBATCH --job-name=decolle-mnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

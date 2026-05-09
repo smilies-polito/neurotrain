@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-etlp-dvscifar10
+#SBATCH --job-name=etlp-dvscifar10
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

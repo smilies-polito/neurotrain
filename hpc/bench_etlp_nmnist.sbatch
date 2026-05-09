@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-etlp-nmnist
+#SBATCH --job-name=etlp-nmnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

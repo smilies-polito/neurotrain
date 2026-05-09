@@ -164,6 +164,33 @@ Paper results:
 
 ---
 
+## VGG9 Paper Experiments — Individual Configs (`config/paper/vgg9/`)
+
+Each row below has its own config file and sbatch script so they can be submitted in parallel.
+Launch all 15 HPC jobs at once with `make paper-vgg9-all-hpc-split`.
+
+| Trainer | Net     | Dataset     | Acc (200 ep) | Config file                                  |
+| ------- | :-----: | :---------: | :----------: | -------------------------------------------- |
+| BPTT    | TPnet   | CIFAR10     | 0.855 🟢     | `config/paper/vgg9/bptt_tpnet_cifar10.yaml`   |
+| BPTT    | TPnet   | SVHN        | 0.946 🟢     | `config/paper/vgg9/bptt_tpnet_svhn.yaml`       |
+| BPTT    | TPnet   | DVSGesture  | 0.765 🟡     | `config/paper/vgg9/bptt_tpnet_dvsgesture.yaml` |
+| BPTT    | OTTTnet | SVHN        | 0.913 🟢     | `config/paper/vgg9/bptt_otttnet_svhn.yaml`     |
+| TP      | TPnet   | CIFAR10     | 0.723 🟢     | `config/paper/vgg9/tp_tpnet_cifar10.yaml`      |
+| TP      | TPnet   | SVHN        | 0.921 🟡     | `config/paper/vgg9/tp_tpnet_svhn.yaml`         |
+| TP      | TPnet   | DVSGesture  | 0.666 🟡     | `config/paper/vgg9/tp_tpnet_dvsgesture.yaml`   |
+| TP      | TPnet   | DVSCifar10  | 0.506 🟢     | `config/paper/vgg9/tp_tpnet_dvscifar10.yaml`   |
+| TP      | OTTTnet | CIFAR10     | 0.729 🟢     | `config/paper/vgg9/tp_otttnet_cifar10.yaml`    |
+| TP      | OTTTnet | SVHN        | 0.924 🟡     | `config/paper/vgg9/tp_otttnet_svhn.yaml`       |
+| TP      | OTTTnet | DVSGesture  | 0.610 🟡     | `config/paper/vgg9/tp_otttnet_dvsgesture.yaml` |
+| TP      | OTTTnet | DVSCifar10  | 0.451 🟢     | `config/paper/vgg9/tp_otttnet_dvscifar10.yaml` |
+| OTTT    | TPnet   | CIFAR10     | 0.774 🟢     | `config/paper/vgg9/ottt_tpnet_cifar10.yaml`    |
+| OTTT    | OTTTnet | CIFAR10     | 0.717 🟢     | `config/paper/vgg9/ottt_otttnet_cifar10.yaml`  |
+| OTTT    | OTTTnet | SVHN        | 0.915 🟢     | `config/paper/vgg9/ottt_otttnet_svhn.yaml`     |
+
+> Accuracy values are from the HPO exploration phase (10 epochs). Full 200-epoch results will replace these once available.
+
+---
+
 ## VGG9 Full Matrix (`make vgg9-matrix`)
 
 All 24 combinations from the Makefile `vgg9-matrix` target.

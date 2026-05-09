@@ -1,0 +1,69 @@
+ottt_otttnet_cifar10:
+  name: ottt_otttnet_cifar10
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.0020906970316613652
+    online_updates: true
+    loss_lambda: 0.06237820535466996
+    grad_clip: null
+    sanitize_grads: null
+    constant_input_per_timestep: false
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: global_linear
+    use_tp_pool: false
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.5
+    threshold: 1.0
+    conv_gain: 1.0
+    scale_after_lif: 2.74
+    surrogate_kind: sigmoid
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    algorithm_name: ottt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 748
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 200
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-esd-rtrl
+#SBATCH --job-name=esd-rtrl
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

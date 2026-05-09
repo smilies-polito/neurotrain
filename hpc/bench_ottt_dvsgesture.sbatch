@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-ottt-dvsgesture
+#SBATCH --job-name=ottt-dvsgesture
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

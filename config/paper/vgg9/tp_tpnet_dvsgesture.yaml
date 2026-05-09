@@ -1,0 +1,81 @@
+tp_tpnet_dvsgesture:
+  name: tp_tpnet_dvsgesture_opt
+  opt: false
+  trainer:
+    name: tp
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.00024289169469748895
+    alpha: 0.9436714480253212
+    beta: 0.8586770314875884
+    vth: 1.018390181036444
+    surrogate_scale: 1.0
+    train_target_propagator: true
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 11
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta:
+        value: 0.53
+        type: float
+        min: 0.3
+        max: 0.99
+    threshold:
+        value: 1.0
+        type: float
+        min: 0.5
+        max: 1.5
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    algorithm_name: tp
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    seed: 157
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 200
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}

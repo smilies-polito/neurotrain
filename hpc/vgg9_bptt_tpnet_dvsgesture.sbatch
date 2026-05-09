@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-vgg9-bptt-tpnet-dvsgesture
+#SBATCH --job-name=vgg9-bptt-tpnet-dvsgesture
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

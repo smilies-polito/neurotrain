@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-ell
+#SBATCH --job-name=ell
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

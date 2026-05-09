@@ -1,0 +1,68 @@
+bptt_tpnet_cifar10:
+  name: bptt_tpnet_cifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.0008686865419501416
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 3
+    num_classes: 10
+    input_shape:
+    - 3
+    - 32
+    - 32
+    head_type: leaky_integrator
+    use_tp_pool: true
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.4419520030050591
+    threshold: 0.9778257400389069
+    conv_gain: 1.8
+    scale_after_lif: 0.0
+    surrogate_kind: atan
+    li_head_spatial: 2
+    li_head_leak: 1.0
+    surrogate_scale: 1.0
+    pool_after_blocks:
+    - 2
+    - 4
+    algorithm_name: bptt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    seed: 107
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 200
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 128
+    progress: false
+  optuna: {}

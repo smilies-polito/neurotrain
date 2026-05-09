@@ -2,36 +2,17 @@
 
 PYTHON ?= python3
 
-BENCH_CONFIG  ?= config/benchmarking.yaml
-CUSTOM_CONFIG ?= config/experiments.yaml
 EXP_NAME      ?=
 HPC_SLURM_OUT ?= hpc/slurm_outputs
 
 
 
-# ── Test and generic runs ───────────────────────────────────────────────────────
-
-## Run a benchmarking campaign
-bench:
-	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
-## Run a benchmarking campaign with optuna
-bench-opt:
-	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) --name debug_opt
-## Dry-run: print experiment list without running
-dry-bench:
-	$(PYTHON) run_exp_campaign.py --benchmarking $(BENCH_CONFIG) --dry-run
-
-## Run custom experiments
-custom:
-	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) $(if $(EXP_NAME),--name $(EXP_NAME),)
-## Dry-run: print experiment list without running
-dry-custom:
-	$(PYTHON) run_exp_campaign.py --custom $(CUSTOM_CONFIG) --dry-run
-
-
-# ── Paper reproducibility runs ───────────────────────────────────────────────────────
-
-## Run paper experiments (fill config/paper.yaml with best Optuna results first)
+# ▗▄▄▖  ▗▄▖ ▗▄▄▖ ▗▄▄▄▖▗▄▄▖ 
+# ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌
+# ▐▛▀▘ ▐▛▀▜▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖
+# ▐▌   ▐▌ ▐▌▐▌   ▐▙▄▄▖▐▌ ▐▌
+                         
+## Run paper experiments 
 paper-bptt:
 	$(PYTHON) run_exp_campaign.py --custom config/paper/bptt.yaml --name paper_bptt
 paper-decolle:
@@ -53,26 +34,157 @@ paper-ottt:
 paper-stsf:
 	$(PYTHON) run_exp_campaign.py --custom config/paper/stsf.yaml --name paper_stsf
 paper-tp:
-	$(PYTHON) run_exp_campaign.py --custom config/paper/tp.yaml --name
+	$(PYTHON) run_exp_campaign.py --custom config/paper/tp.yaml --name paper_tp
 
-## Paper VGG9 winning configurations — local single-run
+## Run paper aggregate VGG9 experiments
 paper-vgg9-tp:
 	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_tp.yaml --name paper_vgg9_tp
 paper-vgg9-ottt:
 	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_ottt.yaml --name paper_vgg9_ottt
 paper-vgg9-bptt:
 	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9_bptt.yaml --name paper_vgg9_bptt
-
-bench-tp-vgg9-cifar10:
-	$(PYTHON) run_exp_campaign.py --benchmarking config/benchmarking/tp_vgg9_cifar10.yaml
+paper-vgg9: paper-vgg9-tp paper-vgg9-ottt paper-vgg9-bptt
 
 
 
-# ── VGG9 Full Matrix — local single-run (no Optuna) ────────────────────────
-# Naming: vgg9-<trainer>-<nettype>-<dataset>
-# nettype: tpnet = TP-style (leaky_integrator head, atan surrogate, conv_gain=1.8)
-#          otttnet = OTTT-style (global_linear head, sigmoid surrogate, scale_after_lif=2.74)
-# Config files live in config/vgg9/
+# ▗▄▄▖  ▗▄▖ ▗▄▄▖ ▗▄▄▄▖▗▄▄▖     ▗▖  ▗▖ ▗▄▄▖ ▗▄▄▖     ▗▄▄▖▗▄▄▄▖▗▖ ▗▖▗▄▄▄▗▖  ▗▖
+# ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌    ▐▌  ▐▌▐▌   ▐▌       ▐▌     █  ▐▌ ▐▌▐▌  █▝▚▞▘ 
+# ▐▛▀▘ ▐▛▀▜▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖    ▐▌  ▐▌▐▌▝▜▌▐▌▝▜▌     ▝▀▚▖  █  ▐▌ ▐▌▐▌  █ ▐▌  
+# ▐▌   ▐▌ ▐▌▐▌   ▐▙▄▄▖▐▌ ▐▌     ▝▚▞▘ ▝▚▄▞▘▝▚▄▞▘    ▗▄▄▞▘  █  ▝▚▄▞▘▐▙▄▄▀ ▐▌  
+
+# ----------- Local Execution -----------
+# BPTT
+paper-vgg9-bptt-tpnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_tpnet_cifar10.yaml --name paper_vgg9_bptt_tpnet_cifar10
+paper-vgg9-bptt-tpnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_tpnet_dvsgesture.yaml --name paper_vgg9_bptt_tpnet_dvsgesture
+paper-vgg9-bptt-tpnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_tpnet_svhn.yaml --name paper_vgg9_bptt_tpnet_svhn
+paper-vgg9-bptt-otttnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_otttnet_svhn.yaml --name paper_vgg9_bptt_otttnet_svhn
+# TP
+paper-vgg9-tp-tpnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_tpnet_cifar10.yaml --name paper_vgg9_tp_tpnet_cifar10
+paper-vgg9-tp-tpnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_tpnet_dvscifar10.yaml --name paper_vgg9_tp_tpnet_dvscifar10
+paper-vgg9-tp-tpnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_tpnet_dvsgesture.yaml --name paper_vgg9_tp_tpnet_dvsgesture
+paper-vgg9-tp-tpnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_tpnet_svhn.yaml --name paper_vgg9_tp_tpnet_svhn
+paper-vgg9-tp-otttnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_otttnet_cifar10.yaml --name paper_vgg9_tp_otttnet_cifar10
+paper-vgg9-tp-otttnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_otttnet_dvscifar10.yaml --name paper_vgg9_tp_otttnet_dvscifar10
+paper-vgg9-tp-otttnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_otttnet_dvsgesture.yaml --name paper_vgg9_tp_otttnet_dvsgesture
+paper-vgg9-tp-otttnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/tp_otttnet_svhn.yaml --name paper_vgg9_tp_otttnet_svhn
+# OTTT
+paper-vgg9-ottt-tpnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_tpnet_cifar10.yaml --name paper_vgg9_ottt_tpnet_cifar10
+paper-vgg9-ottt-otttnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_otttnet_cifar10.yaml --name paper_vgg9_ottt_otttnet_cifar10
+paper-vgg9-ottt-otttnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_otttnet_svhn.yaml --name paper_vgg9_ottt_otttnet_svhn
+
+## Paper VGG9 pending experiments — local (config TODOs: fill with best HPO results first)
+paper-vgg9-bptt-tpnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_tpnet_dvscifar10.yaml --name paper_vgg9_bptt_tpnet_dvscifar10
+paper-vgg9-bptt-otttnet-cifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_otttnet_cifar10.yaml --name paper_vgg9_bptt_otttnet_cifar10
+paper-vgg9-bptt-otttnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_otttnet_dvsgesture.yaml --name paper_vgg9_bptt_otttnet_dvsgesture
+paper-vgg9-bptt-otttnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/bptt_otttnet_dvscifar10.yaml --name paper_vgg9_bptt_otttnet_dvscifar10
+paper-vgg9-ottt-tpnet-svhn:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_tpnet_svhn.yaml --name paper_vgg9_ottt_tpnet_svhn
+paper-vgg9-ottt-tpnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_tpnet_dvsgesture.yaml --name paper_vgg9_ottt_tpnet_dvsgesture
+paper-vgg9-ottt-tpnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_tpnet_dvscifar10.yaml --name paper_vgg9_ottt_tpnet_dvscifar10
+paper-vgg9-ottt-otttnet-dvsgesture:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_otttnet_dvsgesture.yaml --name paper_vgg9_ottt_otttnet_dvsgesture
+paper-vgg9-ottt-otttnet-dvscifar10:
+	$(PYTHON) run_exp_campaign.py --custom config/paper/vgg9/ottt_otttnet_dvscifar10.yaml --name paper_vgg9_ottt_otttnet_dvscifar10
+
+# ----------- HPC Execution -----------
+# BPTT
+paper-vgg9-bptt-tpnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_tpnet_cifar10.sbatch
+paper-vgg9-bptt-tpnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_tpnet_dvsgesture.sbatch
+paper-vgg9-bptt-tpnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_tpnet_svhn.sbatch
+paper-vgg9-bptt-otttnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_otttnet_svhn.sbatch
+# TP
+paper-vgg9-tp-tpnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_tpnet_cifar10.sbatch
+paper-vgg9-tp-tpnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_tpnet_dvscifar10.sbatch
+paper-vgg9-tp-tpnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_tpnet_dvsgesture.sbatch
+paper-vgg9-tp-tpnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_tpnet_svhn.sbatch
+paper-vgg9-tp-otttnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_otttnet_cifar10.sbatch
+paper-vgg9-tp-otttnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_otttnet_dvscifar10.sbatch
+paper-vgg9-tp-otttnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_otttnet_dvsgesture.sbatch
+paper-vgg9-tp-otttnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_tp_otttnet_svhn.sbatch
+# OTTT
+paper-vgg9-ottt-tpnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_tpnet_cifar10.sbatch
+paper-vgg9-ottt-otttnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_otttnet_cifar10.sbatch
+paper-vgg9-ottt-otttnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_otttnet_svhn.sbatch
+
+## Paper VGG9 pending experiments — HPC (fill configs first!)
+paper-vgg9-bptt-tpnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_tpnet_dvscifar10.sbatch
+paper-vgg9-bptt-otttnet-cifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_otttnet_cifar10.sbatch
+paper-vgg9-bptt-otttnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_otttnet_dvsgesture.sbatch
+paper-vgg9-bptt-otttnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_bptt_otttnet_dvscifar10.sbatch
+paper-vgg9-ottt-tpnet-svhn-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_tpnet_svhn.sbatch
+paper-vgg9-ottt-tpnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_tpnet_dvsgesture.sbatch
+paper-vgg9-ottt-tpnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_tpnet_dvscifar10.sbatch
+paper-vgg9-ottt-otttnet-dvsgesture-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_otttnet_dvsgesture.sbatch
+paper-vgg9-ottt-otttnet-dvscifar10-hpc: hpc-mkdir
+	sbatch hpc/paper_vgg9_ottt_otttnet_dvscifar10.sbatch
+
+## Submit all 15 ready paper VGG9 jobs at once to HPC
+## To add the 9 pending experiments, fill their configs and uncomment the lines below
+paper-vgg9-all-hpc: hpc-mkdir \
+	paper-vgg9-bptt-tpnet-cifar10-hpc paper-vgg9-bptt-tpnet-dvsgesture-hpc \
+	paper-vgg9-bptt-tpnet-svhn-hpc paper-vgg9-bptt-otttnet-svhn-hpc \
+	paper-vgg9-tp-tpnet-cifar10-hpc paper-vgg9-tp-tpnet-dvscifar10-hpc \
+	paper-vgg9-tp-tpnet-dvsgesture-hpc paper-vgg9-tp-tpnet-svhn-hpc \
+	paper-vgg9-tp-otttnet-cifar10-hpc paper-vgg9-tp-otttnet-dvscifar10-hpc \
+	paper-vgg9-tp-otttnet-dvsgesture-hpc paper-vgg9-tp-otttnet-svhn-hpc \
+	paper-vgg9-ottt-tpnet-cifar10-hpc paper-vgg9-ottt-otttnet-cifar10-hpc \
+	paper-vgg9-ottt-otttnet-svhn-hpc
+#	paper-vgg9-bptt-tpnet-dvscifar10-hpc \
+#	paper-vgg9-bptt-otttnet-cifar10-hpc paper-vgg9-bptt-otttnet-dvsgesture-hpc paper-vgg9-bptt-otttnet-dvscifar10-hpc \
+#	paper-vgg9-ottt-tpnet-svhn-hpc paper-vgg9-ottt-tpnet-dvsgesture-hpc paper-vgg9-ottt-tpnet-dvscifar10-hpc \
+#	paper-vgg9-ottt-otttnet-dvsgesture-hpc paper-vgg9-ottt-otttnet-dvscifar10-hpc
+
+
+
+
+# ▗▖  ▗▖ ▗▄▄▖ ▗▄▄▖    ▗▖    ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖       ▗▄▄▄▖▗▖  ▗▖▗▄▄▖ 
+# ▐▌  ▐▌▐▌   ▐▌       ▐▌   ▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌       ▐▌    ▝▚▞▘ ▐▌ ▐▌
+# ▐▌  ▐▌▐▌▝▜▌▐▌▝▜▌    ▐▌   ▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌       ▐▛▀▀▘  ▐▌  ▐▛▀▘ 
+#  ▝▚▞▘ ▝▚▄▞▘▝▚▄▞▘    ▐▙▄▄▖▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖    ▐▙▄▄▖▗▞▘▝▚▖▐▌   
 
 ## TP trainer
 vgg9-tp-tpnet-cifar10:
@@ -91,6 +203,9 @@ vgg9-tp-otttnet-dvsgesture:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/tp_otttnet_dvsgesture.yaml --name vgg9_tp_otttnet_dvsgesture
 vgg9-tp-otttnet-dvscifar10:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/tp_otttnet_dvscifar10.yaml --name vgg9_tp_otttnet_dvscifar10
+vgg9-tp-all: \
+	vgg9-tp-tpnet-cifar10 vgg9-tp-tpnet-svhn vgg9-tp-tpnet-dvsgesture vgg9-tp-tpnet-dvscifar10 \
+	vgg9-tp-otttnet-cifar10 vgg9-tp-otttnet-svhn vgg9-tp-otttnet-dvsgesture vgg9-tp-otttnet-dvscifar10
 
 ## OTTT trainer
 vgg9-ottt-tpnet-cifar10:
@@ -130,6 +245,9 @@ vgg9-bptt-otttnet-dvsgesture:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/bptt_otttnet_dvsgesture.yaml --name vgg9_bptt_otttnet_dvsgesture
 vgg9-bptt-otttnet-dvscifar10:
 	$(PYTHON) run_exp_campaign.py --custom config/vgg9/bptt_otttnet_dvscifar10.yaml --name vgg9_bptt_otttnet_dvscifar10
+vgg9-bptt-all: \
+	vgg9-bptt-tpnet-cifar10 vgg9-bptt-tpnet-svhn vgg9-bptt-tpnet-dvsgesture vgg9-bptt-tpnet-dvscifar10 \
+	vgg9-bptt-otttnet-cifar10 vgg9-bptt-otttnet-svhn vgg9-bptt-otttnet-dvsgesture vgg9-bptt-otttnet-dvscifar10
 
 ## Run the complete local VGG9 matrix (all 24 cells sequentially)
 vgg9-matrix: \
@@ -142,9 +260,14 @@ vgg9-matrix: \
 
 
 
-# ── VGG9 Full Matrix — HPC Optuna sweep (sbatch) ───────────────────────────
-# Uses config/vgg9/*_opt.yaml (50 trials × 10 epochs each).
-# Edit runtime.epochs and optuna.n_trials in those files to change the budget.
+# ▗▖  ▗▖ ▗▄▄▖ ▗▄▄▖    ▗▖ ▗▖▗▄▄▖  ▗▄▄▖    ▗▄▄▄▖▗▖  ▗▖▗▄▄▖ 
+# ▐▌  ▐▌▐▌   ▐▌       ▐▌ ▐▌▐▌ ▐▌▐▌       ▐▌    ▝▚▞▘ ▐▌ ▐▌
+# ▐▌  ▐▌▐▌▝▜▌▐▌▝▜▌    ▐▛▀▜▌▐▛▀▘ ▐▌       ▐▛▀▀▘  ▐▌  ▐▛▀▘ 
+#  ▝▚▞▘ ▝▚▄▞▘▝▚▄▞▘    ▐▌ ▐▌▐▌   ▝▚▄▄▖    ▐▙▄▄▖▗▞▘▝▚▖▐▌   
+
+## Ensure SLURM output directory exists
+hpc-mkdir:
+	mkdir -p $(HPC_SLURM_OUT)
 
 ## TP trainer
 sbatch-vgg9-tp-tpnet-cifar10: hpc-mkdir
@@ -163,6 +286,9 @@ sbatch-vgg9-tp-otttnet-dvsgesture: hpc-mkdir
 	sbatch hpc/vgg9_tp_otttnet_dvsgesture.sbatch
 sbatch-vgg9-tp-otttnet-dvscifar10: hpc-mkdir
 	sbatch hpc/vgg9_tp_otttnet_dvscifar10.sbatch
+sbatch-vgg9-tp-all: \
+	sbatch-vgg9-tp-tpnet-cifar10 sbatch-vgg9-tp-tpnet-svhn sbatch-vgg9-tp-tpnet-dvsgesture sbatch-vgg9-tp-tpnet-dvscifar10 \
+	sbatch-vgg9-tp-otttnet-cifar10 sbatch-vgg9-tp-otttnet-svhn sbatch-vgg9-tp-otttnet-dvsgesture sbatch-vgg9-tp-otttnet-dvscifar10
 
 ## OTTT trainer
 sbatch-vgg9-ottt-tpnet-cifar10: hpc-mkdir
@@ -202,9 +328,12 @@ sbatch-vgg9-bptt-otttnet-dvsgesture: hpc-mkdir
 	sbatch hpc/vgg9_bptt_otttnet_dvsgesture.sbatch
 sbatch-vgg9-bptt-otttnet-dvscifar10: hpc-mkdir
 	sbatch hpc/vgg9_bptt_otttnet_dvscifar10.sbatch
+sbatch-vgg9-bptt-all: \
+	sbatch-vgg9-bptt-tpnet-cifar10 sbatch-vgg9-bptt-tpnet-svhn sbatch-vgg9-bptt-tpnet-dvsgesture sbatch-vgg9-bptt-tpnet-dvscifar10 \
+	sbatch-vgg9-bptt-otttnet-cifar10 sbatch-vgg9-bptt-otttnet-svhn sbatch-vgg9-bptt-otttnet-dvsgesture sbatch-vgg9-bptt-otttnet-dvscifar10
 
 ## Submit the complete HPC VGG9 matrix (all 24 jobs)
-opt-vgg9-matrix: \
+sbatch-vgg9-matrix: \
 	sbatch-vgg9-tp-tpnet-cifar10 sbatch-vgg9-tp-tpnet-svhn sbatch-vgg9-tp-tpnet-dvsgesture sbatch-vgg9-tp-tpnet-dvscifar10 \
 	sbatch-vgg9-tp-otttnet-cifar10 sbatch-vgg9-tp-otttnet-svhn sbatch-vgg9-tp-otttnet-dvsgesture sbatch-vgg9-tp-otttnet-dvscifar10 \
 	sbatch-vgg9-ottt-tpnet-cifar10 sbatch-vgg9-ottt-tpnet-svhn sbatch-vgg9-ottt-tpnet-dvsgesture sbatch-vgg9-ottt-tpnet-dvscifar10 \
@@ -212,129 +341,12 @@ opt-vgg9-matrix: \
 	sbatch-vgg9-bptt-tpnet-cifar10 sbatch-vgg9-bptt-tpnet-svhn sbatch-vgg9-bptt-tpnet-dvsgesture sbatch-vgg9-bptt-tpnet-dvscifar10 \
 	sbatch-vgg9-bptt-otttnet-cifar10 sbatch-vgg9-bptt-otttnet-svhn sbatch-vgg9-bptt-otttnet-dvsgesture sbatch-vgg9-bptt-otttnet-dvscifar10
 
-## Paper VGG9 winning configurations — HPC (sbatch)
-paper-vgg9-tp-hpc: hpc-mkdir
-	sbatch hpc/paper_vgg9_tp.sbatch
-paper-vgg9-ottt-hpc: hpc-mkdir
-	sbatch hpc/paper_vgg9_ottt.sbatch
-paper-vgg9-bptt-hpc: hpc-mkdir
-	sbatch hpc/paper_vgg9_bptt.sbatch
-
-## Submit all paper VGG9 HPC jobs
-paper-vgg9-all-hpc: paper-vgg9-tp-hpc paper-vgg9-ottt-hpc paper-vgg9-bptt-hpc
 
 
-
-
-# ── DEPRECATED VGG9 targets (kept for in-flight campaigns) ─────────────────
-# These point at config/custom/ and config/benchmarking/ paths.
-# Use the vgg9-* and sbatch-vgg9-* targets above for new experiments.
-
-############# OTTT VGG9 Experiments #############
-ottt-vgg9-cifar10:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_cifar10.yaml --name ottt_vgg9_cifar10
-ottt-vgg9-svhn:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_svhn.yaml --name ottt_vgg9_svhn
-ottt-vgg9-dvsgesture:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/ottt_vgg9_dvsgesture.yaml --name ottt_vgg9_dvsgesture
-
-############ TP VGG9 Experiments #############
-tp-vgg9-cifar10:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_cifar10.yaml --name tp_vgg9_cifar10
-tp-vgg9-svhn:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_svhn.yaml --name tp_vgg9_svhn
-tp-vgg9-dvsgesture:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_dvsgesture.yaml --name tp_vgg9_dvsgesture
-tp-vgg9-dvscifar10:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/tp_vgg9_dvscifar10.yaml --name tp_vgg9_dvscifar10
-
-########### BPTT VGG9 Experiments #############
-bptt-vgg9-cifar10-ottt:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_ottt.yaml --name bptt_vgg9_cifar10_ottt
-bptt-vgg9-svhn-ottt:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_svhn_ottt.yaml --name bptt_vgg9_svhn_ottt
-bptt-vgg9-dvsgesture-ottt:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_dvsgesture_ottt.yaml --name bptt_vgg9_dvsgesture_ottt
-bptt-vgg9-cifar10-tp:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_cifar10_tp.yaml --name bptt_vgg9_cifar10_tp
-bptt-vgg9-svhn-tp:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_svhn_tp.yaml --name bptt_vgg9_svhn_tp
-bptt-vgg9-dvsgesture-tp:
-	$(PYTHON) run_exp_campaign.py --custom config/custom/bptt_vgg9_dvsgesture_tp.yaml --name bptt_vgg9_dvsgesture_tp
-
-## DEPRECATED aggregate — use vgg9-matrix instead
-vgg9-all: ottt-vgg9-cifar10 ottt-vgg9-svhn ottt-vgg9-dvsgesture tp-vgg9-cifar10 tp-vgg9-svhn tp-vgg9-dvsgesture bptt-vgg9-cifar10-ottt bptt-vgg9-svhn-ottt bptt-vgg9-dvsgesture-ottt bptt-vgg9-cifar10-tp bptt-vgg9-svhn-tp bptt-vgg9-dvsgesture-tp
-
-## DEPRECATED HPC targets — use sbatch-vgg9-* / opt-vgg9-matrix instead
-opt-vgg9-all: sbatch-ottt-vgg9-cifar10 sbatch-ottt-vgg9-svhn sbatch-ottt-vgg9-dvsgesture sbatch-tp-vgg9-cifar10 sbatch-tp-vgg9-svhn sbatch-tp-vgg9-dvsgesture
-
-sbatch-ottt-vgg9-cifar10: hpc-mkdir
-	sbatch hpc/custom_ottt_vgg9_cifar10.sbatch
-
-sbatch-ottt-vgg9-svhn: hpc-mkdir
-	sbatch hpc/custom_ottt_vgg9_svhn.sbatch
-
-sbatch-ottt-vgg9-dvsgesture: hpc-mkdir
-	sbatch hpc/custom_ottt_vgg9_dvsgesture.sbatch
-
-sbatch-tp-vgg9-cifar10: hpc-mkdir
-	sbatch hpc/custom_tp_vgg9_cifar10.sbatch
-
-sbatch-tp-vgg9-svhn: hpc-mkdir
-	sbatch hpc/custom_tp_vgg9_svhn.sbatch
-
-sbatch-tp-vgg9-dvsgesture: hpc-mkdir
-	sbatch hpc/custom_tp_vgg9_dvsgesture.sbatch
-
-## DEPRECATED — use opt-vgg9-matrix instead
-opt-ottt-vgg9: hpc-mkdir
-	sbatch hpc/bench_ottt_vgg9_cifar10.sbatch
-	sbatch hpc/bench_ottt_vgg9_svhn.sbatch
-	sbatch hpc/bench_ottt_vgg9_dvscifar10.sbatch
-	sbatch hpc/bench_ottt_vgg9_dvsgesture.sbatch
-
-## DEPRECATED — use opt-vgg9-matrix instead
-opt-tp-vgg9: hpc-mkdir
-	sbatch hpc/bench_tp_vgg9_cifar10.sbatch
-	sbatch hpc/bench_tp_vgg9_svhn.sbatch
-	sbatch hpc/bench_tp_vgg9_dvscifar10.sbatch
-	sbatch hpc/bench_tp_vgg9_dvsgesture.sbatch
-# ── END DEPRECATED ──────────────────────────────────────────────────────────
-
-
-
-# ── Training runs — 300 epochs, no Optuna (HPC sbatch) ──────────────────────
-
-## TP + VGG9 + DVS-CIFAR10 — 300 epochs
-sbatch-train-tp-vgg9-dvscifar10: hpc-mkdir
-	sbatch hpc/train_tp_vgg9_dvscifar10.sbatch
-
-## TP + VGG9 + DVSGesture — 300 epochs
-sbatch-train-tp-vgg9-dvsgesture: hpc-mkdir
-	sbatch hpc/train_tp_vgg9_dvsgesture.sbatch
-
-## OTTT + VGG9 + CIFAR10 — 300 epochs
-sbatch-train-ottt-vgg9-cifar10: hpc-mkdir
-	sbatch hpc/train_ottt_vgg9_cifar10.sbatch
-
-## OTTT + VGG9 + SVHN — 300 epochs
-sbatch-train-ottt-vgg9-svhn: hpc-mkdir
-	sbatch hpc/train_ottt_vgg9_svhn.sbatch
-
-## Submit all four training jobs
-sbatch-train-vgg9-test: \
-	sbatch-train-tp-vgg9-dvscifar10 \
-	sbatch-train-tp-vgg9-dvsgesture \
-	sbatch-train-ottt-vgg9-cifar10 \
-	sbatch-train-ottt-vgg9-svhn
-
-
-
-# ── HPC / SLURM targets ─────────────────────────────────────────────────────
-
-## Ensure SLURM output directory exists
-hpc-mkdir:
-	mkdir -p $(HPC_SLURM_OUT)
+# ▗▖ ▗▖▗▄▄▖  ▗▄▖      ▗▄▄▖ ▗▄▖ ▗▖  ▗▖▗▄▄▖  ▗▄▖ ▗▄▄▄▖ ▗▄▄▖▗▖  ▗▖ ▗▄▄▖
+# ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌    ▐▌   ▐▌ ▐▌▐▛▚▞▜▌▐▌ ▐▌▐▌ ▐▌  █  ▐▌   ▐▛▚▖▐▌▐▌   
+# ▐▛▀▜▌▐▛▀▘ ▐▌ ▐▌    ▐▌   ▐▛▀▜▌▐▌  ▐▌▐▛▀▘ ▐▛▀▜▌  █  ▐▌▝▜▌▐▌ ▝▜▌ ▝▀▚▖
+# ▐▌ ▐▌▐▌   ▝▚▄▞▘    ▝▚▄▄▖▐▌ ▐▌▐▌  ▐▌▐▌   ▐▌ ▐▌▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
 
 ## Per trainer experiments
 all-opt: opt-bptt opt-decolle opt-eprop opt-esd_rtrl opt-etlp opt-ostl opt-osttp opt-ottt opt-stsf opt-tp
@@ -430,7 +442,10 @@ opt-tp: hpc-mkdir
 
 
 
-# ── Cleanup ─────────────────────────────────────────────────────────────────
+#  ▗▄▄▖▗▖   ▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖▗▖ ▗▖▗▄▄▖ 
+# ▐▌   ▐▌   ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌ ▐▌▐▌ ▐▌
+# ▐▌   ▐▌   ▐▛▀▀▘▐▛▀▜▌▐▌ ▝▜▌▐▌ ▐▌▐▛▀▘ 
+# ▝▚▄▄▖▐▙▄▄▖▐▙▄▄▖▐▌ ▐▌▐▌  ▐▌▝▚▄▞▘▐▌   
 
 ## Remove all experiment outputs and clear HPC SLURM logs
 clean: clean-hpc

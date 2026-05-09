@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-bench
+#SBATCH --job-name=bench
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

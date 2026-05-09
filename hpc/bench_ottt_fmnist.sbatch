@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-ottt-fmnist
+#SBATCH --job-name=ottt-fmnist
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

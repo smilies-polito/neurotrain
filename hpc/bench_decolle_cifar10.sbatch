@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=snn-decolle-cifar10
+#SBATCH --job-name=decolle-cifar10
 #SBATCH --partition=serics_gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
