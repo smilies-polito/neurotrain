@@ -5,13 +5,13 @@ models:
 datasets:
 - DVSCifar10
 runtime:
-  epochs: 5
+  epochs: 20
   device: cuda
   seed: 42
   neurobench: false
 opt: true
 optuna:
-  n_trials: 50
+  n_trials: 15
   direction: maximize
   sampler: tpe
   pruner: null

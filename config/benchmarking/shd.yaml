@@ -18,7 +18,7 @@ runtime:
 opt: true
 
 optuna:
-  n_trials: 20          # number of trials per experiment
+  n_trials: 15          # number of trials per experiment
   direction: maximize   # maximize | minimize
   sampler: tpe          # tpe | random | cmaes
   pruner: null          # median | hyperband | null (no pruning)
