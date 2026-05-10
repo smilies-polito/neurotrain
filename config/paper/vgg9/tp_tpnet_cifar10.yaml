@@ -8,7 +8,8 @@ tp_tpnet_cifar10:
     - rec
     - conv
     - vgg9
-    lr: 0.00017648250675988955
+    # lr: 0.00017648250675988955
+    lr: 2.941375112664826e-05  # original / T=6 (direct coding: T per-timestep Adam steps amplify effective lr by T)
     alpha: 0.5791396725266317
     beta: 0.6722544985518655
     vth: 0.36326210131781284

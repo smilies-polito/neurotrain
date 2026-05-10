@@ -9,7 +9,8 @@ bptt_otttnet_svhn:
     - conv
     lr: 4.207988669606632e-05
     loss_type: ce_rate
-    grad_clip: null
+    # grad_clip: null
+    grad_clip: 1.0
     use_optimizer: true
   model:
     name: vgg9

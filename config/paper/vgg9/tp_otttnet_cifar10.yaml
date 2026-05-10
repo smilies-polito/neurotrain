@@ -8,7 +8,8 @@ tp_otttnet_cifar10:
     - rec
     - conv
     - vgg9
-    lr: 0.00014867167179068166
+    # lr: 0.00014867167179068166
+    lr: 2.477861196511361e-05  # original / T=6 (direct coding: T per-timestep Adam steps amplify effective lr by T)
     alpha: 0.4174410757039846
     beta: 0.563950957910326
     vth: 0.4737083077110927

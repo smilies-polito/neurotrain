@@ -8,7 +8,8 @@ tp_tpnet_svhn:
     - rec
     - conv
     - vgg9
-    lr: 4.768785415482607e-05
+    # lr: 4.768785415482607e-05
+    lr: 4.768785415482607e-06  # original / T=10 (direct coding: T per-timestep Adam steps amplify effective lr by T)
     alpha: 0.33598770838196546
     beta: 0.7571306514997965
     vth: 0.8183340223705389
