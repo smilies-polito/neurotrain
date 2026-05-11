@@ -6,11 +6,6 @@ T:
   min: 5
   max: 15
   step: 1
-seed:
-  value: 42
-  type: int
-  min: 1
-  max: 1000
 direct_coding: true
 pin_memory: false
 download: true

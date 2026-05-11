@@ -32,9 +32,9 @@ def experiment_dir(campaign_dir: Path, exp_name: str) -> Path:
 
 
 def save_experiment_config(exp_dir: Path, spec: ExperimentSpec) -> None:
-    """Write the resolved ExperimentSpec as config.yaml."""
+    """Write the resolved ExperimentSpec as config.yaml in --custom compatible format."""
     with open(exp_dir / "config.yaml", "w") as f:
-        yaml.dump(asdict(spec), f, default_flow_style=False, sort_keys=False)
+        yaml.dump({spec.name: asdict(spec)}, f, default_flow_style=False, sort_keys=False)
 
 
 def save_experiment_metrics(exp_dir: Path, metrics: dict) -> None:

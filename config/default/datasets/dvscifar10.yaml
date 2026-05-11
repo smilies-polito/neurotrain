@@ -6,11 +6,6 @@ T:
   min: 5
   max: 20
   step: 1
-seed:
-  value: 42
-  type: int
-  min: 1
-  max: 1000
 pin_memory: false
 num_workers: 4
 train_fraction: 0.9
