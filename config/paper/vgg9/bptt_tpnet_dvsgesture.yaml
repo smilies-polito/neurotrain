@@ -59,7 +59,7 @@ bptt_tpnet_dvsgesture:
     download: true
     use_cache: true
   runtime:
-    epochs: 200
+    epochs: 100
     device: cuda
     seed: 42
     log_level: INFO

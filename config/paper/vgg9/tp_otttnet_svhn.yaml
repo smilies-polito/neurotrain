@@ -72,7 +72,7 @@ tp_otttnet_svhn:
     data_root: null
     num_workers: 4
   runtime:
-    epochs: 200
+    epochs: 100
     device: cuda
     seed: 42
     log_level: INFO
