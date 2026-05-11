@@ -1,0 +1,53 @@
+name: tp_fc_snn_svhn_t4
+opt: false
+trainer:
+  name: tp
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  lr: 0.001553544580758846
+  alpha: 0.09366338795679786
+  beta: 0.7976969774317049
+  vth: 0.5046289484247498
+  surrogate_scale: 1.0
+  train_target_propagator: true
+  use_optimizer: true
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.8123598026672032
+  threshold: 1.4488855372533331
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: tp
+dataset:
+  name: svhn
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 966
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

@@ -1,0 +1,51 @@
+name: tp_r_snn_nmnist_t3
+opt: false
+trainer:
+  name: tp
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  lr: 3.280829084730047e-05
+  alpha: 0.324615969623105
+  beta: 0.6795173032139089
+  vth: 0.8472839810604431
+  surrogate_scale: 1.0
+  train_target_propagator: true
+  use_optimizer: true
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 2312
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.9491834326646726
+  threshold: 0.6996737821583597
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: tp
+dataset:
+  name: nmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 515
+  pin_memory: false
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

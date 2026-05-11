@@ -1,0 +1,50 @@
+name: tp_r_snn_shd_t7
+opt: false
+trainer:
+  name: tp
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  lr: 4.8280425192712865e-05
+  alpha: 0.961409550098685
+  beta: 0.8798150834469461
+  vth: 1.427398729877027
+  surrogate_scale: 1.0
+  train_target_propagator: true
+  use_optimizer: true
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 700
+  hidden_sizes:
+  - 512
+  num_classes: 20
+  beta: 0.9700171965812533
+  threshold: 1.097899978811085
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: tp
+dataset:
+  name: shd
+  supported_net_types:
+  - fc
+  - rec
+  T: 100
+  seed: 922
+  pin_memory: true
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

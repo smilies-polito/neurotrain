@@ -1,0 +1,54 @@
+name: tp_fc_snn_dvscifar10_t4
+opt: false
+trainer:
+  name: tp
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  lr: 0.001553544580758846
+  alpha: 0.09366338795679786
+  beta: 0.7976969774317049
+  vth: 0.5046289484247498
+  surrogate_scale: 1.0
+  train_target_propagator: true
+  use_optimizer: true
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 32768
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.8123598026672032
+  threshold: 1.4488855372533331
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: tp
+dataset:
+  name: dvscifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 966
+  pin_memory: false
+  num_workers: 4
+  train_fraction: 0.9
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}
