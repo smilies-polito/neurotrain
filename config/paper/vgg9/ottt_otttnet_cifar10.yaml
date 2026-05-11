@@ -11,8 +11,8 @@ ottt_otttnet_cifar10:
     lr: 0.0020906970316613652
     online_updates: true
     loss_lambda: 0.06237820535466996
-    grad_clip: null
-    sanitize_grads: null
+    grad_clip: 0.2
+    sanitize_grads: true
   model:
     name: vgg9
     net_type: vgg9

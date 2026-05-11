@@ -124,6 +124,7 @@ This document contains comprehensive results and analysis for VGG9 models traine
 **Comments:**
 
 The run is reaching good accuracies for us of around **93%** but is then suddendly dying reverting to random accuracy that resembles a network that is not spiking.
+I tried doing lr/6 and it stayed stable for longer but then loss became NaN.
 
 ---
 

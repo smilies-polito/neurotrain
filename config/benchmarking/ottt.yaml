@@ -11,6 +11,10 @@ datasets:
   - FashionMNIST
   - CIFAR10
   - SVHN
+  - NMNIST
+  - DVSGesture
+  - DVSCIFAR10
+  - SHD
 
 runtime:
   epochs: 20

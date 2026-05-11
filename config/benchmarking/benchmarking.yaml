@@ -1,4 +1,7 @@
 trainers:
+  - bptt
+  - decolle
+  - eprop
   - esd_rtrl
 
 models:
@@ -25,7 +28,7 @@ runtime:
 opt: true
 
 optuna:
-  n_trials: 15
+  n_trials: 10
   direction: maximize
   sampler: tpe
   pruner: null

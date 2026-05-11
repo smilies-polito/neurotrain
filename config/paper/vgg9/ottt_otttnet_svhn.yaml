@@ -11,8 +11,8 @@ ottt_otttnet_svhn:
     lr: 0.04160439645256607
     online_updates: true
     loss_lambda: 0.00011916299962955152
-    grad_clip: null
-    sanitize_grads: null
+    grad_clip: 0.2
+    sanitize_grads: true
   model:
     name: vgg9
     net_type: vgg9
