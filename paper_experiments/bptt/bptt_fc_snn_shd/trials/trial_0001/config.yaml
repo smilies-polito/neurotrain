@@ -1,0 +1,46 @@
+name: bptt_fc_snn_shd_t1
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 4.207988669606632e-05
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 700
+  hidden_sizes:
+  - 512
+  num_classes: 20
+  beta: 0.8296389588638785
+  threshold: 0.5580836121681995
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: bptt
+dataset:
+  name: shd
+  supported_net_types:
+  - fc
+  - rec
+  T: 100
+  seed: 867
+  pin_memory: true
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

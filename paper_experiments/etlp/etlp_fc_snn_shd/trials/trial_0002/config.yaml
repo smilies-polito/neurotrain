@@ -1,0 +1,51 @@
+name: etlp_fc_snn_shd_t2
+opt: false
+trainer:
+  name: etlp
+  supported_net_types:
+  - fc
+  - rec
+  lr: 0.021368329072358756
+  surrogate_scale: 0.29110519961044856
+  weight_l1: 0.0
+  weight_l2: 0.0
+  update_rate_hz: 1000.0
+  dt_ms: 1.0
+  feedback_distribution: normal
+  feedback_scale: 0.4454674376934912
+  use_optimizer: false
+  grad_clip: 0.0
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 700
+  hidden_sizes:
+  - 512
+  num_classes: 20
+  beta: 0.8348468568721524
+  threshold: 0.8042422429595377
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: etlp
+dataset:
+  name: shd
+  supported_net_types:
+  - fc
+  - rec
+  T: 100
+  seed: 525
+  pin_memory: true
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

@@ -1,0 +1,54 @@
+name: etlp_r_snn_dvscifar10_t6
+opt: false
+trainer:
+  name: etlp
+  supported_net_types:
+  - fc
+  - rec
+  lr: 0.00016536937182824412
+  surrogate_scale: 0.1879049026057455
+  weight_l1: 0.0
+  weight_l2: 0.0
+  update_rate_hz: 1000.0
+  dt_ms: 1.0
+  feedback_distribution: normal
+  feedback_scale: 1.400042750373098
+  use_optimizer: false
+  grad_clip: 0.0
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 32768
+  hidden_sizes:
+  - 512
+  num_classes: 10
+  beta: 0.8836289738105243
+  threshold: 0.6220382348447788
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: etlp
+dataset:
+  name: dvscifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 496
+  pin_memory: false
+  num_workers: 4
+  train_fraction: 0.9
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

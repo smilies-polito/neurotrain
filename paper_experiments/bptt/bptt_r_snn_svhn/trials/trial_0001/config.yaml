@@ -1,0 +1,49 @@
+name: bptt_r_snn_svhn_t1
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 4.207988669606632e-05
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 512
+  - 256
+  num_classes: 10
+  beta: 0.8296389588638785
+  threshold: 0.5580836121681995
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: bptt
+dataset:
+  name: svhn
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 867
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

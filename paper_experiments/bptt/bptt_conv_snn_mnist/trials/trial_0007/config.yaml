@@ -1,0 +1,45 @@
+name: bptt_conv_snn_mnist_t7
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 0.00234238498471129
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: conv_snn
+  net_type: conv
+  in_shape:
+  - 1
+  - 28
+  - 28
+  num_classes: 10
+  beta: 0.8088255784167996
+  threshold: 1.1075448519014384
+  algorithm_name: bptt
+dataset:
+  name: mnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 171
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

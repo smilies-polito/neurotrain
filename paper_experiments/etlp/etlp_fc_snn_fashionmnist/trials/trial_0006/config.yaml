@@ -1,0 +1,52 @@
+name: etlp_fc_snn_fashionmnist_t6
+opt: false
+trainer:
+  name: etlp
+  supported_net_types:
+  - fc
+  - rec
+  lr: 0.00016536937182824412
+  surrogate_scale: 0.1879049026057455
+  weight_l1: 0.0
+  weight_l2: 0.0
+  update_rate_hz: 1000.0
+  dt_ms: 1.0
+  feedback_distribution: normal
+  feedback_scale: 1.400042750373098
+  use_optimizer: false
+  grad_clip: 0.0
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 800
+  num_classes: 10
+  beta: 0.8836289738105243
+  threshold: 0.6220382348447788
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: etlp
+dataset:
+  name: fashionmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 496
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

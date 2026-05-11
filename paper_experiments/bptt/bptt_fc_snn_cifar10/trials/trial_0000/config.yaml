@@ -1,0 +1,49 @@
+name: bptt_fc_snn_cifar10_t0
+opt: false
+trainer:
+  name: bptt
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 0.00031489116479568613
+  loss_type: ce_rate
+  grad_clip: null
+  use_optimizer: true
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.9806357182178841
+  threshold: 1.231993941811405
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: bptt
+dataset:
+  name: cifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 6
+  seed: 599
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

@@ -1,0 +1,43 @@
+name: stsf_fc_snn_fashionmnist_t7
+opt: false
+trainer:
+  name: stsf
+  supported_net_types:
+  - fc
+  lr: 0.00234238498471129
+  use_optimizer: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 800
+  num_classes: 10
+  beta: 0.8088255784167996
+  threshold: 1.1075448519014384
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: stsf
+dataset:
+  name: fashionmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 171
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

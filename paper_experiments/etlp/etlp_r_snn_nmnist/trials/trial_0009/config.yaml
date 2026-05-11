@@ -1,0 +1,52 @@
+name: etlp_r_snn_nmnist_t9
+opt: false
+trainer:
+  name: etlp
+  supported_net_types:
+  - fc
+  - rec
+  lr: 0.002463768595899745
+  surrogate_scale: 0.9296868115208051
+  weight_l1: 0.0
+  weight_l2: 0.0
+  update_rate_hz: 1000.0
+  dt_ms: 1.0
+  feedback_distribution: normal
+  feedback_scale: 0.2681357538986471
+  use_optimizer: false
+  grad_clip: 0.0
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 2312
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.8372367438596376
+  threshold: 0.5452272889105381
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: etlp
+dataset:
+  name: nmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 326
+  pin_memory: false
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

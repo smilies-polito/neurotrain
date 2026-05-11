@@ -1,0 +1,9 @@
+params:
+  dataset.seed: 525
+  model.beta: 0.8348468568721524
+  model.threshold: 0.8042422429595377
+  trainer.feedback_scale: 0.4454674376934912
+  trainer.lr: 0.021368329072358756
+  trainer.surrogate_scale: 0.29110519961044856
+trial: 2
+value: 0.9318
