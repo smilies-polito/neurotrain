@@ -1,0 +1,55 @@
+name: eprop_r_snn_fashionmnist_t0
+opt: false
+trainer:
+  name: eprop
+  supported_net_types:
+  - rec
+  lr: 0.00031489116479568613
+  gamma: 0.4802857225639665
+  dt: null
+  tau_mem: null
+  tau_out: null
+  threshold: null
+  lr_layer_norm:
+  - 1.0
+  - 1.0
+  - 1.0
+  use_optimizer: true
+  update_last: false
+  update_every: 1
+  seq_batch_size: 1
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.9390788489441669
+  threshold: 1.0986584841970366
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: eprop
+dataset:
+  name: fashionmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 157
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

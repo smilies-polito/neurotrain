@@ -81,6 +81,14 @@ Previous table:
 ### EPROP
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
+Final Results on HPO with 20 epochs and 15 trials:
+| Network |   MNIST   |  F-MNIST  | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 |   SHD    |
+| ------- | :-------: | :-------: | :-----: | :--: | :----: | :------: | :--------: | :------: |
+| FC      |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
+| RC      | 0.9783 🟢 | 0.8550 🟢 |    🔴    |  🔴   |   🔴    |    🔴     |     🔴      | 0.6913 🟢 |
+| Conv    |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
+
+Previous table:
 | Network |  MNIST   | F-MNIST  | CIFAR10 |  SVHN  |  NMNIST  | DVSGest. | DVSCifar10 | SHD |
 | ------- | :------: | :------: | :-----: | :----: | :------: | :------: | :--------: | :-: |
 | FC      |    ⚫     |    ⚫     |    ⚫    |   ⚫    |    ⚫     |    ⚫     |     ⚫      |  ⚫  |
