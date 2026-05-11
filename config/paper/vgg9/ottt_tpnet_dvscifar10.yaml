@@ -62,7 +62,7 @@ ottt_tpnet_dvscifar10:
     num_workers: 4
     use_cache: true
   runtime:
-    epochs: 200
+    epochs: 100
     device: cuda
     seed: 42
     log_level: INFO
