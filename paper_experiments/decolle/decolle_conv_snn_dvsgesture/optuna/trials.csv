@@ -1,0 +1,2 @@
+trial,value,state,dataset.seed,model.beta,model.threshold,trainer.delta,trainer.g_scale,trainer.lr,trainer.surrogate_scale
+0,,FAIL,59,0.829643541684063,0.6559945203362026,0.6387926357773329,1.9063571821788408,0.00031489116479568613,14.907884894416696

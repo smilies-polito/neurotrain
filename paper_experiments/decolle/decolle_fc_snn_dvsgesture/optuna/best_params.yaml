@@ -1,0 +1,10 @@
+params:
+  dataset.seed: 496
+  model.beta: 0.8836289738105243
+  model.threshold: 0.6220382348447788
+  trainer.delta: 0.7158097238609412
+  trainer.g_scale: 0.6787661614294043
+  trainer.lr: 0.01712337597316398
+  trainer.surrogate_scale: 2.8557701661212933
+trial: 5
+value: 0.7083333333333334

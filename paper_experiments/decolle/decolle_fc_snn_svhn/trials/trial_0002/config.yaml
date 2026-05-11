@@ -1,0 +1,55 @@
+name: decolle_fc_snn_svhn_t2
+opt: false
+trainer:
+  name: decolle
+  supported_net_types:
+  - fc
+  - conv
+  lr: 5.3370327626039544e-05
+  g_scale: 0.4484685687215243
+  burn_in: 0
+  surrogate: sigmoid
+  surrogate_scale: 6.780602616231217
+  delta: 0.5722807884690141
+  h_with_noise: false
+  omega_std: 0.5
+  lambda_u_upper: 0.0
+  lambda_u_lower: 0.0
+  lr_scale_per_layer: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.882069553542002
+  threshold: 0.7912291401980419
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: decolle
+dataset:
+  name: svhn
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 612
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

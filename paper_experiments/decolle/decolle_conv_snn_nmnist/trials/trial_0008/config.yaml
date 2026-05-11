@@ -1,0 +1,52 @@
+name: decolle_conv_snn_nmnist_t8
+opt: false
+trainer:
+  name: decolle
+  supported_net_types:
+  - fc
+  - conv
+  lr: 2.259279742015695e-05
+  g_scale: 0.47236743859637587
+  burn_in: 0
+  surrogate: sigmoid
+  surrogate_scale: 1.8593184893002233
+  delta: 0.39279729768693794
+  h_with_noise: false
+  omega_std: 0.5
+  lambda_u_upper: 0.0
+  lambda_u_lower: 0.0
+  lr_scale_per_layer: false
+model:
+  name: conv_snn
+  net_type: conv
+  in_shape:
+  - 2
+  - 34
+  - 34
+  num_classes: 10
+  beta: 0.8738486850410017
+  threshold: 0.7713490317738959
+  out_integrator: true
+  algorithm_name: decolle
+dataset:
+  name: nmnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 829
+  pin_memory: false
+  num_workers: 4
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

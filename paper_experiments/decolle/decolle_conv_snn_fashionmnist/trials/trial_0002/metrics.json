@@ -1,0 +1,133 @@
+{
+  "name": "decolle_conv_snn_fashionmnist_t2",
+  "trainer": "decolle",
+  "model": "conv_snn",
+  "dataset": "fashionmnist",
+  "test_accuracy": 0.649,
+  "train_loss": 0.47178508927027385,
+  "elapsed_s": 443.50833535194397,
+  "epochs": 20,
+  "epoch_metrics": [
+    {
+      "epoch": 1,
+      "train_loss": 0.8013391104062398,
+      "train_accuracy": 0.14098333333333332,
+      "test_accuracy": 0.1911
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.7726957143147787,
+      "train_accuracy": 0.2618666666666667,
+      "test_accuracy": 0.322
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.7247409404118855,
+      "train_accuracy": 0.4114833333333333,
+      "test_accuracy": 0.4553
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.6758713914235432,
+      "train_accuracy": 0.4981833333333333,
+      "test_accuracy": 0.5148
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.6344941694895426,
+      "train_accuracy": 0.5399666666666667,
+      "test_accuracy": 0.5549
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.6037406040509542,
+      "train_accuracy": 0.5683166666666667,
+      "test_accuracy": 0.5734
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.5814071526209513,
+      "train_accuracy": 0.58555,
+      "test_accuracy": 0.5922
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.5629925051371256,
+      "train_accuracy": 0.5962833333333334,
+      "test_accuracy": 0.6031
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.5480703219095866,
+      "train_accuracy": 0.6068666666666667,
+      "test_accuracy": 0.6072
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.5354204219818115,
+      "train_accuracy": 0.61325,
+      "test_accuracy": 0.6161
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.5255409313201904,
+      "train_accuracy": 0.6178,
+      "test_accuracy": 0.6184
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.5185519442558288,
+      "train_accuracy": 0.6256,
+      "test_accuracy": 0.627
+    },
+    {
+      "epoch": 13,
+      "train_loss": 0.5106317419687907,
+      "train_accuracy": 0.6303833333333333,
+      "test_accuracy": 0.6264
+    },
+    {
+      "epoch": 14,
+      "train_loss": 0.5035268757502238,
+      "train_accuracy": 0.6335833333333334,
+      "test_accuracy": 0.6324
+    },
+    {
+      "epoch": 15,
+      "train_loss": 0.4969778698603312,
+      "train_accuracy": 0.6380333333333333,
+      "test_accuracy": 0.6366
+    },
+    {
+      "epoch": 16,
+      "train_loss": 0.49084048261642454,
+      "train_accuracy": 0.6420666666666667,
+      "test_accuracy": 0.6371
+    },
+    {
+      "epoch": 17,
+      "train_loss": 0.48594809028307595,
+      "train_accuracy": 0.6457,
+      "test_accuracy": 0.6417
+    },
+    {
+      "epoch": 18,
+      "train_loss": 0.48107289191881814,
+      "train_accuracy": 0.6498,
+      "test_accuracy": 0.6461
+    },
+    {
+      "epoch": 19,
+      "train_loss": 0.4768744699637095,
+      "train_accuracy": 0.6542833333333333,
+      "test_accuracy": 0.6503
+    },
+    {
+      "epoch": 20,
+      "train_loss": 0.47178508927027385,
+      "train_accuracy": 0.6584333333333333,
+      "test_accuracy": 0.649
+    }
+  ],
+  "neurobench": {}
+}

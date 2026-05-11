@@ -60,6 +60,14 @@ Final Results on HPO with 20 epochs and 15 trials:
 ### DECOLLE
 Commit: `968f810153ca27300c9347a7be933628302bf732`
 
+Final Results on HPO with 20 epochs and 15 trials:
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. |  DVSCifar10  | SHD |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :----------: | :-: |
+| FC      | 0.957 🟢 | 0.801 🟢 | 0.399 🟢 | 0.749 🟢 | 0.931 🟢 | 0.708 🟢 |   0.361 🟢   | 0.375 🟢  |
+| RC      |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |      ⚫       |  ⚫  |
+| Conv    | 0.971 🟡 | 0.783 🟢 | 0.352 🟢 | 0.559 🟢 |   🔴     |   🔴     |      🔴       |  ⚫  |
+
+Previous table:
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. |  DVSCifar10  | SHD |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :----------: | :-: |
 | FC      | 0.913 🟢 | 0.724 🟢 | 0.381 🟢 | 0.744 🟢 | 0.919 🟢 | 0.739 🟢 |   0.360 🟢   | 🔵  |

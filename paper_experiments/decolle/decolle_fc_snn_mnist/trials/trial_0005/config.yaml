@@ -1,0 +1,53 @@
+name: decolle_fc_snn_mnist_t5
+opt: false
+trainer:
+  name: decolle
+  supported_net_types:
+  - fc
+  - conv
+  lr: 0.01712337597316398
+  g_scale: 0.6787661614294043
+  burn_in: 0
+  surrogate: sigmoid
+  surrogate_scale: 2.8557701661212933
+  delta: 0.7158097238609412
+  h_with_noise: false
+  omega_std: 0.5
+  lambda_u_upper: 0.0
+  lambda_u_lower: 0.0
+  lr_scale_per_layer: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.8836289738105243
+  threshold: 0.6220382348447788
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: decolle
+dataset:
+  name: mnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 496
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}
