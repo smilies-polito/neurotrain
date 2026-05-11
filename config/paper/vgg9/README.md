@@ -4,6 +4,39 @@ This document contains comprehensive results and analysis for VGG9 models traine
 
 ---
 
+## Experiment Status
+
+| Algorithm | Network  | Dataset      | Config file                         | State              |
+|-----------|----------|--------------|-------------------------------------|--------------------|
+| BPTT      | OTTTNet  | CIFAR-10     | `bptt_otttnet_cifar10.yaml`         | 🔵 DEFAULT         |
+| BPTT      | OTTTNet  | DVS-CIFAR10  | `bptt_otttnet_dvscifar10.yaml`      | 🔵 DEFAULT         |
+| BPTT      | OTTTNet  | DVS-Gesture  | `bptt_otttnet_dvsgesture.yaml`      | 🔵 DEFAULT         |
+| BPTT      | OTTTNet  | SVHN         | `bptt_otttnet_svhn.yaml`            | 🟡 HPO RESULT      |
+| BPTT      | TPNet    | CIFAR-10     | `bptt_tpnet_cifar10.yaml`           | 🟡 HPO RESULT      |
+| BPTT      | TPNet    | DVS-CIFAR10  | `bptt_tpnet_dvscifar10.yaml`        | 🟡 HPO RESULT      |
+| BPTT      | TPNet    | DVS-Gesture  | `bptt_tpnet_dvsgesture.yaml`        | 🟡 HPO RESULT      |
+| BPTT      | TPNet    | SVHN         | `bptt_tpnet_svhn.yaml`              | 🟡 HPO RESULT      |
+| OTTT      | OTTTNet  | CIFAR-10     | `ottt_otttnet_cifar10.yaml`         | 🟡 HPO RESULT      |
+| OTTT      | OTTTNet  | DVS-CIFAR10  | `ottt_otttnet_dvscifar10.yaml`      | 🔵 DEFAULT         |
+| OTTT      | OTTTNet  | DVS-Gesture  | `ottt_otttnet_dvsgesture.yaml`      | 🔵 DEFAULT         |
+| OTTT      | OTTTNet  | SVHN         | `ottt_otttnet_svhn.yaml`            | 🟡 HPO RESULT      |
+| OTTT      | TPNet    | CIFAR-10     | `ottt_tpnet_cifar10.yaml`           | 🟡 HPO RESULT      |
+| OTTT      | TPNet    | DVS-CIFAR10  | `ottt_tpnet_dvscifar10.yaml`        | 🔵 DEFAULT         |
+| OTTT      | TPNet    | DVS-Gesture  | `ottt_tpnet_dvsgesture.yaml`        | 🔵 DEFAULT         |
+| OTTT      | TPNet    | SVHN         | `ottt_tpnet_svhn.yaml`              | 🔵 DEFAULT         |
+| TP        | OTTTNet  | CIFAR-10     | `tp_otttnet_cifar10.yaml`           | 🟡 HPO RESULT      |
+| TP        | OTTTNet  | DVS-CIFAR10  | `tp_otttnet_dvscifar10.yaml`        | 🟡 HPO RESULT      |
+| TP        | OTTTNet  | DVS-Gesture  | `tp_otttnet_dvsgesture.yaml`        | 🟡 HPO RESULT      |
+| TP        | OTTTNet  | SVHN         | `tp_otttnet_svhn.yaml`              | 🟡 HPO RESULT      |
+| TP        | TPNet    | CIFAR-10     | `tp_tpnet_cifar10.yaml`             | 🟡 HPO RESULT      |
+| TP        | TPNet    | DVS-CIFAR10  | `tp_tpnet_dvscifar10.yaml`          | 🟡 HPO RESULT      |
+| TP        | TPNet    | DVS-Gesture  | `tp_tpnet_dvsgesture.yaml`          | 🟡 HPO RESULT      |
+| TP        | TPNet    | SVHN         | `tp_tpnet_svhn.yaml`                | 🟡 HPO RESULT      |
+
+> **State legend** — 🔵 DEFAULT: base hyperparameters, no HPO yet · 🟡 HPO RESULT: Optuna-tuned hyperparameters · 🟢 DONE: final result accepted for the paper
+
+---
+
 ## Table of Contents
 
 - [BPTT](#bptt)

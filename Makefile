@@ -162,21 +162,20 @@ paper-vgg9-ottt-otttnet-dvsgesture-hpc: hpc-mkdir
 paper-vgg9-ottt-otttnet-dvscifar10-hpc: hpc-mkdir
 	sbatch hpc/paper_vgg9_ottt_otttnet_dvscifar10.sbatch
 
-## Submit all 15 ready paper VGG9 jobs at once to HPC
-## To add the 9 pending experiments, fill their configs and uncomment the lines below
+## Submit all 24 paper VGG9 jobs at once to HPC
 paper-vgg9-all-hpc: hpc-mkdir \
-	paper-vgg9-bptt-tpnet-cifar10-hpc paper-vgg9-bptt-tpnet-dvsgesture-hpc \
-	paper-vgg9-bptt-tpnet-svhn-hpc paper-vgg9-bptt-otttnet-svhn-hpc \
+	paper-vgg9-bptt-tpnet-cifar10-hpc paper-vgg9-bptt-tpnet-dvscifar10-hpc \
+	paper-vgg9-bptt-tpnet-dvsgesture-hpc paper-vgg9-bptt-tpnet-svhn-hpc \
+	paper-vgg9-bptt-otttnet-cifar10-hpc paper-vgg9-bptt-otttnet-dvscifar10-hpc \
+	paper-vgg9-bptt-otttnet-dvsgesture-hpc paper-vgg9-bptt-otttnet-svhn-hpc \
 	paper-vgg9-tp-tpnet-cifar10-hpc paper-vgg9-tp-tpnet-dvscifar10-hpc \
 	paper-vgg9-tp-tpnet-dvsgesture-hpc paper-vgg9-tp-tpnet-svhn-hpc \
 	paper-vgg9-tp-otttnet-cifar10-hpc paper-vgg9-tp-otttnet-dvscifar10-hpc \
 	paper-vgg9-tp-otttnet-dvsgesture-hpc paper-vgg9-tp-otttnet-svhn-hpc \
-	paper-vgg9-ottt-tpnet-cifar10-hpc paper-vgg9-ottt-otttnet-cifar10-hpc \
-	paper-vgg9-ottt-otttnet-svhn-hpc
-#	paper-vgg9-bptt-tpnet-dvscifar10-hpc \
-#	paper-vgg9-bptt-otttnet-cifar10-hpc paper-vgg9-bptt-otttnet-dvsgesture-hpc paper-vgg9-bptt-otttnet-dvscifar10-hpc \
-#	paper-vgg9-ottt-tpnet-svhn-hpc paper-vgg9-ottt-tpnet-dvsgesture-hpc paper-vgg9-ottt-tpnet-dvscifar10-hpc \
-#	paper-vgg9-ottt-otttnet-dvsgesture-hpc paper-vgg9-ottt-otttnet-dvscifar10-hpc
+	paper-vgg9-ottt-tpnet-cifar10-hpc paper-vgg9-ottt-tpnet-dvscifar10-hpc \
+	paper-vgg9-ottt-tpnet-dvsgesture-hpc paper-vgg9-ottt-tpnet-svhn-hpc \
+	paper-vgg9-ottt-otttnet-cifar10-hpc paper-vgg9-ottt-otttnet-dvscifar10-hpc \
+	paper-vgg9-ottt-otttnet-dvsgesture-hpc paper-vgg9-ottt-otttnet-svhn-hpc
 
 
 

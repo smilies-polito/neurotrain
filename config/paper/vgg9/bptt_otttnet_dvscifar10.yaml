@@ -1,1 +1,68 @@
-# TODO: fill with best HPO hyperparameters before running
+# DEFAULT — fill with HPO results before final run
+bptt_otttnet_dvscifar10:
+  name: bptt_otttnet_dvscifar10
+  opt: false
+  trainer:
+    name: bptt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.001
+    loss_type: ce_rate
+    grad_clip: null
+    use_optimizer: true
+  model:
+    name: vgg9
+    net_type: vgg9
+    in_channels: 2
+    num_classes: 10
+    input_shape:
+    - 2
+    - 128
+    - 128
+    head_type: global_linear
+    use_tp_pool: false
+    channels:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
+    - 512
+    - 512
+    - 512
+    beta: 0.5
+    threshold: 1.0
+    conv_gain: 1.0
+    scale_after_lif: 2.74
+    surrogate_kind: sigmoid
+    surrogate_slope: 4.0
+    pool_after_blocks:
+    - 2
+    - 4
+    - 6
+    algorithm_name: bptt
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    seed: 42
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    use_cache: true
+  runtime:
+    epochs: 200
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: true
+    batch_size: 32
+    progress: false
+  optuna: {}
