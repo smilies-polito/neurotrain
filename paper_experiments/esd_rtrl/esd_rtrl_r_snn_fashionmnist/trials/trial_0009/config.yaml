@@ -1,53 +1,53 @@
-name: esd_rtrl_r_snn_fashionmnist_t9
-opt: false
-trainer:
-  name: esd_rtrl
-  supported_net_types:
-  - fc
-  - rec
-  - conv
-  lr: 0.002463768595899745
-  use_optimizer: true
-  etrace_decay: 0.9517183751613272
-  gamma: 0.1707940016415356
-  lr_layer_norm:
-  - 1.0
-  - 1.0
-  - 1.0
-  detach_state_each_step: true
-  debug_unused_learning_signals: false
-model:
-  name: r_snn
-  net_type: rec
-  in_shape:
-  - 784
-  hidden_sizes:
-  - 256
-  num_classes: 10
-  beta: 0.8372367438596376
-  threshold: 0.5452272889105381
-  reset_mechanism: subtract
-  out_integrator: true
-  algorithm_name: esd_rtrl
-dataset:
-  name: fashionmnist
-  supported_net_types:
-  - fc
-  - rec
-  - conv
-  T: 10
-  seed: 326
-  pin_memory: false
-  download: true
-  data_root: null
-  num_workers: 4
-  direct_coding: false
-runtime:
-  epochs: 20
-  device: cuda
-  seed: 42
-  log_level: INFO
-  neurobench: false
-  batch_size: 256
-  progress: true
-optuna: {}
+esd_rtrl_r_snn_fashionmnist_t9:
+  name: esd_rtrl_r_snn_fashionmnist_t9
+  opt: false
+  trainer:
+    name: esd_rtrl
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.004467752817973905
+    use_optimizer: true
+    etrace_decay: 0.6527384272838114
+    gamma: 0.5160544169422486
+    lr_layer_norm:
+    - 1.0
+    - 1.0
+    - 1.0
+    detach_state_each_step: true
+    debug_unused_learning_signals: false
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 256
+    num_classes: 10
+    beta: 0.9038749530752231
+    threshold: 0.684854455525527
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: esd_rtrl
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: false
+  optuna: {}

@@ -1,0 +1,47 @@
+ottt_conv_snn_mnist_t0:
+  name: ottt_conv_snn_mnist_t0
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.002428916946974888
+    online_updates: true
+    loss_lambda: 0.3285970816964244
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 1
+    - 28
+    - 28
+    num_classes: 10
+    beta: 0.9390788489441669
+    threshold: 1.0986584841970366
+    algorithm_name: ottt
+  dataset:
+    name: mnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

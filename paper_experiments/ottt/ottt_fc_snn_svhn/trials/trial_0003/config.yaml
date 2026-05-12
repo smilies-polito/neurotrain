@@ -1,0 +1,51 @@
+ottt_fc_snn_svhn_t3:
+  name: ottt_fc_snn_svhn_t3
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.11999975480350802
+    online_updates: true
+    loss_lambda: 0.0006101491367302714
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8345467437693491
+    threshold: 0.6834045098534338
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ottt
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

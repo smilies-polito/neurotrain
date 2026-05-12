@@ -1,0 +1,7 @@
+params:
+  model.beta: 0.8379380186100884
+  model.threshold: 1.0142344384136117
+  trainer.loss_lambda: 0.08023102291340051
+  trainer.lr: 0.004863951003835903
+trial: 6
+value: 0.357

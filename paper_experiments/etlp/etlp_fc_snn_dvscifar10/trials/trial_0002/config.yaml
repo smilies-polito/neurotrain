@@ -1,0 +1,55 @@
+etlp_fc_snn_dvscifar10_t2:
+  name: etlp_fc_snn_dvscifar10_t2
+  opt: false
+  trainer:
+    name: etlp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 1.2087541473056957e-05
+    surrogate_scale: 0.9729188669457949
+    weight_l1: 0.0
+    weight_l2: 0.0
+    update_rate_hz: 1000.0
+    dt_ms: 1.0
+    feedback_distribution: normal
+    feedback_scale: 1.6816410175208014
+    use_optimizer: false
+    grad_clip: 0.0
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8403444310288725
+    threshold: 0.6818249672071006
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: etlp
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 64
+    progress: false
+  optuna: {}

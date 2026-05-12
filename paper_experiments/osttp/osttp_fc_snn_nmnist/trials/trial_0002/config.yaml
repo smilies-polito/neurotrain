@@ -1,0 +1,49 @@
+osttp_fc_snn_nmnist_t2:
+  name: osttp_fc_snn_nmnist_t2
+  opt: false
+  trainer:
+    name: osttp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.002537815508265664
+    pseudo: tanh
+    output_loss: mse
+    feedback_scale: 1.4453378978124864
+    feedback_seed: 42
+    grad_clip: 0.0
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 2312
+    hidden_sizes:
+    - 512
+    num_classes: 10
+    beta: 0.8039110539162025
+    threshold: 1.4699098521619942
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: osttp
+  dataset:
+    name: nmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

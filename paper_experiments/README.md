@@ -1,7 +1,8 @@
 # Paper Experiments — Final Results
 
-This file collects the results reported on the paper. To showcase the capabilities of NeuroTrain the results have been obtained with an **HPO with 20 epochs and 15 trials** for every trainer
+This file collects the results reported on the paper. To showcase the capabilities of NeuroTrain the results have been obtained with an **HPO with 20 epochs, batch size 256 and 15 trials** for every trainer
 benchmarked in the paper. Some results have been obtained with a different configuration that is specified in the noted.
+The ranges and default parameters are stored in the `configs/default` folder. Small deviations from the default configuration are noted in the table footnotes. The results are reported as the final test accuracy obtained with the best hyperparameters found in the HPO.
 
 ---
 
@@ -32,6 +33,8 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 
 ## BPTT
 
+All the results here have been obtained with the default campaign.
+
 | Network |   MNIST  | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 | SHD |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :-: |
 | FC      | 0.978 🟢 | 0.837 🟢 | 0.359 🟢 | 0.536 🟢 | 0.968 🟢 | 0.689 🟢 |  0.337 🟢  | 0.496 🟢 |
@@ -46,7 +49,9 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
 | FC      | 0.957 🟢 | 0.801 🟢 | 0.399 🟢 | 0.749 🟢 | 0.931 🟢 | 0.708 🟢 |  0.361 🟢  | 0.375 🟢 |
 | RC      |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |     ⚫      |    ⚫     |
-| Conv    | 0.971 🟢 | 0.783 🟢 | 0.352 🟢 | 0.559 🟢 | 0.955 🟢 | 0.784 🟢 | 0.394 🟢 |    ⚫     |
+| Conv    | 0.971 🟢 | 0.783 🟢 | 0.352 🟢 | 0.559 🟢 | 0.955 🟢 | 0.784 🟢 [1] | 0.394 🟢 [1] |    ⚫     |
+
+1. Results obtained with a lower batch size of 64 due to GPU memory constraints.
 
 ---
 
@@ -55,11 +60,11 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 | Network |   MNIST   |  F-MNIST  | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :-------: | :-------: | :-----: | :--: | :----: | :------: | :--------: | :------: |
 | FC      |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
-| RC      | 0.9783 🟢 | 0.8550 🟢 |    🔴    |  🔴   |   🔴    |    🔴     |     🔴      | 0.6913 🟢 |
+| RC      | 0.9783 🟢 | 0.8550 🟢 | 0.425 🟢 [1] |0.596 🟢 [1] | 0.960 🟢 [1] |    🔴     |     🔴      | 0.6913 🟢 |
 | Conv    |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
 
-> Only RC results for MNIST, F-MNIST and SHD have been collected so far.
-> Remaining dataset / architecture combinations are to be run.
+1. For a fair comparison these results have been obtained with 512 hidden units instead of 256 ran in a different campaign since the framework doesn't support different default configs per trainer in a benchmarking campaign but it is planned to be added in the near future.
+
 
 ---
 
@@ -68,7 +73,7 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
 | FC      | 0.956 🟢 | 0.864 🟢 | 0.426 🟢 | 0.732 🟢 | 0.958 🟢 | 0.731 🟢 |  0.379 🟢  | 0.510 🟢 |
-| RC      |   🟡     |   🟡     |   🟡     |   🟡     |   🟡     |   🟡     |    🟡      |   🟡     |
+| RC      | 0.827 🟢 | 0.678 🟢 | 0.221 🟢 |   🔴     |   🔴     |   🔴     |    🔴      |   🔴     |
 | Conv    | 0.963 🟢 | 0.808 🟢 | 0.429 🟢 | 0.661 🟢 | 0.949 🟢 | 0.474 🟢 |  0.233 🟢  |    ⚫     |
 
 > RC accuracy is at chance level for all datasets — the r_snn model consistently fails to learn with ESD_RTRL (all values in the range 0.06–0.13).
@@ -79,9 +84,11 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
-| FC      | 0.932 🟢 | 0.822 🟢 | 0.249 🟢 | 0.361 🟢 | 0.888 🟢 |   🔴     |     🔴     | 0.260 🟢 |
-| RC      | 0.913 🟢 | 0.807 🟢 | 0.261 🟢 | 0.308 🟢 | 0.901 🟢 |   🔴     |  0.308 🟢  | 0.269 🟢 |
+| FC      | 0.932 🟢 | 0.822 🟢 | 0.249 🟢 | 0.361 🟢 | 0.888 🟢 | 0.636 🟢 [1] | 0.264 🟢 [1] | 0.260 🟢 |
+| RC      | 0.913 🟢 | 0.807 🟢 | 0.261 🟢 | 0.308 🟢 | 0.901 🟢 | 0.689 🟢 [1] | 0.308 🟢     | 0.269 🟢 |
 | Conv    |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |     ⚫      |    ⚫     |
+
+1. Results obtained with a lower batch size of 64 due to GPU memory constraints.
 
 ---
 
@@ -89,9 +96,11 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
-| FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 |    🔴    |     🔴     | 0.236 🟢 |
+| FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 | 0.712 🟢 [1] |     🔴     | 0.236 🟢 |
 | RC      | 0.965 🟢 | 0.832 🟢 | 0.237 🟢 | 0.279 🟢 | 0.941 🟢 |    🔴    |     🔴     | 0.308 🟢 |
 | Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
+
+1. Results obtained with a lower batch size of 32 due to GPU memory constraints.
 
 ---
 
@@ -99,17 +108,21 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
-| FC      | 0.925 🟢 | 0.823 🟢 |    🔴    |    🔴    | 0.910 🟢 |    🔴    |     🔴     | 0.280 🟢 |
-| RC      | 0.921 🟢 | 0.810 🟢 |    🔴    |    🔴    |    🔴    |    🔴    |     🔴     |    🔴    |
+| FC      | 0.925 🟢 | 0.823 🟢 |    🔴    |    🔴    | 0.910 🟢 | 0.693 🟢 [1] |     🔴     | 0.280 🟢 |
+| RC      | 0.921 🟢 | 0.810 🟢 | 0.215 🟢 |    🔴    |    🔴    |    🔴    |     🔴     |    🔴    |
 | Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
+
+1. Results obtained with a lower batch size of 16 due to GPU memory constraints.
 
 ---
 
 ## OTTT
 
-> ⚠️ **Results not yet available — to be added once 20-epoch / 15-trial HPO experiments are run.**
->
-> No experiments have been run for this trainer yet.
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
+| FC      | 0.932 🟢 | 0.807 🟢 | 0.349 🟢 | 0.609 🟢 | 0.870 🟢 | 0.572 🟢 |  0.297 🟢  | 0.264 🟢 |
+| RC      | 0.930 🟢 | 0.810 🟢 | 0.350 🟢 | 0.583 🟢 | 0.882 🟢 | 0.606 🟢 |  0.357 🟢  | 0.412 🟢 |
+| Conv    | 0.954 🟢 | 0.738 🟢 | 0.492 🟢 | 0.795 🟢 | 0.802 🟢 | 0.576 🟢 |  0.357 🟢  |    ⚫     |
 
 ---
 

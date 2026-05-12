@@ -1,0 +1,51 @@
+ottt_r_snn_cifar10_t2:
+  name: ottt_r_snn_cifar10_t2
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.016730402817820244
+    online_updates: true
+    loss_lambda: 0.04160439645256607
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.8039110539162025
+    threshold: 1.4699098521619942
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ottt
+  dataset:
+    name: cifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 6
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

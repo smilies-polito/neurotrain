@@ -1,0 +1,49 @@
+ottt_fc_snn_fashionmnist_t7:
+  name: ottt_fc_snn_fashionmnist_t7
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.015535445807588463
+    online_updates: true
+    loss_lambda: 0.00014853153980421636
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 784
+    hidden_sizes:
+    - 800
+    num_classes: 10
+    beta: 0.9154335218612732
+    threshold: 0.6705241236872915
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ottt
+  dataset:
+    name: fashionmnist
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    T: 10
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+    direct_coding: false
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

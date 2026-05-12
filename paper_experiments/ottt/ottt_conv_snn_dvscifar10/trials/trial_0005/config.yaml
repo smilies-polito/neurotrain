@@ -1,0 +1,49 @@
+ottt_conv_snn_dvscifar10_t5:
+  name: ottt_conv_snn_dvscifar10_t5
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.01833266087018814
+    online_updates: true
+    loss_lambda: 0.00032808290847300504
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 2
+    - 128
+    - 128
+    num_classes: 10
+    beta: 0.8555074832216915
+    threshold: 0.8663618432936917
+    algorithm_name: ottt
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

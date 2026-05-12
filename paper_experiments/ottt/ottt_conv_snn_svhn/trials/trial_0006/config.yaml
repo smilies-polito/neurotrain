@@ -1,0 +1,48 @@
+ottt_conv_snn_svhn_t6:
+  name: ottt_conv_snn_svhn_t6
+  opt: false
+  trainer:
+    name: ottt
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    lr: 0.004863951003835903
+    online_updates: true
+    loss_lambda: 0.08023102291340051
+    grad_clip: 0.0
+    sanitize_grads: false
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 3
+    - 32
+    - 32
+    num_classes: 10
+    beta: 0.8379380186100884
+    threshold: 1.0142344384136117
+    algorithm_name: ottt
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}
