@@ -1,0 +1,12 @@
+Running benchmark
+
+======================================================================
+Campaign results — 1 succeeded, 0 failed
+======================================================================
+Name                                      Test Acc  Train Loss
+-----------------------------------------------------------------
+bptt_tpnet_cifar10                          0.9089      0.0204
+
+Output directory: /home/acaviglia/snn-training-benchmarking/experiments/paper_vgg9_bptt_tpnet_cifar10
+======================================================================
+

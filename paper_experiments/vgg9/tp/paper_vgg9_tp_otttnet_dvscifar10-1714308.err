@@ -1,0 +1,99 @@
+INFO:    squashfuse not found, will not be able to mount SIF or other squashfs files
+INFO:    gocryptfs not found, will not be able to use gocryptfs
+INFO:    Converting SIF file to temporary sandbox...
+2026-05-11 14:11:36,189 [INFO] Loading experiments from: config/paper/vgg9/tp_otttnet_dvscifar10.yaml
+2026-05-11 14:11:36,231 [INFO] Built 1 experiment specs from custom config.
+2026-05-11 14:11:36,231 [INFO] Found 1 experiment(s) to run.
+2026-05-11 14:11:36,243 [INFO] Campaign output: experiments/paper_vgg9_tp_otttnet_dvscifar10
+2026-05-11 14:11:36,257 [INFO] Terminal stdout log: experiments/paper_vgg9_tp_otttnet_dvscifar10/terminal_stdout.log
+2026-05-11 14:11:36,257 [INFO] Terminal stderr log: experiments/paper_vgg9_tp_otttnet_dvscifar10/terminal_stderr.log
+2026-05-11 14:11:36,257 [INFO] Combined terminal log: experiments/paper_vgg9_tp_otttnet_dvscifar10/terminal.log
+2026-05-11 14:11:36,262 [INFO] [1/1] Running: tp_otttnet_dvscifar10_opt  (trainer=tp, model=vgg9, dataset=dvscifar10)
+2026-05-11 14:11:37,981 [INFO] Starting experiment: tp_otttnet_dvscifar10_opt
+2026-05-11 14:11:38,187 [INFO] Using device: cuda
+2026-05-11 14:11:38,187 [INFO] Loading dataset: dvscifar10 (T=10, batch=32)
+2026-05-11 14:11:38,248 [INFO] Building network: vgg9
+2026-05-11 14:11:38,444 [INFO] Building trainer: tp
+2026-05-11 14:11:38,681 [INFO] Training for 100 epochs...
+2026-05-11 14:24:21,088 [INFO] Epoch 1/100 — loss: 2.1769  train_acc: 0.1864  test_acc: 0.2140
+2026-05-11 14:37:02,239 [INFO] Epoch 2/100 — loss: 2.1047  train_acc: 0.2586  test_acc: 0.1920
+2026-05-11 14:49:44,280 [INFO] Epoch 3/100 — loss: 2.1705  train_acc: 0.2752  test_acc: 0.2780
+2026-05-11 15:02:27,523 [INFO] Epoch 4/100 — loss: 1.9206  train_acc: 0.3355  test_acc: 0.3980
+2026-05-11 15:15:09,795 [INFO] Epoch 5/100 — loss: 1.7156  train_acc: 0.4080  test_acc: 0.3840
+2026-05-11 15:27:52,319 [INFO] Epoch 6/100 — loss: 1.7195  train_acc: 0.4373  test_acc: 0.4320
+2026-05-11 15:40:33,556 [INFO] Epoch 7/100 — loss: 1.6622  train_acc: 0.4552  test_acc: 0.4410
+2026-05-11 15:53:15,592 [INFO] Epoch 8/100 — loss: 1.6506  train_acc: 0.4772  test_acc: 0.4060
+2026-05-11 16:05:56,881 [INFO] Epoch 9/100 — loss: 1.6135  train_acc: 0.4951  test_acc: 0.2900
+2026-05-11 16:18:38,270 [INFO] Epoch 10/100 — loss: 1.6149  train_acc: 0.5000  test_acc: 0.4090
+2026-05-11 16:31:20,239 [INFO] Epoch 11/100 — loss: 1.6007  train_acc: 0.5191  test_acc: 0.3850
+2026-05-11 16:44:02,292 [INFO] Epoch 12/100 — loss: 1.5449  train_acc: 0.5387  test_acc: 0.4290
+2026-05-11 16:56:43,699 [INFO] Epoch 13/100 — loss: 1.6466  train_acc: 0.5291  test_acc: 0.2870
+2026-05-11 17:09:27,931 [INFO] Epoch 14/100 — loss: 1.5957  train_acc: 0.5359  test_acc: 0.4070
+2026-05-11 17:22:10,866 [INFO] Epoch 15/100 — loss: 1.6494  train_acc: 0.5346  test_acc: 0.3280
+2026-05-11 17:34:58,768 [INFO] Epoch 16/100 — loss: 1.6116  train_acc: 0.5376  test_acc: 0.3420
+2026-05-11 17:47:40,522 [INFO] Epoch 17/100 — loss: 1.7219  train_acc: 0.5262  test_acc: 0.4080
+2026-05-11 18:00:22,498 [INFO] Epoch 18/100 — loss: 1.6899  train_acc: 0.5351  test_acc: 0.3790
+2026-05-11 18:13:04,658 [INFO] Epoch 19/100 — loss: 1.6784  train_acc: 0.5336  test_acc: 0.4260
+2026-05-11 18:25:49,151 [INFO] Epoch 20/100 — loss: 1.6533  train_acc: 0.5403  test_acc: 0.4280
+2026-05-11 18:38:31,673 [INFO] Epoch 21/100 — loss: 1.6709  train_acc: 0.5462  test_acc: 0.3170
+2026-05-11 18:51:14,288 [INFO] Epoch 22/100 — loss: 1.7034  train_acc: 0.5436  test_acc: 0.4860
+2026-05-11 19:03:56,753 [INFO] Epoch 23/100 — loss: 1.8436  train_acc: 0.5308  test_acc: 0.4100
+2026-05-11 19:16:40,392 [INFO] Epoch 24/100 — loss: 1.7520  train_acc: 0.5411  test_acc: 0.3850
+2026-05-11 19:29:22,926 [INFO] Epoch 25/100 — loss: 1.6420  train_acc: 0.5597  test_acc: 0.4670
+2026-05-11 19:42:04,777 [INFO] Epoch 26/100 — loss: 1.5819  train_acc: 0.5658  test_acc: 0.4510
+2026-05-11 19:54:47,958 [INFO] Epoch 27/100 — loss: 1.5382  train_acc: 0.5813  test_acc: 0.4610
+2026-05-11 20:07:32,993 [INFO] Epoch 28/100 — loss: 1.5563  train_acc: 0.5796  test_acc: 0.4880
+2026-05-11 20:20:17,792 [INFO] Epoch 29/100 — loss: 1.5616  train_acc: 0.5792  test_acc: 0.4610
+2026-05-11 20:33:04,747 [INFO] Epoch 30/100 — loss: 1.5414  train_acc: 0.5824  test_acc: 0.3290
+2026-05-11 20:45:52,360 [INFO] Epoch 31/100 — loss: 1.6151  train_acc: 0.5701  test_acc: 0.5040
+2026-05-11 20:58:39,247 [INFO] Epoch 32/100 — loss: 1.6201  train_acc: 0.5730  test_acc: 0.2670
+2026-05-11 21:11:25,316 [INFO] Epoch 33/100 — loss: 1.7624  train_acc: 0.5603  test_acc: 0.2810
+2026-05-11 21:24:07,853 [INFO] Epoch 34/100 — loss: 1.6927  train_acc: 0.5657  test_acc: 0.4290
+2026-05-11 21:36:50,216 [INFO] Epoch 35/100 — loss: 1.7362  train_acc: 0.5639  test_acc: 0.3230
+2026-05-11 21:49:32,626 [INFO] Epoch 36/100 — loss: 1.7328  train_acc: 0.5645  test_acc: 0.3080
+2026-05-11 22:02:19,697 [INFO] Epoch 37/100 — loss: 1.9182  train_acc: 0.5516  test_acc: 0.1380
+2026-05-11 22:15:02,116 [INFO] Epoch 38/100 — loss: 1.9174  train_acc: 0.5515  test_acc: 0.1930
+2026-05-11 22:27:44,836 [INFO] Epoch 39/100 — loss: 1.9875  train_acc: 0.5520  test_acc: 0.1710
+2026-05-11 22:40:28,812 [INFO] Epoch 40/100 — loss: 2.0437  train_acc: 0.5534  test_acc: 0.2690
+2026-05-11 22:53:12,915 [INFO] Epoch 41/100 — loss: 2.2432  train_acc: 0.5368  test_acc: 0.2390
+2026-05-11 23:05:55,465 [INFO] Epoch 42/100 — loss: 2.2382  train_acc: 0.5378  test_acc: 0.2590
+2026-05-11 23:18:39,130 [INFO] Epoch 43/100 — loss: 2.2316  train_acc: 0.5349  test_acc: 0.2210
+2026-05-11 23:31:26,827 [INFO] Epoch 44/100 — loss: 2.3651  train_acc: 0.5379  test_acc: 0.1320
+2026-05-11 23:44:11,258 [INFO] Epoch 45/100 — loss: 2.3250  train_acc: 0.5497  test_acc: 0.2240
+2026-05-11 23:56:53,802 [INFO] Epoch 46/100 — loss: 2.2913  train_acc: 0.5530  test_acc: 0.1970
+2026-05-12 00:09:36,702 [INFO] Epoch 47/100 — loss: 2.3274  train_acc: 0.5485  test_acc: 0.2760
+2026-05-12 00:22:20,113 [INFO] Epoch 48/100 — loss: 2.2558  train_acc: 0.5587  test_acc: 0.3110
+2026-05-12 00:35:03,316 [INFO] Epoch 49/100 — loss: 2.2671  train_acc: 0.5574  test_acc: 0.3420
+2026-05-12 00:47:49,886 [INFO] Epoch 50/100 — loss: 2.2225  train_acc: 0.5679  test_acc: 0.3900
+2026-05-12 01:00:38,779 [INFO] Epoch 51/100 — loss: 2.2662  train_acc: 0.5605  test_acc: 0.2560
+2026-05-12 01:13:21,930 [INFO] Epoch 52/100 — loss: 2.2164  train_acc: 0.5752  test_acc: 0.3290
+2026-05-12 01:26:06,402 [INFO] Epoch 53/100 — loss: 2.1795  train_acc: 0.5812  test_acc: 0.3190
+2026-05-12 01:38:49,447 [INFO] Epoch 54/100 — loss: 2.1150  train_acc: 0.5862  test_acc: 0.2880
+2026-05-12 01:51:33,758 [INFO] Epoch 55/100 — loss: 2.0650  train_acc: 0.6005  test_acc: 0.3560
+2026-05-12 02:04:16,479 [INFO] Epoch 56/100 — loss: 2.0377  train_acc: 0.5982  test_acc: 0.3590
+2026-05-12 02:17:03,219 [INFO] Epoch 57/100 — loss: 2.0223  train_acc: 0.6074  test_acc: 0.3770
+2026-05-12 02:29:47,043 [INFO] Epoch 58/100 — loss: 2.0351  train_acc: 0.6153  test_acc: 0.3390
+2026-05-12 02:42:30,143 [INFO] Epoch 59/100 — loss: 1.9821  train_acc: 0.6168  test_acc: 0.3620
+2026-05-12 02:55:12,882 [INFO] Epoch 60/100 — loss: 1.9513  train_acc: 0.6264  test_acc: 0.3950
+2026-05-12 03:07:55,471 [INFO] Epoch 61/100 — loss: 1.9540  train_acc: 0.6261  test_acc: 0.2600
+2026-05-12 03:20:40,881 [INFO] Epoch 62/100 — loss: 1.9336  train_acc: 0.6377  test_acc: 0.3660
+2026-05-12 03:33:23,770 [INFO] Epoch 63/100 — loss: 1.8087  train_acc: 0.6468  test_acc: 0.4260
+2026-05-12 03:46:08,603 [INFO] Epoch 64/100 — loss: 1.8846  train_acc: 0.6475  test_acc: 0.2970
+2026-05-12 03:58:52,015 [INFO] Epoch 65/100 — loss: 1.7438  train_acc: 0.6593  test_acc: 0.4100
+2026-05-12 04:11:35,814 [INFO] Epoch 66/100 — loss: 1.7600  train_acc: 0.6599  test_acc: 0.4610
+2026-05-12 04:24:19,276 [INFO] Epoch 67/100 — loss: 1.6776  train_acc: 0.6738  test_acc: 0.3970
+2026-05-12 04:37:02,461 [INFO] Epoch 68/100 — loss: 1.6664  train_acc: 0.6815  test_acc: 0.3320
+2026-05-12 04:49:47,911 [INFO] Epoch 69/100 — loss: 1.5817  train_acc: 0.6972  test_acc: 0.2940
+2026-05-12 05:02:30,628 [INFO] Epoch 70/100 — loss: 1.6208  train_acc: 0.6897  test_acc: 0.4000
+2026-05-12 05:15:13,446 [INFO] Epoch 71/100 — loss: 1.5707  train_acc: 0.6974  test_acc: 0.4030
+2026-05-12 05:27:56,002 [INFO] Epoch 72/100 — loss: 1.5277  train_acc: 0.7084  test_acc: 0.3920
+2026-05-12 05:40:38,542 [INFO] Epoch 73/100 — loss: 1.4672  train_acc: 0.7226  test_acc: 0.3900
+2026-05-12 05:53:22,893 [INFO] Epoch 74/100 — loss: 1.4915  train_acc: 0.7156  test_acc: 0.3750
+2026-05-12 06:06:05,951 [INFO] Epoch 75/100 — loss: 1.3679  train_acc: 0.7345  test_acc: 0.3030
+2026-05-12 06:18:48,955 [INFO] Epoch 76/100 — loss: 1.3753  train_acc: 0.7380  test_acc: 0.3570
+2026-05-12 06:31:31,736 [INFO] Epoch 77/100 — loss: 1.2652  train_acc: 0.7473  test_acc: 0.2840
+2026-05-12 06:44:16,038 [INFO] Epoch 78/100 — loss: 1.2136  train_acc: 0.7554  test_acc: 0.3200
+2026-05-12 06:56:59,581 [INFO] Epoch 79/100 — loss: 1.1951  train_acc: 0.7679  test_acc: 0.3570
+2026-05-12 07:09:42,451 [INFO] Epoch 80/100 — loss: 1.1885  train_acc: 0.7675  test_acc: 0.3620
+2026-05-12 07:22:24,984 [INFO] Epoch 81/100 — loss: 1.0697  train_acc: 0.7809  test_acc: 0.3570
+2026-05-12 07:35:07,208 [INFO] Epoch 82/100 — loss: 1.1089  train_acc: 0.7821  test_acc: 0.3750

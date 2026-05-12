@@ -1,0 +1,12 @@
+Running benchmark
+
+======================================================================
+Campaign results — 1 succeeded, 0 failed
+======================================================================
+Name                                      Test Acc  Train Loss
+-----------------------------------------------------------------
+tp_otttnet_dvsgesture_opt                   0.9167      0.0034
+
+Output directory: /home/acaviglia/snn-training-benchmarking/experiments/paper_vgg9_tp_otttnet_dvsgesture
+======================================================================
+
