@@ -229,10 +229,15 @@ def _build_sampler(name: str | None, seed: int | None) -> "optuna.samplers.BaseS
     raise ValueError(f"Unknown Optuna sampler '{name}'. Expected: tpe | random | cmaes.")
 
 
-def _build_pruner(name: str | None) -> "optuna.pruners.BasePruner | None":
-    if name is None:
-        return None
+def _build_pruner(name: str | None) -> "optuna.pruners.BasePruner":
     import optuna.pruners as p
+
+    # When name is None (i.e. pruner: null in config) we must explicitly use
+    # NopPruner.  Passing pruner=None to create_study() makes Optuna fall back
+    # to its default MedianPruner, which would prune trials even when the user
+    # has disabled pruning.
+    if name is None:
+        return p.NopPruner()
 
     name = name.lower()
     if name == "median":
@@ -245,7 +250,7 @@ def _build_pruner(name: str | None) -> "optuna.pruners.BasePruner | None":
         # first pruning check fires at epoch 20; earlier epochs are never pruned.
         return p.ThresholdPruner(lower=0.20, n_warmup_steps=20)
     if name == "none":
-        return None
+        return p.NopPruner()
     raise ValueError(f"Unknown Optuna pruner '{name}'. Expected: median | hyperband | threshold | null.")
 
 
