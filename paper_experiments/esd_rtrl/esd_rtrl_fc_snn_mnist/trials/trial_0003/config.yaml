@@ -1,0 +1,53 @@
+name: esd_rtrl_fc_snn_mnist_t3
+opt: false
+trainer:
+  name: esd_rtrl
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 0.0005342937261279777
+  use_optimizer: true
+  etrace_decay: 0.6427022786970406
+  gamma: 0.5894823157779036
+  lr_layer_norm:
+  - 1.0
+  - 1.0
+  - 1.0
+  detach_state_each_step: true
+  debug_unused_learning_signals: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.826503833523888
+  threshold: 0.7921446485352182
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: esd_rtrl
+dataset:
+  name: mnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 367
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

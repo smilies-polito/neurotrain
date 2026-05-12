@@ -1,0 +1,54 @@
+name: esd_rtrl_conv_snn_dvscifar10_t4
+opt: false
+trainer:
+  name: esd_rtrl
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 0.0006672367170464204
+  use_optimizer: true
+  etrace_decay: 0.8847362210825767
+  gamma: 0.25973902572668783
+  lr_layer_norm:
+  - 1.0
+  - 1.0
+  - 1.0
+  detach_state_each_step: true
+  debug_unused_learning_signals: false
+model:
+  name: conv_snn
+  net_type: conv
+  in_shape:
+  - 2
+  - 128
+  - 128
+  num_classes: 10
+  beta: 0.8977045432985862
+  threshold: 1.0924145688620426
+  out_integrator: true
+  algorithm_name: esd_rtrl
+dataset:
+  name: dvscifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 47
+  pin_memory: false
+  num_workers: 4
+  train_fraction: 0.9
+  data_root: null
+  download: true
+  use_cache: true
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

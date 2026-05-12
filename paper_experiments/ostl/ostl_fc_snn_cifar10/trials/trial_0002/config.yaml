@@ -1,0 +1,50 @@
+name: ostl_fc_snn_cifar10_t2
+opt: false
+trainer:
+  name: ostl
+  supported_net_types:
+  - fc
+  - rec
+  lr: 0.002537815508265664
+  grad_clip: 0.0
+  use_optimizer: false
+  deferred: false
+  feedback_alignment: false
+  ostl_complete: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.9345337897812487
+  threshold: 0.5205844942958024
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: ostl
+dataset:
+  name: cifar10
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 6
+  seed: 970
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

@@ -116,6 +116,14 @@ Final results:
 | FC      | 0.974 🟢 | 0.847 🟡 | 0.449 🟢 |   0.744 🟢   |       | 0.723 🟢 |  0.351 🟢  |     |
 | RC      | 0.700 🔴 | 0.315 🔴 | 0.123 🔴 |              |       | 0.697 🟢 |            |     |
 | Conv    | 0.854 🔴 | 0.828 🟡 | 0.436 🟡 |              |       | 0.390 🔴 |            |      |
+
+Final Results on HPO with 20 epochs and 15 trials:
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
+| FC      | 0.956 🟢 | 0.864 🟢 | 0.426 🟢 | 0.732 🟢 | 0.958 🟢 | 0.731 🟢 |  0.379 🟢  | 0.510 🟢 |
+| RC      |   🔴     |   🔴     |   🔴     |   🔴     |   🔴     |   🔴     |    🔴      |   🔴     |
+| Conv    | 0.963 🟢 | 0.808 🟢 | 0.429 🟢 | 0.661 🟢 | 0.949 🟢 | 0.474 🟢 |  0.233 🟢  |    ⚫     |
+> RC accuracy is at chance level for all datasets — the r_snn model consistently fails to learn with ESD_RTRL (all values in the range 0.06–0.13).
 ---
 
 ### ETLP
@@ -147,11 +155,19 @@ Final Results on HPO with 20 epochs and 15 trials:
 
 ### OSTL
 
+Previous HPO results:
 | Network | MNIST | F-MNIST | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 | SHD |
 | ------- | :---: | :-----: | :-----: | :--: | :----: | :------: | :--------: | :-: |
 | FC      | 0.967 🟢 | 0.838 🟢 | 0.395 🟢 | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
 | RC      | 0.967 🟢 |   🔵   |    0.396   | 🔵 | 🔵 | 🔵 | 🔵 | 🔵 |
 | Conv    |   ⚫     |   ⚫   |    ⚫   | ⚫ | ⚫ | ⚫ | ⚫ | ⚫ |
+
+Final Results on HPO with 20 epochs and 15 trials:
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
+| FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 |    🔵    |     🔵     | 0.236 🟢 |
+| RC      | 0.965 🟢 | 0.832 🟢 | 0.237 🟡 | 0.279 🟡 | 0.941 🟢 |    🔵    |     🔵     | 0.308 🟢 |
+| Conv    |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |     ⚫      |    ⚫     |
 
 ---
 

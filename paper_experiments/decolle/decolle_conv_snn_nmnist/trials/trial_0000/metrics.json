@@ -5,7 +5,7 @@
   "dataset": "nmnist",
   "test_accuracy": 0.9149,
   "train_loss": 0.18452340867529568,
-  "elapsed_s": 611.6117091178894,
+  "elapsed_s": 862.0738935470581,
   "epochs": 20,
   "epoch_metrics": [
     {

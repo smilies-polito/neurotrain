@@ -1,0 +1,9 @@
+params:
+  dataset.seed: 367
+  model.beta: 0.826503833523888
+  model.threshold: 0.7921446485352182
+  trainer.etrace_decay: 0.6427022786970406
+  trainer.gamma: 0.5894823157779036
+  trainer.lr: 0.0005342937261279777
+trial: 3
+value: 0.5101590106007067

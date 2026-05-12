@@ -1,0 +1,50 @@
+name: ostl_fc_snn_svhn_t8
+opt: false
+trainer:
+  name: ostl
+  supported_net_types:
+  - fc
+  - rec
+  lr: 1.8205657658407255e-05
+  grad_clip: 0.0
+  use_optimizer: false
+  deferred: false
+  feedback_alignment: false
+  ostl_complete: false
+model:
+  name: fc_snn
+  net_type: fc
+  in_shape:
+  - 3072
+  hidden_sizes:
+  - 1024
+  - 512
+  num_classes: 10
+  beta: 0.9802882520781333
+  threshold: 1.4656320330745594
+  reset_mechanism: subtract
+  out_integrator: false
+  algorithm_name: ostl
+dataset:
+  name: svhn
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  - vgg9
+  T: 10
+  seed: 809
+  direct_coding: true
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

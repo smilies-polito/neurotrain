@@ -1,0 +1,53 @@
+name: esd_rtrl_r_snn_mnist_t0
+opt: false
+trainer:
+  name: esd_rtrl
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  lr: 0.00031489116479568613
+  use_optimizer: true
+  etrace_decay: 0.9658500101408589
+  gamma: 0.685595153449124
+  lr_layer_norm:
+  - 1.0
+  - 1.0
+  - 1.0
+  detach_state_each_step: true
+  debug_unused_learning_signals: false
+model:
+  name: r_snn
+  net_type: rec
+  in_shape:
+  - 784
+  hidden_sizes:
+  - 256
+  num_classes: 10
+  beta: 0.9137451119974369
+  threshold: 0.6560186404424365
+  reset_mechanism: subtract
+  out_integrator: true
+  algorithm_name: esd_rtrl
+dataset:
+  name: mnist
+  supported_net_types:
+  - fc
+  - rec
+  - conv
+  T: 10
+  seed: 156
+  pin_memory: false
+  download: true
+  data_root: null
+  num_workers: 4
+  direct_coding: false
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  log_level: INFO
+  neurobench: false
+  batch_size: 256
+  progress: true
+optuna: {}

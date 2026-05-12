@@ -1,0 +1,54 @@
+decolle_conv_snn_dvscifar10_t3:
+  name: decolle_conv_snn_dvscifar10_t3
+  opt: false
+  trainer:
+    name: decolle
+    supported_net_types:
+    - fc
+    - conv
+    lr: 0.0005342937261279777
+    g_scale: 0.6533353663762795
+    burn_in: 0
+    surrogate: sigmoid
+    surrogate_scale: 12.62520499972521
+    delta: 0.22554447458683766
+    h_with_noise: false
+    omega_std: 0.5
+    lambda_u_upper: 0.0
+    lambda_u_lower: 0.0
+    lr_scale_per_layer: false
+  model:
+    name: conv_snn
+    net_type: conv
+    in_shape:
+    - 2
+    - 128
+    - 128
+    num_classes: 10
+    beta: 0.8555074832216915
+    threshold: 0.8663618432936917
+    out_integrator: true
+    algorithm_name: decolle
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 64
+    progress: true
+  optuna: {}
