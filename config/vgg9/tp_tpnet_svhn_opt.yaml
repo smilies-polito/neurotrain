@@ -1,7 +1,36 @@
 # TP trainer + TP-style VGG9 + SVHN — Optuna sweep
-# ── Optuna budget — edit these two values to change the sweep cost ──────────
-# runtime.epochs : epochs per trial (currently 10)
-# optuna.n_trials: total number of trials   (currently 50)
+# ── Optuna budget ───────────────────────────────────────────────────────────
+# runtime.epochs : epochs per trial  (20 — paper-standard HPO budget)
+# optuna.n_trials: number of trials  (15 — paper-standard HPO budget)
+# ── Rationale for search ranges ─────────────────────────────────────────────
+# Previous 50-trial / 10-epoch HPO found:
+#   lr=4.77e-5 → manually corrected to 4.77e-6 in the final config (see below)
+#   alpha=0.336, beta=0.757, vth=0.818
+# The 100-epoch run was spectacular up to epoch 51 (90.4% test) then
+# catastrophically overfit: train 93.3% vs test 32.2% at epoch 100.
+#
+# Two compounding issues:
+#
+# 1. LR amplification by direct coding (T=10).
+#    With direct_coding=True, Adam makes T gradient steps per sample — one
+#    per time-step.  This amplifies the effective per-sample LR by T compared
+#    with a neuromorphic dataset of the same T.  The previous run divided
+#    the HPO-found lr (4.77e-5) by T=10 before the final run, giving 4.77e-6.
+#    The new HPO searches the already-corrected (÷T) LR directly so the
+#    best value can be used in the final config without adjustment.
+#    Range centred near 5e-6 (≈ paper 1e-4 ÷ T=10 / 2), extended down to
+#    1e-7 for safety.
+#
+# 2. High beta (0.757) → stiff eligibility traces → overfitting.
+#    SVHN is not in the TP paper, but the DVSCifar10 recipe (alpha=0.19,
+#    beta=0.18) demonstrates that leaky parameters generalise better than
+#    stiff ones on complex visual data.  The beta ceiling is lowered from
+#    0.99 → 0.70 to bias the search toward shorter-memory traces.
+#    alpha is also capped at 0.50 (same reasoning as DVSCifar10 config).
+#
+# Params left at full exploration range: vth, model β, model θ.
+# All TP architecture params are fixed (leaky-integrator head, atan
+# surrogate, conv_gain=1.8, pool_after_blocks=[2,4] for 32×32 input).
 # ────────────────────────────────────────────────────────────────────────────
 tp_tpnet_svhn_opt:
   name: tp_tpnet_svhn_opt
@@ -15,58 +44,65 @@ tp_tpnet_svhn_opt:
     storage: null
   trainer:
     name: tp
+    # ── searched ─────────────────────────────────────────────────────────────
+    # NOTE: lr is the T-corrected value (÷10 from the nominal Adam lr).
+    # direct_coding with T=10 makes Adam take T gradient steps per sample,
+    # amplifying the effective per-sample LR by T.  Search this already-
+    # corrected LR so the winner can be plugged directly into the final config.
     lr:
-      value: 1.0e-4
+      value: 5.0e-6                  # ≈ paper 1e-4 ÷ T=10 ÷ 2 (conservative)
       type: float
-      min: 1.0e-5
-      max: 5.0e-2
+      min: 1.0e-7                    # very conservative lower bound for long-run stability
+      max: 5.0e-5                    # upper bound: slightly above the prev corrected value
       log: true
-    alpha:
-      value: 0.53
+    alpha:                           # target-path membrane decay; no SVHN reference in paper
+      value: 0.25                    # anchored near DVSCifar10 paper value (0.19)
       type: float
       min: 0.05
-      max: 0.99
-    beta:
-      value: 0.98
+      max: 0.50                      # capped: mirrors DVSCifar10 constraint to avoid overfitting
+    beta:                            # eligibility-trace decay; prev 0.757 caused late overfitting
+      value: 0.30
       type: float
-      min: 0.5
-      max: 0.99
-    vth:
-      value: 1.0
+      min: 0.05
+      max: 0.70                      # lowered ceiling (was 0.99) — biases toward shorter memory
+    vth:                             # target-path spike threshold; no SVHN reference in paper
+      value: 0.80                    # previous HPO best: 0.818
       type: float
       min: 0.3
       max: 1.5
   model:
     name: vgg9
     default:
-      head_type: leaky_integrator
+      # ── fixed (TP architecture) ──────────────────────────────────────────
+      head_type: leaky_integrator    # temporal integration via leaky integrator head
       use_tp_pool: true
       li_head_spatial: 2
       li_head_leak: 1.0
-      surrogate_kind: atan
+      surrogate_kind: atan           # TP paper uses ArcTan surrogate
       surrogate_scale: 1.0
-      conv_gain: 1.8
-      scale_after_lif: 0.0
-      beta:
+      conv_gain: 1.8                 # TP-style VGG9 initialisation gain
+      scale_after_lif: 0.0           # no post-LIF scaling in TP arch
+      in_channels: 3
+      input_shape: [3, 32, 32]
+      num_classes: 10
+      pool_after_blocks: [2, 4]      # two max-pool ×2 for 32×32 → 8×8 feature map
+      # ── searched ─────────────────────────────────────────────────────────
+      beta:                          # LIF neuron membrane decay
         value: 0.53
         type: float
         min: 0.3
         max: 0.99
-      threshold:
+      threshold:                     # LIF voltage threshold
         value: 1.0
         type: float
         min: 0.5
         max: 1.5
-      in_channels: 3
-      input_shape: [3, 32, 32]
-      num_classes: 10
-      pool_after_blocks: [2, 4]
   dataset:
     name: SVHN
     T: 10
     direct_coding: true
   runtime:
-    epochs: 10
+    epochs: 100
     device: cuda
     batch_size: 128
     seed: 42

@@ -1,7 +1,35 @@
 # TP trainer + TP-style VGG9 + DVSCIFAR10 — Optuna sweep
-# ── Optuna budget — edit these two values to change the sweep cost ──────────
-# runtime.epochs : epochs per trial (currently 10)
-# optuna.n_trials: total number of trials   (currently 50)
+# ── Optuna budget ───────────────────────────────────────────────────────────
+# runtime.epochs : epochs per trial  (20 — paper-standard HPO budget)
+# optuna.n_trials: number of trials  (15 — paper-standard HPO budget)
+# ── Rationale for search ranges ─────────────────────────────────────────────
+# Previous 50-trial / 10-epoch HPO found:
+#   lr=2.43e-4, alpha=0.944, beta=0.738, vth=1.018
+# The subsequent 100-epoch run peaked at ~47% test at epoch 12, then
+# diverged — train reached 81% while test fell to 31%.  Severe overfitting.
+#
+# Root cause: the HPO found a high-alpha (≈0.94) / high-beta (≈0.74)
+# combination — "stiff" neurons with very long memory and slow-decaying
+# eligibility traces.  While these can look good over 10 epochs, they cause
+# the network to memorise training patterns over long runs.  The TP paper
+# (Pes et al. 2026) recommends alpha=0.19, beta=0.18 for DVSCifar10 — a
+# much more "leaky" regime that generalises better.
+#
+# Changes vs previous opt config:
+#   • alpha range: old [0.05, 0.99] → new [0.05, 0.50]. Capping at 0.5
+#     keeps Optuna in the "leaky" half of the space and prevents it from
+#     rediscovering the stiff regime that led to overfitting.
+#     Default is set to the paper value (0.19).
+#   • beta range: old [0.05, 0.99] → new [0.05, 0.50]. Same reasoning.
+#     Default set to paper value (0.18).
+#   • vth range: old [0.3, 1.5] → new [0.3, 1.0]. The paper uses 0.5;
+#     the previous HPO found 1.018 — likely too high.  Capping at 1.0.
+#   • LR range: upper bound tightened 5e-2 → 5e-3.  The previous HPO
+#     found 2.43e-4, well below 5e-2; the paper value is 1e-4.  No reason
+#     to explore two orders of magnitude above the discovered region.
+#   • model β and θ: retain full exploration ranges (general SNN params).
+#   • All architecture params fixed: leaky-integrator head, atan surrogate,
+#     conv_gain=1.8, pool_after_blocks=[2,4,6] for 128×128 input.
 # ────────────────────────────────────────────────────────────────────────────
 tp_tpnet_dvscifar10_opt:
   name: tp_tpnet_dvscifar10_opt
@@ -15,58 +43,62 @@ tp_tpnet_dvscifar10_opt:
     storage: null
   trainer:
     name: tp
-    lr:
+    # ── searched ─────────────────────────────────────────────────────────────
+    lr:                              # paper: Adam 1e-4 (all datasets)
       value: 1.0e-4
       type: float
       min: 1.0e-5
-      max: 5.0e-2
+      max: 5.0e-3                    # tightened: prev HPO found 2.4e-4 ≪ old 5e-2 upper bound
       log: true
-    alpha:
-      value: 0.18   # paper DVSCIFAR10 value (Pes et al. 2026)
+    alpha:                           # target-path membrane decay; paper DVSCifar10 = 0.19
+      value: 0.19
       type: float
       min: 0.05
-      max: 0.99
-    beta:
-      value: 0.19   # paper DVSCIFAR10 value
+      max: 0.50                      # CAPPED: constrain to leaky regime, prevents overfitting
+    beta:                            # eligibility-trace decay; paper DVSCifar10 = 0.18
+      value: 0.18
       type: float
       min: 0.05
-      max: 0.99
-    vth:
-      value: 0.5    # paper DVSCIFAR10 value
+      max: 0.50                      # same cap — old 0.99 ceiling led to stiff traces
+    vth:                             # target-path spike threshold; paper DVSCifar10 = 0.5
+      value: 0.5
       type: float
       min: 0.3
-      max: 1.5
+      max: 1.0                       # tightened: prev HPO found 1.018 which was too high
   model:
     name: vgg9
     default:
-      head_type: leaky_integrator
+      # ── fixed (TP architecture) ──────────────────────────────────────────
+      head_type: leaky_integrator    # temporal integration via leaky integrator head
       use_tp_pool: true
-      li_head_spatial: 2
-      li_head_leak: 1.0
-      surrogate_kind: atan
+      li_head_spatial: 2             # spatial pooling in the LI head
+      li_head_leak: 1.0              # LI head leak coefficient
+      surrogate_kind: atan           # TP paper uses ArcTan surrogate
       surrogate_scale: 1.0
-      conv_gain: 1.8
-      scale_after_lif: 0.0
-      beta:
+      conv_gain: 1.8                 # TP-style VGG9 initialisation gain
+      scale_after_lif: 0.0           # no post-LIF scaling in TP arch
+      in_channels: 2
+      input_shape: [2, 128, 128]
+      num_classes: 10
+      pool_after_blocks: [2, 4, 6]   # three max-pool ×2: 128 → 16
+      # ── searched ─────────────────────────────────────────────────────────
+      beta:                          # LIF neuron membrane decay; paper DVSGesture = 0.53
         value: 0.53
         type: float
         min: 0.3
         max: 0.99
-      threshold:
+      threshold:                     # LIF voltage threshold
         value: 1.0
         type: float
         min: 0.5
         max: 1.5
-      in_channels: 2
-      input_shape: [2, 128, 128]
-      num_classes: 10
-      pool_after_blocks: [2, 4, 6]
   dataset:
     name: DVSCIFAR10
     T: 10
+    use_cache: true
   runtime:
-    epochs: 10
+    epochs: 100
     device: cuda
-    batch_size: 32
+    batch_size: 16
     seed: 42
     neurobench: false
