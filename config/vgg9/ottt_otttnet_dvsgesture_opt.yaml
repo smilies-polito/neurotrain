@@ -1,7 +1,7 @@
 # OTTT trainer + OTTT-style VGG9 + DVSGesture — Optuna sweep
 # ── Optuna budget ───────────────────────────────────────────────────────────
-# runtime.epochs : epochs per trial  (20 — paper-standard HPO budget)
-# optuna.n_trials: number of trials  (15 — paper-standard HPO budget)
+# runtime.epochs : epochs per trial  (100)
+# optuna.n_trials: number of trials  (50)
 # ── Rationale for search ranges ─────────────────────────────────────────────
 # !! CRITICAL: this combination was NEVER properly HPO'd before.  The 100-epoch
 # run used the raw defaults (lr=0.1, loss_lambda=0.001) and stayed at chance
@@ -33,7 +33,7 @@ ottt_otttnet_dvsgesture_opt:
     n_trials: 50
     direction: maximize
     sampler: tpe
-    pruner: null
+    pruner: threshold
     timeout: null
     storage: null
   trainer:

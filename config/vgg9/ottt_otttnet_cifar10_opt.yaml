@@ -1,7 +1,7 @@
 # OTTT trainer + OTTT-style VGG9 + CIFAR10 — Optuna sweep
 # ── Optuna budget ───────────────────────────────────────────────────────────
-# runtime.epochs : epochs per trial  (20 — paper-standard HPO budget)
-# optuna.n_trials: number of trials  (15 — paper-standard HPO budget)
+# runtime.epochs : epochs per trial  (100)
+# optuna.n_trials: number of trials  (50)
 # ── Rationale for search ranges ─────────────────────────────────────────────
 # Previous 50-trial / 10-epoch HPO found:
 #   lr=2.09e-3, loss_lambda=0.062, scale_after_lif=2.74, β=0.5, θ=1.0
@@ -31,7 +31,7 @@ ottt_otttnet_cifar10_opt:
     n_trials: 50
     direction: maximize
     sampler: tpe
-    pruner: null
+    pruner: threshold
     timeout: null
     storage: null
   trainer:

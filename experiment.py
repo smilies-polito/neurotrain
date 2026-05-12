@@ -56,13 +56,18 @@ def _strip_metadata(cfg: dict) -> dict:
     return {k: v for k, v in cfg.items() if k not in _CONFIG_METADATA_KEYS}
 
 
-def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) -> dict:
+def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger, trial=None) -> dict:
     """
     Core training loop: build dataset/model/trainer, train for spec.runtime
     epochs, optionally run NeuroBench, and return a metrics dict.
 
     The spec must already have plain (non-tunable-block) values — either
     normalised by normalize_optuna_attrs or resolved by suggest_from_cfg.
+
+    When `trial` is provided (Optuna HPO mode) the test accuracy is reported
+    to Optuna after every epoch via trial.report() and trial.should_prune() is
+    checked.  If the pruner fires, a TrialPruned exception is raised *after*
+    GPU memory is freed so subsequent trials are not starved of memory.
     """
     # ── Reproducibility ────────────────────────────────────────────────────
     seed = int(spec.runtime.get("seed", 42))
@@ -156,13 +161,23 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
             train_metrics["loss"], train_metrics["accuracy"], test_acc,
         )
 
+        # ── Optuna pruning (HPO mode only) ───────────────────────────────
+        if trial is not None:
+            trial.report(test_acc, step=epoch)
+            if trial.should_prune():
+                import optuna as _op
+                _pruned_exc = _op.TrialPruned()
+                break
+    else:
+        _pruned_exc = None  # loop completed normally
+
     elapsed = time.time() - t0
     final_test_acc = epoch_metrics[-1]["test_accuracy"] if epoch_metrics else 0.0
     log.info("Training done in %.1f s. Final test accuracy: %.4f", elapsed, final_test_acc)
 
     # ── NeuroBench evaluation ──────────────────────────────────────────────
     nb_results = {}
-    if spec.runtime.get("neurobench", True):
+    if _pruned_exc is None and spec.runtime.get("neurobench", True):  # skip for pruned trials
         log.info("Running NeuroBench evaluation...")
         try:
             nb_results = run_neurobench(
@@ -182,6 +197,10 @@ def _train_and_evaluate(spec: ExperimentSpec, out: Path, log: logging.Logger) ->
     del trainer, train_loader, test_loader, network
     gc.collect()
     torch.cuda.empty_cache()
+
+    # Re-raise after cleanup so GPU memory is freed before Optuna marks the trial
+    if _pruned_exc is not None:
+        raise _pruned_exc
 
     return {
         "name":           spec.name,
@@ -242,7 +261,7 @@ def main(spec_path: str, output_dir: str) -> None:
             optuna  = {},
         )
 
-        metrics = _train_and_evaluate(trial_spec, trial_dir, log)
+        metrics = _train_and_evaluate(trial_spec, trial_dir, log, trial=trial)
         save_experiment_config(trial_dir, trial_spec)
         save_experiment_metrics(trial_dir, metrics)
 

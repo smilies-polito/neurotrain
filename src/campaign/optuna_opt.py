@@ -239,9 +239,14 @@ def _build_pruner(name: str | None) -> "optuna.pruners.BasePruner | None":
         return p.MedianPruner()
     if name in ("hyperband", "hb"):
         return p.HyperbandPruner()
+    if name == "threshold":
+        # Kill trials that have not exceeded 20% test accuracy by epoch 20.
+        # n_warmup_steps=20 with 1-indexed trial.report(step=epoch) means the
+        # first pruning check fires at epoch 20; earlier epochs are never pruned.
+        return p.ThresholdPruner(lower=0.20, n_warmup_steps=20)
     if name == "none":
         return None
-    raise ValueError(f"Unknown Optuna pruner '{name}'. Expected: median | hyperband | null.")
+    raise ValueError(f"Unknown Optuna pruner '{name}'. Expected: median | hyperband | threshold | null.")
 
 
 def _write_artifacts(study: "optuna.Study", out_dir: Path) -> None:
