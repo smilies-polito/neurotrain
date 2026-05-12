@@ -229,29 +229,70 @@ def _build_sampler(name: str | None, seed: int | None) -> "optuna.samplers.BaseS
     raise ValueError(f"Unknown Optuna sampler '{name}'. Expected: tpe | random | cmaes.")
 
 
-def _build_pruner(name: str | None) -> "optuna.pruners.BasePruner":
+def _build_pruner(cfg: "str | dict | None") -> "optuna.pruners.BasePruner":
+    """Build an Optuna pruner from a config value.
+
+    Accepts three forms:
+      * ``null`` / ``None``  — no pruning (NopPruner).
+      * A plain string name  — e.g. ``"median"``, ``"hyperband"``, ``"threshold"``.
+      * A dict               — must contain a ``type`` key (same names as above)
+                               plus optional keyword arguments forwarded to the
+                               pruner constructor.  Example::
+
+                                   pruner:
+                                     type: threshold
+                                     lower: 0.15
+                                     n_warmup_steps: 1
+    """
     import optuna.pruners as p
 
+    # ------------------------------------------------------------------ dict
+    if isinstance(cfg, dict):
+        cfg = dict(cfg)  # copy so we can pop safely
+        ptype = cfg.pop("type", None)
+        if ptype is None:
+            raise ValueError("Pruner dict config must include a 'type' key.")
+        ptype = ptype.lower()
+        if ptype == "median":
+            return p.MedianPruner(**cfg)
+        if ptype in ("hyperband", "hb"):
+            return p.HyperbandPruner(**cfg)
+        if ptype == "threshold":
+            cfg.setdefault("lower", 0.20)
+            cfg.setdefault("n_warmup_steps", 20)
+            return p.ThresholdPruner(**cfg)
+        if ptype == "none":
+            return p.NopPruner()
+        raise ValueError(
+            f"Unknown Optuna pruner type '{ptype}' in dict config. "
+            "Expected: median | hyperband | threshold | none."
+        )
+
+    # ----------------------------------------------------------------- None
     # When name is None (i.e. pruner: null in config) we must explicitly use
     # NopPruner.  Passing pruner=None to create_study() makes Optuna fall back
     # to its default MedianPruner, which would prune trials even when the user
     # has disabled pruning.
-    if name is None:
+    if cfg is None:
         return p.NopPruner()
 
-    name = name.lower()
+    # ---------------------------------------------------------------- string
+    name = cfg.lower()
     if name == "median":
         return p.MedianPruner()
     if name in ("hyperband", "hb"):
         return p.HyperbandPruner()
     if name == "threshold":
-        # Kill trials that have not exceeded 20% test accuracy by epoch 20.
-        # n_warmup_steps=20 with 1-indexed trial.report(step=epoch) means the
-        # first pruning check fires at epoch 20; earlier epochs are never pruned.
+        # Legacy default: kill trials that have not exceeded 20% test accuracy
+        # by epoch 20.  Use the dict form for full control.
         return p.ThresholdPruner(lower=0.20, n_warmup_steps=20)
     if name == "none":
         return p.NopPruner()
-    raise ValueError(f"Unknown Optuna pruner '{name}'. Expected: median | hyperband | threshold | null.")
+    raise ValueError(
+        f"Unknown Optuna pruner '{name}'. "
+        "Expected: median | hyperband | threshold | null, "
+        "or a dict with 'type' plus pruner kwargs."
+    )
 
 
 def _write_artifacts(study: "optuna.Study", out_dir: Path) -> None:
