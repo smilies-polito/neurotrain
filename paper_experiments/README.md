@@ -91,16 +91,17 @@ Conv is always: 12C5-MP2-32C5-MP2-FC
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
 | FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 |    🔴    |     🔴     | 0.236 🟢 |
 | RC      | 0.965 🟢 | 0.832 🟢 | 0.237 🟢 | 0.279 🟢 | 0.941 🟢 |    🔴    |     🔴     | 0.308 🟢 |
-| Conv    |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |    ⚫     |     ⚫      |    ⚫     |
+| Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
 
 ---
 
 ## OSTTP
 
-> ⚠️ **Results not yet available — to be added once 20-epoch / 15-trial HPO experiments are run.**
->
-> Earlier HPO runs exist in `config/paper/README.md` but a dedicated 20-epoch / 15-trial sweep
-> has not been completed yet.
+| Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
+| ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
+| FC      | 0.925 🟢 | 0.823 🟢 |    🔴    |    🔴    | 0.910 🟢 |    🔴    |     🔴     | 0.280 🟢 |
+| RC      | 0.921 🟢 | 0.810 🟢 |    🔴    |    🔴    |    🔴    |    🔴    |     🔴     |    🔴    |
+| Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
 
 ---
 
