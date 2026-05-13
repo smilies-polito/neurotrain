@@ -509,7 +509,12 @@ class ESDRTRLTrainer(BaseTrainer):
             ]
 
             for i, layer in enumerate(layers):
-                if self.model_kind == "vgg9" and layer.name == "output":
+                # Output layer with threshold=1e9 (integrator head) would give D_f ≈ 0 from
+                # the surrogate gradient; use identity (ones) so output weights can still learn.
+                is_identity_out = (self.model_kind == "vgg9" and layer.name == "output") or (
+                    layer.name == "output" and getattr(self.network, "out_integrator", False)
+                )
+                if is_identity_out:
                     D_f_diag = torch.ones_like(layer.mem)
                     D_diag = torch.ones_like(layer.mem)
                 else:
