@@ -60,11 +60,11 @@ All the results here have been obtained with the default campaign.
 | Network |   MNIST   |  F-MNIST  | CIFAR10 | SVHN | NMNIST | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :-------: | :-------: | :-----: | :--: | :----: | :------: | :--------: | :------: |
 | FC      |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
-| RC      | 0.9783 🟢 | 0.8550 🟢 | 0.425 🟢 [1] |0.596 🟢 [1] | 0.960 🟢 [1] |    🔴     |     🔴      | 0.6913 🟢 |
+| RC      | 0.9783 🟢 | 0.8550 🟢 | 0.425 🟢 [1] |0.596 🟢 [1] | 0.960 🟢 [1] | 0.667 🟢 [2] | 0.253 🟢 [2]| 0.6913 🟢 |
 | Conv    |     ⚫     |     ⚫     |    ⚫    |  ⚫   |   ⚫    |    ⚫     |     ⚫      |    ⚫     |
 
 1. For a fair comparison these results have been obtained with 512 hidden units instead of 256 ran in a different campaign since the framework doesn't support different default configs per trainer in a benchmarking campaign but it is planned to be added in the near future.
-
+2. Results obtained with a lower batch size of 32 due to GPU memory constraints.
 
 ---
 
@@ -96,8 +96,8 @@ All the results here have been obtained with the default campaign.
 
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
-| FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 | 0.712 🟢 [1] |     🔴     | 0.236 🟢 |
-| RC      | 0.965 🟢 | 0.832 🟢 | 0.237 🟢 | 0.279 🟢 | 0.941 🟢 |    🔴    |     🔴     | 0.308 🟢 |
+| FC      | 0.963 🟢 | 0.837 🟢 | 0.379 🟢 | 0.618 🟢 | 0.932 🟢 | 0.712 🟢 [1] | 0.324 🟢 [1] | 0.236 🟢 |
+| RC      | 0.965 🟢 | 0.832 🟢 | 0.237 🟢 | 0.279 🟢 | 0.941 🟢 | 0.712 🟢 [1] | 0.323 🟢 [1] | 0.308 🟢 |
 | Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
 
 1. Results obtained with a lower batch size of 32 due to GPU memory constraints.
@@ -109,7 +109,7 @@ All the results here have been obtained with the default campaign.
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
 | FC      | 0.925 🟢 | 0.823 🟢 |    🔴    |    🔴    | 0.910 🟢 | 0.693 🟢 [1] |     🔴     | 0.280 🟢 |
-| RC      | 0.921 🟢 | 0.810 🟢 | 0.215 🟢 |    🔴    |    🔴    |    🔴    |     🔴     |    🔴    |
+| RC      | 0.921 🟢 | 0.810 🟢 | 0.215 🟢 | 0.217 🟢 | 0.918 🟢 |    🔴    |     🔴     |    🔴    |
 | Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
 
 1. Results obtained with a lower batch size of 16 due to GPU memory constraints.
@@ -171,7 +171,7 @@ Two distinct VGG9 architectures are used in these experiments, tailored for diff
 | OTTT    | VGG9 (OTTT-inspired) | 0.525 🟡 [4] | 0.485 🟡 [5] | 0.100 🟡 [1] | 0.091 🟡 [1] |
 | OTTT    | VGG9 (TP-inspired)   | 0.666 🟡 [4] | 0.224 🟡 [4] | 0.587 🟡 [6] | 0.091 🟡 [1] |
 | TP      | VGG9 (OTTT-inspired) | 0.534 🟡 [7] | 0.311 🟡 [8] | 0.375 🟡 [8] |   0.920 🟢   |
-| TP      | VGG9 (TP-inspired)   | 0.750 🟡 [7] | 0.321 🟡 [8] | 0.311 🟡 [8] |   0.882 🟢   | 
+| TP      | VGG9 (TP-inspired)   | 0.750 🟡 [7] |   0.944 🟢   | 0.311 🟡 [8] |   0.882 🟢   | 
 
 1. Accuracy stayed at chance level for all 100 epochs.
 2. After an initial increase in accuracy (~90%), the model collapsed to chance level for the remaining epochs.

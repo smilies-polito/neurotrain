@@ -1,0 +1,51 @@
+osttp_r_snn_svhn_t4:
+  name: osttp_r_snn_svhn_t4
+  opt: false
+  trainer:
+    name: osttp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.00016480446427978953
+    pseudo: tanh
+    output_loss: mse
+    feedback_scale: 1.097037220101252
+    feedback_seed: 42
+    grad_clip: 0.0
+    use_optimizer: true
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 512
+    - 256
+    num_classes: 10
+    beta: 0.882069553542002
+    threshold: 0.7912291401980419
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: osttp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 256
+    progress: true
+  optuna: {}

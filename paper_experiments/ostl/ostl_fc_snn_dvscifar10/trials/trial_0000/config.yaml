@@ -1,0 +1,51 @@
+ostl_fc_snn_dvscifar10_t0:
+  name: ostl_fc_snn_dvscifar10_t0
+  opt: false
+  trainer:
+    name: ostl
+    supported_net_types:
+    - fc
+    - rec
+    lr: 0.00031489116479568613
+    grad_clip: 0.0
+    use_optimizer: false
+    deferred: false
+    feedback_alignment: false
+    ostl_complete: false
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.9806357182178841
+    threshold: 1.231993941811405
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: ostl
+  dataset:
+    name: dvscifar10
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    pin_memory: false
+    num_workers: 4
+    train_fraction: 0.9
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 32
+    progress: false
+  optuna: {}
