@@ -1,0 +1,54 @@
+esd_rtrl_r_snn_dvsgesture_t15:
+  name: esd_rtrl_r_snn_dvsgesture_t15
+  opt: false
+  trainer:
+    name: esd_rtrl
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    lr: 0.07290852325098897
+    use_optimizer: true
+    etrace_decay: 0.7864029644390766
+    gamma: 0.374239430613053
+    lr_layer_norm:
+    - 1.0
+    - 1.0
+    - 1.0
+    detach_state_each_step: true
+    debug_unused_learning_signals: false
+  model:
+    name: r_snn
+    net_type: rec
+    in_shape:
+    - 32768
+    hidden_sizes:
+    - 1024
+    num_classes: 11
+    beta: 0.8325287407107456
+    threshold: 0.8222189240170943
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: esd_rtrl
+  dataset:
+    name: dvsgesture
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 20
+    pin_memory: false
+    num_workers: 4
+    data_root: null
+    download: true
+    use_cache: true
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 32
+    progress: false
+  optuna: {}

@@ -1,0 +1,7 @@
+params:
+  model.beta: 0.8674043933507224
+  model.threshold: 0.6193925875915673
+  trainer.feedback_scale: 1.3746732186386261
+  trainer.lr: 8.84056082219224e-05
+trial: 22
+value: 0.29955439459127225

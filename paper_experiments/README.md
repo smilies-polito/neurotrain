@@ -73,10 +73,13 @@ All the results here have been obtained with the default campaign.
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
 | FC      | 0.956 🟢 | 0.864 🟢 | 0.426 🟢 | 0.732 🟢 | 0.958 🟢 | 0.731 🟢 |  0.379 🟢  | 0.510 🟢 |
-| RC      | 0.827 🟢 | 0.678 🟢 | 0.221 🟢 |   🔴     |   🔴     |   🔴     |    🔴      |   🔴     |
+| RC      | 0.827 🟢 | 0.678 🟢 | 0.221 🟢 |   🔴     | 0.801* 🟢 | 0.708 🟢 [1] | 0.191 🟢 [1] | 0.315* 🟢 |
 | Conv    | 0.963 🟢 | 0.808 🟢 | 0.429 🟢 | 0.661 🟢 | 0.949 🟢 | 0.474 🟢 |  0.233 🟢  |    ⚫     |
 
-> RC accuracy is at chance level for all datasets — the r_snn model consistently fails to learn with ESD_RTRL (all values in the range 0.06–0.13).
+1. Batch size of 32.
+
+- NMNIST on HPC `paper_esd-rtrl_r_pr-1716677`
+- 
 
 ---
 
@@ -108,8 +111,8 @@ All the results here have been obtained with the default campaign.
 
 | Network |  MNIST   | F-MNIST  | CIFAR10  |   SVHN   |  NMNIST  | DVSGest. | DVSCifar10 |   SHD    |
 | ------- | :------: | :------: | :------: | :------: | :------: | :------: | :--------: | :------: |
-| FC      | 0.925 🟢 | 0.823 🟢 |    🔴    |    🔴    | 0.910 🟢 | 0.693 🟢 [1] |     🔴     | 0.280 🟢 |
-| RC      | 0.921 🟢 | 0.810 🟢 | 0.215 🟢 | 0.217 🟢 | 0.918 🟢 |    🔴    |     🔴     |    🔴    |
+| FC      | 0.925 🟢 | 0.823 🟢 | 0.315* 🟢 | 0.300 🟢 | 0.910 🟢 | 0.693 🟢 [1] | 0.100 🟡 | 0.280 🟢 |
+| RC      | 0.921 🟢 | 0.810 🟢 | 0.215 🟢 | 0.217 🟢 | 0.918 🟢 | 0.655 🟢 [1] | 0.100 🟡 |    🔴    |
 | Conv    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |    ⚫    |     ⚫     |    ⚫    |
 
 1. Results obtained with a lower batch size of 16 due to GPU memory constraints.

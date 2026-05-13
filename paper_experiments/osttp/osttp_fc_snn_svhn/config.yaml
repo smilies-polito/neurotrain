@@ -1,0 +1,51 @@
+osttp_fc_snn_svhn_t22:
+  name: osttp_fc_snn_svhn_t22
+  opt: false
+  trainer:
+    name: osttp
+    supported_net_types:
+    - fc
+    - rec
+    lr: 8.84056082219224e-05
+    pseudo: tanh
+    output_loss: mse
+    feedback_scale: 1.3746732186386261
+    feedback_seed: 42
+    grad_clip: 0.0
+    use_optimizer: true
+  model:
+    name: fc_snn
+    net_type: fc
+    in_shape:
+    - 3072
+    hidden_sizes:
+    - 1024
+    - 512
+    num_classes: 10
+    beta: 0.8674043933507224
+    threshold: 0.6193925875915673
+    reset_mechanism: subtract
+    out_integrator: false
+    algorithm_name: osttp
+  dataset:
+    name: svhn
+    supported_net_types:
+    - fc
+    - rec
+    - conv
+    - vgg9
+    T: 10
+    direct_coding: true
+    pin_memory: false
+    download: true
+    data_root: null
+    num_workers: 4
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+    log_level: INFO
+    neurobench: false
+    batch_size: 64
+    progress: false
+  optuna: {}
