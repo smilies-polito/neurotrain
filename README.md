@@ -28,17 +28,7 @@ Built on **[snnTorch](https://github.com/jeshraghian/snntorch)** (≥ 0.7), **[T
 > }
 > ```
 
-
-<p align="center">
-  <img src="docs/figures/LOGO_WEB.png" alt="SMILIES logo" height="40"/>
-  <br/>
-  Developed at the <strong>SMILIES Research Group</strong>, Dept. of Control and Computer Engineering, Politecnico di Torino.
-  <br/>
-  <a href="https://www.smilies.polito.it/">Website</a> · <a href="https://www.linkedin.com/company/smilies-polito">LinkedIn</a> · <a href="https://x.com/smiliespolito">𝕏</a>
-</p>
-
-
-## Quickstart
+t
 
 ```bash
 git clone https://github.com/smilies-polito/neurotrain
