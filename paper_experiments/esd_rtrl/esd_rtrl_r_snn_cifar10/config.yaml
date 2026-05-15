@@ -1,5 +1,5 @@
-esd_rtrl_r_snn_cifar10_t3:
-  name: esd_rtrl_r_snn_cifar10_t3
+esd_rtrl_r_snn_cifar10_t0:
+  name: esd_rtrl_r_snn_cifar10_t0
   opt: false
   trainer:
     name: esd_rtrl
@@ -7,10 +7,10 @@ esd_rtrl_r_snn_cifar10_t3:
     - fc
     - rec
     - conv
-    lr: 5.415244119402538e-05
+    lr: 0.00031489116479568613
     use_optimizer: true
-    etrace_decay: 0.6490786990501735
-    gamma: 0.5198051453057903
+    etrace_decay: 0.9658500101408589
+    gamma: 0.685595153449124
     lr_layer_norm:
     - 1.0
     - 1.0
@@ -26,10 +26,10 @@ esd_rtrl_r_snn_cifar10_t3:
     - 512
     - 256
     num_classes: 10
-    beta: 0.882069553542002
-    threshold: 0.7912291401980419
+    beta: 0.9137451119974369
+    threshold: 0.6560186404424365
     reset_mechanism: subtract
-    out_integrator: false
+    out_integrator: true
     algorithm_name: esd_rtrl
   dataset:
     name: cifar10
@@ -50,6 +50,6 @@ esd_rtrl_r_snn_cifar10_t3:
     seed: 42
     log_level: INFO
     neurobench: false
-    batch_size: 256
+    batch_size: 128
     progress: false
   optuna: {}

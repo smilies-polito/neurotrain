@@ -1,0 +1,8 @@
+params:
+  model.beta: 0.9137451119974369
+  model.threshold: 0.6560186404424365
+  trainer.etrace_decay: 0.9658500101408589
+  trainer.gamma: 0.685595153449124
+  trainer.lr: 0.00031489116479568613
+trial: 0
+value: 0.24692685925015365

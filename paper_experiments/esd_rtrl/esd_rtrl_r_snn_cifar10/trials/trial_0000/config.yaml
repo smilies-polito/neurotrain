@@ -29,7 +29,7 @@ esd_rtrl_r_snn_cifar10_t0:
     beta: 0.9137451119974369
     threshold: 0.6560186404424365
     reset_mechanism: subtract
-    out_integrator: false
+    out_integrator: true
     algorithm_name: esd_rtrl
   dataset:
     name: cifar10
@@ -50,6 +50,6 @@ esd_rtrl_r_snn_cifar10_t0:
     seed: 42
     log_level: INFO
     neurobench: false
-    batch_size: 256
+    batch_size: 128
     progress: false
   optuna: {}
