@@ -680,8 +680,3 @@ python run_exp_campaign.py --custom config/vgg9/<config>.yaml --name vgg9_run
 | TP | VGG9v1 | `tp_vgg9v1_cifar10.yaml` | `tp_vgg9v1_svhn.yaml` | `tp_vgg9v1_dvscifar10.yaml` | `tp_vgg9v1_dvsgesture.yaml` |
 | TP | VGG9v2 | `tp_vgg9v2_cifar10.yaml` | `tp_vgg9v2_svhn.yaml` | `tp_vgg9v2_dvscifar10.yaml` | `tp_vgg9v2_dvsgesture.yaml` |
 
----
-
-# License
-
-*To be added.*
