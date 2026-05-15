@@ -1,9 +1,0 @@
-params:
-  model.beta: 0.9125587680837881
-  model.threshold: 0.5464504127199977
-  trainer.delta: 0.5628109945722505
-  trainer.g_scale: 1.5918343266467259
-  trainer.lr: 0.0006672367170464204
-  trainer.surrogate_scale: 4.793801861008835
-trial: 4
-value: 0.394

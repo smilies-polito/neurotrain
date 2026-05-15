@@ -1,0 +1,39 @@
+# NeuroTrain — complete benchmarking campaign (paper replication).
+#
+# Runs all registered trainers against fc_snn, r_snn, and conv_snn on all
+# supported datasets. Each trainer × model × dataset combination is optimised
+# independently with Optuna before the final evaluation.
+#
+# Training budget: 10 trials × 20 epochs per experiment — matches the budget
+# reported in the paper.
+#
+# Usage:
+#   python run_exp_campaign.py --benchmarking config/paper_benchmarking.yaml \
+#                              --name paper_bench
+#
+# Note: a full campaign takes several GPU-days on a single GPU.
+
+trainers: []   # empty = all registered trainers in config/default/trainers/
+
+models:
+  - fc_snn
+  - r_snn
+  - conv_snn
+
+datasets: []   # empty = all registered datasets in config/default/datasets/
+
+runtime:
+  epochs: 20
+  device: cuda
+  seed: 42
+  neurobench: false
+
+opt: true
+
+optuna:
+  n_trials: 10
+  direction: maximize
+  sampler: tpe
+  pruner: null
+  timeout: null
+  storage: null

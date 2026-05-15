@@ -1,0 +1,96 @@
+# OTTT trainer + VGG9v1 + DVSGesture — Optuna sweep
+# ── Optuna budget ───────────────────────────────────────────────────────────
+# runtime.epochs : epochs per trial  (100)
+# optuna.n_trials: number of trials  (50)
+# ── Rationale for search ranges ─────────────────────────────────────────────
+# !! CRITICAL: this combination was NEVER properly HPO'd before.  The 100-epoch
+# run used the raw defaults (lr=0.1, loss_lambda=0.001) and stayed at chance
+# level (0.0909 = 1/11) for all 100 epochs — a complete training failure. !!
+#
+# Root cause: the OTTT paper switches to Adam with lr=1e-3 for DVSGesture,
+# but the framework uses SGD throughout.  SGD at lr=0.1 is catastrophically
+# too high for a temporal neuromorphic dataset.
+#
+# Design decisions:
+#   • LR range: drastically lowered to [1e-5, 1e-2] (log), centred on 1e-3
+#     (the paper's Adam value).  SGD typically needs a somewhat lower LR than
+#     Adam for the same gradient landscape, so allowing down to 1e-5 gives the
+#     TPE sampler room to find the safe SGD-equivalent region.
+#   • loss_lambda: paper DVSGesture uses 0.001 (very small MSE component).
+#     The range is kept narrow and low [1e-5, 1e-2] to respect this.
+#   • scale_after_lif: was never tuned for DVSGesture — explore from scratch.
+#     Default lowered to 2.0 (conservative vs the CIFAR10 best of 2.74,
+#     because neuromorphic spike rates tend to be lower).
+#   • β (LIF) and θ: same ranges as CIFAR10 — full exploration retained.
+#   • grad_clip and sanitize_grads: same fixed values as CIFAR10 for stability.
+#   • pool_after_blocks fixed at [2, 4, 6] — three max-pool layers to
+#     down-sample 128×128 → 16×16 feature map (architecture requirement).
+# ────────────────────────────────────────────────────────────────────────────
+ottt_vgg9v1_dvsgesture:
+  name: ottt_vgg9v1_dvsgesture
+  opt: true
+  optuna:
+    n_trials: 50
+    direction: maximize
+    sampler: tpe
+    pruner: threshold
+    timeout: null
+    storage: null
+  trainer:
+    name: ottt
+    # ── fixed (paper / stability) ────────────────────────────────────────────
+    online_updates: true
+    grad_clip: 0.2        # not in OTTT paper; kept fixed — prevents gradient spikes
+    sanitize_grads: true  # same; filters NaN/inf gradients
+    # ── searched ─────────────────────────────────────────────────────────────
+    lr:                              # paper: Adam 1e-3 for DVSGesture; SGD-equivalent ≈ 1e-3 or lower
+      value: 1.0e-3
+      type: float
+      min: 1.0e-5                    # lower safety bound for SGD on temporal neuromorphic data
+      max: 1.0e-2                    # 10× paper Adam value — SGD rarely benefits from going higher
+      log: true
+    loss_lambda:                     # paper DVSGesture = 0.001; keep MSE weight very small
+      value: 1.0e-3
+      type: float
+      min: 1.0e-5
+      max: 1.0e-2
+      log: true
+  model:
+    name: vgg9
+    default:
+      # ── fixed (OTTT architecture) ────────────────────────────────────────
+      head_type: global_linear       # no temporal integration — OTTT-arch classifier
+      use_tp_pool: false
+      surrogate_kind: sigmoid        # paper uses sigmoid surrogate
+      surrogate_slope: 4.0           # paper α=4
+      conv_gain: 1.0                 # VGG9v1 weight scale
+      in_channels: 2                 # DVSGesture: polarity on/off = 2 channels
+      input_shape: [2, 128, 128]
+      num_classes: 11
+      pool_after_blocks: [2, 4, 6]   # three max-pool ×2: 128 → 64 → 32 → 16
+      # ── searched ─────────────────────────────────────────────────────────
+      scale_after_lif:               # never tuned for DVSGesture — explore from scratch
+        value: 2.0                   # conservative default (neuromorphic spike rates tend lower)
+        type: float
+        min: 1.5
+        max: 3.5
+      beta:                          # LIF membrane decay; paper τ=2 → β≈0.5
+        value: 0.5
+        type: float
+        min: 0.3
+        max: 0.99
+      threshold:                     # LIF voltage threshold; paper default = 1.0
+        value: 1.0
+        type: float
+        min: 0.5
+        max: 1.5
+  dataset:
+    name: DVSGesture
+    T: 100
+    use_cache: true
+  runtime:
+    epochs: 100
+    device: cuda
+    batch_size: 16                   # same as OTTT paper for DVSGesture
+    seed: 42
+    neurobench: false

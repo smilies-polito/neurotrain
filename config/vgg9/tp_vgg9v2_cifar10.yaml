@@ -1,0 +1,73 @@
+# TP trainer + VGG9v2 + CIFAR10 — Optuna sweep
+# ── Optuna budget — edit these two values to change the sweep cost ──────────
+# runtime.epochs : epochs per trial (currently 10 — increase for better signal)
+# optuna.n_trials: total number of trials   (currently 50)
+# ────────────────────────────────────────────────────────────────────────────
+tp_vgg9v2_cifar10:
+  name: tp_vgg9v2_cifar10
+  opt: true
+  optuna:
+    n_trials: 50
+    direction: maximize
+    sampler: tpe
+    pruner: null
+    timeout: null
+    storage: null
+  trainer:
+    name: tp
+    lr:
+      value: 1.0e-4
+      type: float
+      min: 1.0e-5
+      max: 5.0e-2
+      log: true
+    alpha:
+      value: 0.53
+      type: float
+      min: 0.05
+      max: 0.99
+    beta:
+      value: 0.98
+      type: float
+      min: 0.5
+      max: 0.99
+    vth:
+      value: 1.0
+      type: float
+      min: 0.3
+      max: 1.5
+  model:
+    name: vgg9
+    default:
+      head_type: leaky_integrator
+      use_tp_pool: true
+      li_head_spatial: 2
+      li_head_leak: 1.0
+      surrogate_kind: atan
+      surrogate_scale: 1.0
+      conv_gain: 1.8
+      scale_after_lif: 0.0
+      beta:
+        value: 0.53
+        type: float
+        min: 0.3
+        max: 0.99        # model membrane decay — fixed to paper recipe
+      threshold:
+        value: 1.0
+        type: float
+        min: 0.5
+        max: 1.5
+      in_channels: 3
+      input_shape: [3, 32, 32]
+      num_classes: 10
+      pool_after_blocks: [2, 4]
+  dataset:
+    name: CIFAR10
+    T: 6
+    direct_coding: true
+  runtime:
+    epochs: 10
+    device: cuda
+    batch_size: 128
+    seed: 42
+    neurobench: false

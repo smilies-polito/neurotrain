@@ -1,7 +1,0 @@
-params:
-  model.beta: 0.8110358863119579
-  model.threshold: 1.366176145774935
-  trainer.gamma: 0.16239780813448107
-  trainer.lr: 4.207988669606632e-05
-trial: 1
-value: 0.9598

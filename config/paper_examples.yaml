@@ -1,0 +1,87 @@
+# NeuroTrain — custom experiment examples.
+#
+# Three experiments that illustrate the main customisation patterns:
+#
+#   1. bptt_fc_mnist          — plain run, no HPO, explicit hyperparameters
+#   2. stsf_fc_fmnist_hpo     — Optuna sweep over trainer and model params
+#   3. tp_rc_cifar10_override — parameter and architecture override
+#
+# Usage:
+#   python run_exp_campaign.py --custom config/paper_examples.yaml \
+#                              --name paper_examples
+
+# ── Example 1 ────────────────────────────────────────────────────────────────
+# Plain BPTT run on MNIST with a fully-connected network.
+# opt: false (default) — uses the explicit values given here directly.
+bptt_fc_mnist:
+  trainer:
+    name: bptt
+    lr: 5.0e-4
+  model:
+    name: fc_snn
+    hidden_sizes: [256]
+  dataset:
+    name: MNIST
+    T: 25
+  runtime:
+    epochs: 20
+    device: cuda
+    seed: 42
+
+# ── Example 2 ────────────────────────────────────────────────────────────────
+# STSF on FashionMNIST with Optuna hyperparameter search.
+# Scalar params replaced by tunable blocks (type: float / categorical) are
+# sampled by Optuna; the value: field is used when opt: false.
+stsf_fc_fmnist_hpo:
+  opt: true
+  optuna:
+    n_trials: 30
+    sampler: tpe
+  trainer:
+    name: stsf
+    lr:
+      value: 1.0e-3
+      type: float
+      min: 1.0e-5
+      max: 1.0e-1
+      log: true
+    loss_type:
+      value: ce_rate
+      type: categorical
+      list: [ce_rate, mse_count, ce_count]
+  model:
+    name: fc_snn
+    beta:
+      value: 0.9
+      type: float
+      min: 0.5
+      max: 0.99
+    threshold:
+      value: 1.0
+      type: float
+      min: 0.5
+      max: 2.0
+  dataset:
+    name: FashionMNIST
+  runtime:
+    epochs: 20
+    device: cuda
+
+# ── Example 3 ────────────────────────────────────────────────────────────────
+# TP on CIFAR10 with a recurrent network and a custom hidden-layer size.
+# Demonstrates how to override the default model architecture for a specific
+# experiment without modifying the shared default config.
+tp_rc_cifar10_override:
+  trainer:
+    name: tp
+    lr: 1.0e-4
+  model:
+    name: r_snn
+    hidden_sizes: [512, 256]   # override the default hidden-layer sizes
+    beta: 0.95
+  dataset:
+    name: CIFAR10
+    T: 25
+  runtime:
+    epochs: 20
+    device: cuda

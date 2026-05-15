@@ -7,14 +7,6 @@ models:
   - conv_snn
 
 datasets:
-  - MNIST
-  - FashionMNIST
-  - CIFAR10
-  - SVHN
-  - NMNIST
-  - DVSGesture
-  - DVSCIFAR10
-  - SHD
 
 runtime:
   epochs: 20
@@ -25,7 +17,7 @@ runtime:
 opt: true
 
 optuna:
-  n_trials: 15
+  n_trials: 10
   direction: maximize
   sampler: tpe
   pruner: null

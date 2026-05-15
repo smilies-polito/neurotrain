@@ -1,8 +1,0 @@
-params:
-  dataset.seed: 292
-  model.beta: 0.8997037220101252
-  model.threshold: 0.9319450186421158
-  trainer.gamma: 0.2216968971838151
-  trainer.lr: 5.415244119402538e-05
-trial: 3
-value: 0.9783
