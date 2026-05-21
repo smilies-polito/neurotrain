@@ -132,22 +132,22 @@ Parameters marked `type: null` (or with no `type` key) are treated as plain valu
 Run a dry-run to confirm your trainer appears and matches the expected combinations:
 
 ```bash
-# Edit config/benchmarking.yaml to include your trainer, then:
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml --dry-run
+# Create config/benchmarking/my_trainer.yaml, then:
+python3 run_exp_campaign.py --benchmarking config/benchmarking/my_trainer.yaml --dry-run
 ```
 
 ---
 
 ## Step 3 — Define and Run HPO (Optional)
 
-Hyperparameter optimisation (HPO) via Optuna is built into NeuroTrain and is **optional**. You can run a single training experiment with fixed hyperparameters, or run an HPO study to find the best configuration before the final benchmark. Both paths use the same `config/experiments.yaml` file — the only difference is setting `opt: true` or `opt: false`.
+Hyperparameter optimisation (HPO) via Optuna is built into NeuroTrain and is **optional**. You can run a single training experiment with fixed hyperparameters, or run an HPO study to find the best configuration before the final benchmark. Both paths use a custom YAML file (e.g. `config/paper_examples.yaml` or your own `config/custom/my_experiments.yaml`) — the only difference is setting `opt: true` or `opt: false`.
 
 ### Running without HPO (fixed hyperparameters)
 
 Set `opt: false` (or omit it — false is the default). All parameters are used as plain values.
 
 ```yaml
-# config/experiments.yaml
+# config/custom/my_experiments.yaml
 my_trainer_mnist_fc:
   opt: false
   trainer:
@@ -166,14 +166,14 @@ my_trainer_mnist_fc:
 ```
 
 ```bash
-python3 run_exp_campaign.py --custom config/experiments.yaml --name my_trainer_run
+python3 run_exp_campaign.py --custom config/custom/my_experiments.yaml --name my_trainer_run
 ```
 
 ### Running with HPO
 
 Set `opt: true` and replace any parameter you want to tune with a tunable block. Optuna samples values from the defined search space across `n_trials` trials.
 
-### Add your HPO experiment to `config/experiments.yaml`
+### Add your HPO experiment to `config/custom/my_experiments.yaml`
 
 ```yaml
 my_trainer_mnist_fc:
@@ -219,18 +219,18 @@ my_trainer_mnist_fc:
 Run the study:
 
 ```bash
-python3 run_exp_campaign.py --custom config/experiments.yaml \
+python3 run_exp_campaign.py --custom config/custom/my_experiments.yaml \
     --name my_trainer_hpo
 ```
 
 Optuna writes results to `experiments/my_trainer_hpo/experiments/my_trainer_mnist_fc/optuna/`. The best config is in `best_params.yaml`.
 
-### Save best params to `config/paper.yaml`
+### Save best params to `config/paper_examples.yaml`
 
-Copy the best hyperparameters from `best_params.yaml` into `config/paper.yaml` as plain scalar values (no tunable blocks needed):
+Copy the best hyperparameters from `best_params.yaml` into `config/paper_examples.yaml` (or your own custom YAML) as plain scalar values (no tunable blocks needed):
 
 ```yaml
-# config/paper.yaml
+# config/paper_examples.yaml
 
 my_trainer_mnist_fc:
   name: my_trainer_mnist_fc
@@ -257,22 +257,20 @@ Repeat for each compatible trainer × model × dataset combination you want to i
 
 ## Step 4 — Run Your Benchmark
 
-With your trainer registered and your HPO-tuned final configs saved in `config/paper.yaml`, you have two options.
+With your trainer registered and your HPO-tuned final configs saved, you have two options.
 
 **Option A — Benchmark your trainer only**, without rerunning existing algorithms:
 
 ```bash
-# Edit config/benchmarking.yaml to set:
-# trainers: [my_trainer]
-# then run:
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+# Create config/benchmarking/my_trainer.yaml, then:
+python3 run_exp_campaign.py --benchmarking config/benchmarking/my_trainer.yaml \
     --name my_trainer_bench
 ```
 
 Or use custom mode with your HPO-tuned configs:
 
 ```bash
-python3 run_exp_campaign.py --custom config/paper.yaml \
+python3 run_exp_campaign.py --custom config/paper_examples.yaml \
     --name my_trainer_paper
 ```
 
@@ -281,12 +279,9 @@ This is the recommended path when you want to add your algorithm to the comparis
 **Option B — Rerun the full benchmark**, including your trainer alongside all existing algorithms:
 
 ```bash
-# Edit config/benchmarking.yaml: leave trainers: [] (empty = all)
-python3 run_exp_campaign.py --benchmarking config/benchmarking.yaml \
+# Leave trainers: [] (empty = all) in your benchmarking YAML:
+python3 run_exp_campaign.py --benchmarking config/paper_benchmarking.yaml \
     --name full_bench
-
-# Or reproduce the full paper results:
-make paper
 ```
 
 Use this when you want a complete, fresh comparison — for example after updating shared components (network architectures, dataloaders) that affect all algorithms.
@@ -305,12 +300,6 @@ experiments/<campaign>/
       config.yaml
       metrics.json
       log.txt
-      trials/           # only when opt: true
-        trial_0000/
-          config.yaml
-          metrics.json
-        trial_0001/
-          ...
       optuna/           # only when opt: true
         trials.csv
         best_params.yaml
@@ -329,127 +318,32 @@ runtime:
 When `opt: true`, NeuroTrain writes an SQLite study database. Use [optuna-dashboard](https://github.com/optuna/optuna-dashboard) to inspect trial history, hyperparameter importances, and convergence plots in real time:
 
 ```bash
-optuna-dashboard sqlite:///experiments/<campaign>/experiments/<exp_name>/optuna/study.db
+optuna-dashboard "sqlite:////absolute/path/to/experiments/<campaign>/experiments/<exp_name>/optuna/study.db"
 # → opens at http://localhost:8080
 ```
 
-![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](docs/figures/optuna_dashboard_screenshot.png)
+![optuna-dashboard — trial history, hyperparameter importance, and parallel coordinate plots](figures/optuna-dashboard-screenshot.png)
 
-The parallel coordinate view is particularly useful for identifying which hyperparameters drive accuracy and where the search has converged — use it to decide whether to extend the study or commit the best config to `config/paper.yaml`.
+The parallel coordinate view is particularly useful for identifying which hyperparameters drive accuracy and where the search has converged — use it to decide whether to extend the study or commit the best config to your custom YAML.
 
 ### Generating results tables and heatmap
 
-Once your campaign has run, use `scripts/generate_results.py` to produce per-dataset Markdown accuracy tables and a heatmap PNG from `summary.csv`:
+Once your campaign has run, use `src/generate_results.py` to produce per-dataset Markdown accuracy tables and a heatmap PNG from `summary.csv`:
 
 ```bash
 # Tables + heatmap
-python3 scripts/generate_results.py experiments/my_trainer_bench/
+python3 src/generate_results.py experiments/my_trainer_bench/
 
 # Also include NeuroBench metrics table
-python3 scripts/generate_results.py experiments/my_trainer_bench/ --neurobench
-
-# Inject tables and heatmap directly into this guide
-python3 scripts/generate_results.py experiments/my_trainer_bench/ \
-    --readme docs/HOW_TO_BENCHMARK_YOUR_TRAINER.md
+python3 src/generate_results.py experiments/my_trainer_bench/ --neurobench
 ```
-
-Outputs: `results_tables.md`, `results_heatmap.png`, and optionally `neurobench_table.md`.
-
-<!-- RESULTS_START -->
-
-*Results from campaign `full_bench`. Generated by `scripts/generate_results.py`.*
-
-![NeuroTrain benchmarking results — test accuracy heatmap, algorithms (rows) × architecture–dataset combinations (cols). Campaign: full_bench — 2026-04-30 22:02](../experiments/full_bench/results_heatmap.png)
-*NeuroTrain — Benchmarking Results · Campaign: `full_bench` · 2026-04-30 22:02*
-
-### CIFAR-10
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 34.5% | 32.1% | 30.4% |
-| DECOLLE | 28.1% | 31.8% | — |
-
-### DVSGesture
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 46.6% | 52.7% | 48.9% |
-| DECOLLE | 51.5% | 63.6% | — |
-
-### Fashion-MNIST
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 75.8% | 79.6% | 79.5% |
-| DECOLLE | 65.7% | 65.2% | — |
-
-### MNIST
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 97.8% | 95.2% | 94.9% |
-| DECOLLE | 80.3% | 83.2% | — |
-
-### N-MNIST
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 97.1% | 93.7% | 93.2% |
-| DECOLLE | 82.3% | 77.8% | — |
-
-### SVHN
-
-*Test accuracy (mean ± std where multiple seeds available).*
-
-| Algorithm | Conv-SNN | FC-SNN | R-SNN |
-|---|---|---|---|
-| BPTT | 74.3% | 37.2% | 35.6% |
-| DECOLLE | 49.2% | — | — |
-
-<!-- RESULTS_END -->
-
----
-
-## Add an Integration Test
-
-Add at least one test under `tests/` to pin a known-good result to a specific commit:
-
-```python
-# tests/my_trainer_mnist_fc.py
-"""
-Integration test: MyTrainer on MNIST with FC-SNN.
-Expected: test_accuracy > 0.92 at epoch 25.
-Commit: <hash>
-"""
-def test_my_trainer_mnist_fc():
-    # run via run_exp_campaign.py or directly via experiment.py
-    assert results["test_accuracy"] > 0.92
-```
-
-```bash
-python3 -m pytest tests/my_trainer_mnist_fc.py -v
-```
-
-You can adapt one of the existing tests under `tests/` and assert on the `test_accuracy` field in `metrics.json`.
-
----
 
 ## Contributing
 
 Open a pull request including:
 - `src/trainers/my_trainer.py`
 - `config/default/trainers/my_trainer.yaml`
-- Your HPO-tuned final entries in `config/paper.yaml`
+- Your HPO-tuned final entries in `config/paper_examples.yaml`
 - Integration test with pinned result
 - A one-row summary for the algorithm table in `README.md`
 
